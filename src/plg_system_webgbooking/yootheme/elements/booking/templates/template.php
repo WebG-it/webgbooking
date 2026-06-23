@@ -142,7 +142,7 @@ $trigBtn = trim('uk-button uk-button-' . $btnStyle . ($btnSize ? ' uk-button-' .
 /* Available day = a clearly identifiable box (neutral, theme-safe) with the theme-coloured number */
 .wgb-booking .wgb-cell.wgb-avail{background:rgba(127,127,127,.08);border-color:rgba(127,127,127,.22)}
 .wgb-booking .wgb-cell.wgb-avail:hover{background:rgba(127,127,127,.18)}
-.wgb-booking .wgb-cell:disabled{color:#bbb;font-weight:400;cursor:default}
+.wgb-booking .wgb-cell:disabled{opacity:.45;font-weight:400;cursor:default}
 .wgb-booking .wgb-blank{background:transparent;border-color:transparent}
 .wgb-booking .wgb-cell.wgb-today::after{content:"";position:absolute;bottom:5px;left:50%;transform:translateX(-50%);width:4px;height:4px;border-radius:50%;background:currentColor}
 .wgb-booking.wgb-comfortable .wgb-cell{min-height:42px;font-size:14px}
