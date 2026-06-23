@@ -53,10 +53,21 @@ return [
         ],
         'button_text' => ['label' => 'Button Text', 'type' => 'text', 'source' => true],
         'allow_guest' => [
-            'label' => 'Invite a colleague',
-            'description' => 'Shows an optional "colleague email" field so the visitor can add a guest to the meeting invite.',
+            'label' => 'Invite a guest',
+            'description' => 'Shows an optional "guest email" field so the visitor can invite someone to the meeting.',
             'type' => 'checkbox',
             'text' => 'Allow inviting a guest',
+        ],
+        // --- Per-element confirmation email (empty = plugin/default; signed server-side, not client-editable) ---
+        'email_subject' => [
+            'label' => 'Email subject',
+            'description' => 'Confirmation email subject for THIS element. Empty = plugin default. Placeholders: {name} {date} {time}.',
+            'type' => 'text',
+        ],
+        'email_body' => [
+            'label' => 'Email body (HTML)',
+            'description' => 'Confirmation email body for THIS element. Empty = plugin default. Placeholders: {name} {date} {time} {phone} {notes} {meet_url} {cancel_url} {meet_block} {cancel_block}.',
+            'type' => 'textarea',
         ],
         'analytics_event' => [
             'label' => 'Analytics event',
@@ -171,7 +182,7 @@ return [
             'fields' => [
                 [
                     'title' => 'Content',
-                    'fields' => ['title', 'service', 'button_text', 'allow_guest', 'show_newsletter', 'analytics_event', 'layout'],
+                    'fields' => ['title', 'service', 'button_text', 'allow_guest', 'email_subject', 'email_body', 'show_newsletter', 'analytics_event', 'layout'],
                 ],
                 [
                     'title' => 'Settings',
