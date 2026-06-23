@@ -13,8 +13,8 @@ return [
     'name' => 'wgb_booking',
     'title' => 'Booking',
     'group' => 'WebG',
-    'icon' => '${url:images/icon.svg}',
-    'iconSmall' => '${url:images/iconSmall.svg}',
+    'icon' => '${url:images/cal.svg}',
+    'iconSmall' => '${url:images/cal-sm.svg}',
     'element' => true,
     'width' => 400,
 
