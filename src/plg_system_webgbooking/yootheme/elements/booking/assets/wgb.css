@@ -1,0 +1,41 @@
+/* The interactive area sits on its own readable surface, regardless of the section colour behind. */
+.wgb-booking .wgb-mount{background:#fff;color:#2b2b2b;border-radius:8px;padding:14px}
+.wgb-booking .wgb-mount .uk-text-meta,.wgb-booking .wgb-mount .uk-text-muted{color:#6a6a6a}
+.wgb-booking .wgb-cal-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.wgb-booking .wgb-cal-head,.wgb-booking .wgb-cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}
+.wgb-booking .wgb-cal-head span{text-align:center;font-size:10px;line-height:1.4;text-transform:uppercase;color:var(--wgb-head,inherit);opacity:var(--wgb-head-op,.8)}
+/* High-contrast cells on the white panel: dark numbers always readable; accent only on the selected day */
+.wgb-booking .wgb-cell{position:relative;display:flex;align-items:center;justify-content:center;min-height:36px;padding:0;border:1px solid transparent;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600;line-height:1;background:transparent;color:#2b2b2b}
+/* Available day = a clear white box with a defined border and a dark, readable number */
+.wgb-booking .wgb-cell.wgb-avail{background:#fff;border-color:#ccd3da;color:#1f2937}
+.wgb-booking .wgb-cell.wgb-avail:hover{background:#eef1f5;border-color:#94a3b4}
+.wgb-booking .wgb-cell:disabled{background:transparent;border-color:transparent;color:#aeb4bc;font-weight:400;cursor:default}
+.wgb-booking .wgb-blank{background:transparent;border-color:transparent}
+.wgb-booking .wgb-cell.wgb-active{background:var(--wgb-accent,#2b2b2b);border-color:var(--wgb-accent,#2b2b2b);color:var(--wgb-accent-fg,#fff)}
+.wgb-booking .wgb-cell.wgb-today::after{content:"";position:absolute;bottom:5px;left:50%;transform:translateX(-50%);width:4px;height:4px;border-radius:50%;background:currentColor}
+.wgb-booking.wgb-comfortable .wgb-cell{min-height:44px;font-size:15px}
+.wgb-booking.wgb-comfortable .wgb-cal-head span{font-size:11px}
+/* Plain variant: squared boxes */
+.wgb-booking.wgb-style-plain .wgb-cell.wgb-avail{border-radius:4px}
+/* Optional accent override (only when the element sets a colour) */
+.wgb-booking.wgb-has-accent .wgb-cell.wgb-active{background:var(--wgb-accent)!important;border-color:var(--wgb-accent)!important;color:var(--wgb-accent-fg,#fff)!important}
+.wgb-booking .wgb-summary{cursor:pointer}
+/* Form controls + slots must stay readable on the white panel, regardless of the theme's form styling */
+.wgb-booking .wgb-mount .uk-input,.wgb-booking .wgb-mount .uk-textarea{box-sizing:border-box;width:100%;background:#fff;color:#1f2937;border:1px solid #ccd3da;border-radius:6px;padding:9px 11px;font-size:14px;line-height:1.4;height:auto;transition:border-color .15s}
+.wgb-booking .wgb-mount .uk-textarea{min-height:84px;resize:vertical}
+.wgb-booking .wgb-mount .uk-input:focus,.wgb-booking .wgb-mount .uk-textarea:focus{background:#fff;color:#1f2937;border-color:#6f7d8a;outline:2px solid rgba(111,125,138,.28);outline-offset:1px}
+.wgb-booking .wgb-mount .uk-input::placeholder,.wgb-booking .wgb-mount .uk-textarea::placeholder{color:#6a6a6a;opacity:1}
+/* Alerts pinned to readable colours (theme palette may assume a light page) */
+.wgb-booking .wgb-mount .uk-alert{background:#f3f5f7;color:#1f2937;border:1px solid #d8dde3;border-radius:6px;padding:9px 12px;margin:0 0 10px}
+.wgb-booking .wgb-mount .uk-alert-warning{background:#fff7e6;color:#7a5b00;border-color:#f0d28a}
+.wgb-booking .wgb-mount .uk-alert-danger{background:#fdecec;color:#8a1f1f;border-color:#f0b4b4}
+.wgb-booking .wgb-mount .uk-alert-success{background:#e9f7ef;color:#1d6b3f;border-color:#a9dcc0}
+.wgb-booking .wgb-mount .wgb-sr{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.wgb-booking .wgb-mount button.wgb-summary{display:inline-flex;align-items:center;gap:4px;background:none;border:0;padding:0;font:inherit;color:#6a6a6a;cursor:pointer}
+.wgb-booking .wgb-mount label{display:block;color:#2b2b2b;font-size:13px;line-height:1.5}
+.wgb-booking .wgb-mount .uk-checkbox{appearance:auto;-webkit-appearance:auto;width:16px;height:16px;vertical-align:-3px;margin-right:7px;accent-color:var(--wgb-accent,#2b2b2b)}
+.wgb-booking .wgb-mount .wgb-req{color:#c0392b}
+.wgb-booking .wgb-mount .wgb-slot{background:#fff;color:#1f2937;border:1px solid #ccd3da;border-radius:6px;font-weight:600}
+.wgb-booking .wgb-mount .wgb-slot:hover,.wgb-booking .wgb-mount .wgb-slot:focus{background:#eef1f5;border-color:#6f7d8a;color:#1f2937}
+.wgb-booking .wgb-mount .uk-icon-button{color:#2b2b2b}
+.wgb-booking .wgb-mount [data-act="book"]:focus{outline:2px solid rgba(0,0,0,.35);outline-offset:2px}
