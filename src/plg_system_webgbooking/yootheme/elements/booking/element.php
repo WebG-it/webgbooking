@@ -21,8 +21,10 @@ return [
     'width' => 400,
 
     'defaults' => [
-        'title' => 'Book an appointment',
-        'button_text' => 'Check availability',
+        // Left empty on purpose: the render template falls back to the TRANSLATED
+        // default title/button (PLG_SYSTEM_WEBGBOOKING_DEFAULT_*), so the front end is i18n-correct.
+        'title' => '',
+        'button_text' => '',
         'layout' => 'inline',
         'card_style' => 'card',
         'slot_columns' => '3',
