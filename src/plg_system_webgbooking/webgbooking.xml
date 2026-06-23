@@ -7,7 +7,7 @@
     <creationDate>2026-06</creationDate>
     <copyright>(C) 2026 Marco Galassi / WebG</copyright>
     <license>GNU General Public License version 2 or later</license>
-    <version>0.3.0</version>
+    <version>0.4.0</version>
     <description>PLG_SYSTEM_WEBGBOOKING_XML_DESCRIPTION</description>
     <scriptfile>script.php</scriptfile>
     <updateservers>
@@ -17,6 +17,8 @@
     <languages folder="language">
         <language tag="en-GB">en-GB/plg_system_webgbooking.ini</language>
         <language tag="en-GB">en-GB/plg_system_webgbooking.sys.ini</language>
+        <language tag="it-IT">it-IT/plg_system_webgbooking.ini</language>
+        <language tag="it-IT">it-IT/plg_system_webgbooking.sys.ini</language>
     </languages>
     <files>
         <folder plugin="webgbooking">services</folder>
