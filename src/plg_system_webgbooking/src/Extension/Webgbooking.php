@@ -97,6 +97,11 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
         $notes   = trim((string) $input->post->get('notes', '', 'STRING'));
         $privacy = (int) $input->post->getInt('privacy', 0);
 
+        // Honeypot: bots fill the hidden field. Pretend success and drop the submission.
+        if (trim((string) $input->post->getString('website', '')) !== '') {
+            $this->respond(['ok' => true, 'message' => Text::_('PLG_SYSTEM_WEBGBOOKING_BOOK_OK')]);
+        }
+
         if (
             $name === '' || !filter_var($email, FILTER_VALIDATE_EMAIL) || $privacy !== 1
             || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $date) || !preg_match('/^\d{2}:\d{2}$/', $time)
@@ -105,7 +110,21 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
         }
 
         try {
-            $db  = Factory::getContainer()->get(DatabaseInterface::class);
+            $db = Factory::getContainer()->get(DatabaseInterface::class);
+
+            // Basic rate limit: at most 3 bookings per email per hour.
+            $recent = (int) $db->setQuery(
+                $db->getQuery(true)
+                    ->select('COUNT(*)')
+                    ->from($db->quoteName('#__webgbooking_bookings'))
+                    ->where($db->quoteName('customer_email') . ' = ' . $db->quote($email))
+                    ->where($db->quoteName('created') . ' > ' . $db->quote(Factory::getDate('-1 hour')->toSql()))
+            )->loadResult();
+
+            if ($recent >= 3) {
+                $this->respond(['ok' => false, 'message' => Text::_('PLG_SYSTEM_WEBGBOOKING_BOOK_ERR')]);
+            }
+
             $row = (object) [
                 'created'        => Factory::getDate()->toSql(),
                 'booking_date'   => $date,
