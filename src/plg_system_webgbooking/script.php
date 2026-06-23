@@ -5,8 +5,9 @@
  * @copyright   (C) 2026 Marco Galassi / WebG
  * @license     GNU General Public License version 2 or later
  *
- * Install script: enable the plugin automatically after install/update,
- * so it works out of the box without a manual enable step.
+ * Install script: enable the plugin automatically on first install only,
+ * so it works out of the box without a manual enable step. Updates are left
+ * untouched (we never re-enable on update — respect the user's choice).
  */
 
 \defined('_JEXEC') or die;
@@ -39,7 +40,8 @@ return new class () implements InstallerScriptInterface {
 
     public function postflight(string $type, InstallerAdapter $adapter): bool
     {
-        if ($type !== 'install' && $type !== 'update') {
+        // Only on a fresh install — never re-enable on update (respect the user's choice).
+        if ($type !== 'install') {
             return true;
         }
 
