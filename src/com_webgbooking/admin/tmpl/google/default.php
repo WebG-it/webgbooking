@@ -17,7 +17,7 @@ $s = $this->status;
 <div class="p-3" style="max-width:820px">
 
     <?php if (!empty($s->error)) : ?>
-        <div class="alert alert-danger"><strong>Error:</strong> <?php echo htmlspecialchars((string) $s->error, ENT_QUOTES, 'UTF-8'); ?></div>
+        <div class="alert alert-danger"><strong><?php echo Text::_('COM_WEBGBOOKING_ERROR'); ?></strong> <?php echo htmlspecialchars((string) $s->error, ENT_QUOTES, 'UTF-8'); ?></div>
     <?php endif; ?>
 
     <div class="card">
@@ -50,7 +50,7 @@ $s = $this->status;
                                 <tr>
                                     <td>
                                         <?php echo htmlspecialchars((string) $c->summary, ENT_QUOTES, 'UTF-8'); ?>
-                                        <?php if ($c->primary) : ?> <span class="badge bg-secondary">primary</span><?php endif; ?>
+                                        <?php if ($c->primary) : ?> <span class="badge bg-secondary"><?php echo Text::_('COM_WEBGBOOKING_GOOGLE_CAL_PRIMARY'); ?></span><?php endif; ?>
                                     </td>
                                     <td class="text-center"><input type="checkbox" name="read[]" value="<?php echo htmlspecialchars((string) $c->id, ENT_QUOTES, 'UTF-8'); ?>"<?php echo $c->read ? ' checked' : ''; ?>></td>
                                     <td class="text-center"><input type="radio" name="write" value="<?php echo htmlspecialchars((string) $c->id, ENT_QUOTES, 'UTF-8'); ?>"<?php echo $c->write ? ' checked' : ''; ?>></td>
