@@ -58,6 +58,7 @@ $cfg = [
     'slotSize'  => $slotSize ? 'uk-button-' . $slotSize : '',
     'btnStyle'  => $btnStyle,
     'allowGuest' => !empty($props['allow_guest']),
+    'showNewsletter' => !empty($props['show_newsletter']),
     'analyticsEvent' => trim((string) ($props['analytics_event'] ?? '')),
     'accent'    => $accent,
     'workStart' => $timeOk($pp->get('work_start', '09:00'), '09:00'),
@@ -79,6 +80,7 @@ $cfg = [
         'fPhone'      => Text::_('PLG_SYSTEM_WEBGBOOKING_FIELD_PHONE'),
         'fNotes'      => Text::_('PLG_SYSTEM_WEBGBOOKING_FIELD_NOTES'),
         'fGuest'      => Text::_('PLG_SYSTEM_WEBGBOOKING_FIELD_GUEST'),
+        'fNewsletter' => Text::_('PLG_SYSTEM_WEBGBOOKING_FIELD_NEWSLETTER'),
         'privacy'     => Text::_('PLG_SYSTEM_WEBGBOOKING_PRIVACY'),
         'bookNow'     => Text::_('PLG_SYSTEM_WEBGBOOKING_BOOK_NOW'),
         'required'    => Text::_('PLG_SYSTEM_WEBGBOOKING_REQUIRED'),
@@ -107,22 +109,14 @@ if ($headCol) { $vars[] = '--wgb-head:' . $headCol; $vars[] = '--wgb-head-op:1';
 $styleVar = $vars ? ' style="' . htmlspecialchars(implode(';', $vars), ENT_QUOTES, 'UTF-8') . '"' : '';
 $uid = 'wgb-' . substr(md5(uniqid('', true)), 0, 8);
 
-// Widget assets are enqueued ONCE as external files. Inline <script> injected by the YOOtheme
-// builder via innerHTML does NOT execute on re-render (calendar went blank); an external file
-// plus a MutationObserver (in wgb.js) re-initialises every (re)rendered instance.
-$wgbVer   = '0.17.0';
-$wgbAsset = Uri::root(true) . '/plugins/system/webgbooking/yootheme/elements/booking/assets';
-$wgbDoc   = Factory::getApplication()->getDocument();
-if (method_exists($wgbDoc, 'getWebAssetManager')) {
-    $wgbWa = $wgbDoc->getWebAssetManager();
-    if (!$wgbWa->assetExists('style', 'wgb.booking')) {
-        $wgbWa->registerStyle('wgb.booking', $wgbAsset . '/wgb.css', ['version' => $wgbVer]);
-    }
-    if (!$wgbWa->assetExists('script', 'wgb.booking')) {
-        $wgbWa->registerScript('wgb.booking', $wgbAsset . '/wgb.js', ['version' => $wgbVer], ['defer' => true]);
-    }
-    $wgbWa->useStyle('wgb.booking')->useScript('wgb.booking');
-}
+// Assets are output directly in the element markup (<link> + <script src>). This executes on the
+// initial parse in BOTH the front end and the YOOtheme customizer preview — unlike WebAssetManager
+// scripts, which the customizer does not reliably flush to the live preview (the calendar stayed
+// blank). A MutationObserver in wgb.js then re-initialises every instance the builder re-renders.
+$wgbVer    = '0.18.0';
+$wgbAsset  = Uri::root(true) . '/plugins/system/webgbooking/yootheme/elements/booking/assets';
+$assetTags = '<link rel="stylesheet" href="' . htmlspecialchars($wgbAsset . '/wgb.css?' . $wgbVer, ENT_QUOTES, 'UTF-8') . '">'
+    . '<script src="' . htmlspecialchars($wgbAsset . '/wgb.js?' . $wgbVer, ENT_QUOTES, 'UTF-8') . '" defer></script>';
 
 $root = $this->el('div', ['class' => ['wgb-booking', 'wgb-' . $density, 'wgb-style-' . $calStyle, ($accent ? 'wgb-has-accent' : ''), $cardClass]]);
 
@@ -137,6 +131,7 @@ $inner = function () use ($title, $service, $cfg) {
 $trigBtn = trim('uk-button uk-button-' . $btnStyle . ($btnSize ? ' uk-button-' . $btnSize : '') . (!empty($props['button_fullwidth']) ? ' uk-width-1-1' : ''));
 
 ?>
+<?php if (empty($GLOBALS['__wgbAssets'])) { $GLOBALS['__wgbAssets'] = true; echo $assetTags; } ?>
 <?php if ($layout === 'inline') : ?>
 
     <?= $root($props, $attrs) ?>
