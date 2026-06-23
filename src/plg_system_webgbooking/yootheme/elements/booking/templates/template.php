@@ -51,8 +51,17 @@ $timeOk = fn($v, $def) => preg_match('/^\d{1,2}:\d{2}$/', (string) $v) ? (string
 $wd = $pp->get('work_days', [1, 2, 3, 4, 5]);
 $workDays = array_values(array_map('intval', is_array($wd) ? $wd : explode(',', (string) $wd)));
 
+// Per-element confirmation email, signed with the site secret so the client cannot tamper it.
+$emailCfg  = ['subject' => (string) ($props['email_subject'] ?? ''), 'body' => (string) ($props['email_body'] ?? '')];
+$formToken = '';
+if ($emailCfg['subject'] !== '' || $emailCfg['body'] !== '') {
+    $payload   = base64_encode((string) json_encode($emailCfg));
+    $formToken = $payload . '.' . hash_hmac('sha256', $payload, (string) Factory::getApplication()->get('secret'));
+}
+
 $cfg = [
     'locale'    => $locale,
+    'form'      => $formToken,
     'cols'      => $slotCols,
     'slotStyle' => $slotStyle,
     'slotSize'  => $slotSize ? 'uk-button-' . $slotSize : '',
@@ -81,6 +90,7 @@ $cfg = [
         'fNotes'      => Text::_('PLG_SYSTEM_WEBGBOOKING_FIELD_NOTES'),
         'fGuest'      => Text::_('PLG_SYSTEM_WEBGBOOKING_FIELD_GUEST'),
         'fNewsletter' => Text::_('PLG_SYSTEM_WEBGBOOKING_FIELD_NEWSLETTER'),
+        'emailNote'   => Text::_('PLG_SYSTEM_WEBGBOOKING_EMAIL_NOTE'),
         'privacy'     => Text::_('PLG_SYSTEM_WEBGBOOKING_PRIVACY'),
         'bookNow'     => Text::_('PLG_SYSTEM_WEBGBOOKING_BOOK_NOW'),
         'required'    => Text::_('PLG_SYSTEM_WEBGBOOKING_REQUIRED'),
@@ -113,7 +123,7 @@ $uid = 'wgb-' . substr(md5(uniqid('', true)), 0, 8);
 // initial parse in BOTH the front end and the YOOtheme customizer preview — unlike WebAssetManager
 // scripts, which the customizer does not reliably flush to the live preview (the calendar stayed
 // blank). A MutationObserver in wgb.js then re-initialises every instance the builder re-renders.
-$wgbVer    = '0.18.0';
+$wgbVer    = '0.19.0';
 $wgbAsset  = Uri::root(true) . '/plugins/system/webgbooking/yootheme/elements/booking/assets';
 $assetTags = '<link rel="stylesheet" href="' . htmlspecialchars($wgbAsset . '/wgb.css?' . $wgbVer, ENT_QUOTES, 'UTF-8') . '">'
     . '<script src="' . htmlspecialchars($wgbAsset . '/wgb.js?' . $wgbVer, ENT_QUOTES, 'UTF-8') . '" defer></script>';
