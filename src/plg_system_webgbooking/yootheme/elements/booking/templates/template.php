@@ -4,9 +4,9 @@
  * WebG Booking element — render template (UIkit markup + interactive widget).
  * YOOtheme contract: $this->el(), $props, $attrs, $children, $builder.
  *
- * The widget is a JS step wizard (day -> time -> confirm) that advances in place.
- * Availability is demo data for now; the real data comes from the com_webgbooking
- * engine. All visitor-facing strings are translatable (Joomla language, IT/EN shipped).
+ * Calendly-style flow: month CALENDAR -> time slots -> details FORM -> confirm.
+ * Availability is demo data for now; real data comes from the com_webgbooking engine.
+ * All visitor-facing strings are translatable (Joomla language, IT/EN shipped).
  *
  * @license GNU General Public License version 2 or later
  */
@@ -37,28 +37,27 @@ $btnText  = (string) ($props['button_text'] ?? '') !== '' ? $props['button_text'
 
 $locale = Factory::getApplication()->getLanguage()->getTag();
 
-// Config handed to the widget JS (already localised — escaped into a data attribute).
 $cfg = [
     'locale'    => $locale,
     'cols'      => $slotCols,
     'slotStyle' => $slotStyle,
     'slotSize'  => $slotSize ? 'uk-button-' . $slotSize : '',
-    'btnStyle'  => $btnStyle,
-    'btnSize'   => $btnSize ? 'uk-button-' . $btnSize : '',
     'accent'    => $accent,
     'labels'    => [
-        'stepDay'   => Text::_('PLG_SYSTEM_WEBGBOOKING_STEP_DAY'),
-        'stepTime'  => Text::_('PLG_SYSTEM_WEBGBOOKING_STEP_TIME'),
-        'back'      => Text::_('PLG_SYSTEM_WEBGBOOKING_BACK'),
-        'change'    => Text::_('PLG_SYSTEM_WEBGBOOKING_CHANGE'),
-        'noSlots'   => Text::_('PLG_SYSTEM_WEBGBOOKING_NO_SLOTS'),
-        'confirm'   => Text::_('PLG_SYSTEM_WEBGBOOKING_CONFIRM_BTN'),
-        'prev'      => Text::_('PLG_SYSTEM_WEBGBOOKING_PREV'),
-        'next'      => Text::_('PLG_SYSTEM_WEBGBOOKING_NEXT'),
-        'day'       => Text::_('PLG_SYSTEM_WEBGBOOKING_SELECTED_DAY'),
-        'time'      => Text::_('PLG_SYSTEM_WEBGBOOKING_SELECTED_TIME'),
-        'demo'      => Text::_('PLG_SYSTEM_WEBGBOOKING_DEMO_NOTE'),
-        'done'      => Text::_('PLG_SYSTEM_WEBGBOOKING_DONE'),
+        'stepDay'     => Text::_('PLG_SYSTEM_WEBGBOOKING_STEP_DAY'),
+        'stepTime'    => Text::_('PLG_SYSTEM_WEBGBOOKING_STEP_TIME'),
+        'stepDetails' => Text::_('PLG_SYSTEM_WEBGBOOKING_STEP_DETAILS'),
+        'back'        => Text::_('PLG_SYSTEM_WEBGBOOKING_BACK'),
+        'noSlots'     => Text::_('PLG_SYSTEM_WEBGBOOKING_NO_SLOTS'),
+        'fName'       => Text::_('PLG_SYSTEM_WEBGBOOKING_FIELD_NAME'),
+        'fEmail'      => Text::_('PLG_SYSTEM_WEBGBOOKING_FIELD_EMAIL'),
+        'fPhone'      => Text::_('PLG_SYSTEM_WEBGBOOKING_FIELD_PHONE'),
+        'fNotes'      => Text::_('PLG_SYSTEM_WEBGBOOKING_FIELD_NOTES'),
+        'privacy'     => Text::_('PLG_SYSTEM_WEBGBOOKING_PRIVACY'),
+        'bookNow'     => Text::_('PLG_SYSTEM_WEBGBOOKING_BOOK_NOW'),
+        'required'    => Text::_('PLG_SYSTEM_WEBGBOOKING_REQUIRED'),
+        'demo'        => Text::_('PLG_SYSTEM_WEBGBOOKING_DEMO_NOTE'),
+        'done'        => Text::_('PLG_SYSTEM_WEBGBOOKING_DONE'),
     ],
 ];
 
@@ -68,8 +67,7 @@ $uid      = 'wgb-' . substr(md5(uniqid('', true)), 0, 8);
 
 $root = $this->el('div', ['class' => ['wgb-booking', $cardClass]]);
 
-// Server-rendered fallback (also what the builder preview shows before JS runs).
-$widgetHtml = function () use ($title, $service, $cfg) {
+$inner = function () use ($title, $service, $cfg) {
     ob_start(); ?>
     <?php if ($title !== '') : ?><h3 class="uk-card-title uk-margin-remove-bottom wgb-title"><?= htmlspecialchars($title, ENT_QUOTES, 'UTF-8') ?></h3><?php endif ?>
     <?php if ($service !== '') : ?><div class="uk-text-meta uk-margin-small-bottom"><?= htmlspecialchars($service, ENT_QUOTES, 'UTF-8') ?></div><?php endif ?>
@@ -77,34 +75,32 @@ $widgetHtml = function () use ($title, $service, $cfg) {
     <?php return ob_get_clean();
 };
 
+$trigBtn = trim('uk-button uk-button-' . $btnStyle . ($btnSize ? ' uk-button-' . $btnSize : '') . (!empty($props['button_fullwidth']) ? ' uk-width-1-1' : ''));
+
 ?>
 <?php if ($layout === 'inline') : ?>
 
     <?= $root($props, $attrs) ?>
-    <div data-wgb="<?= $cfgAttr ?>"<?= $styleVar ?>><?= $widgetHtml() ?></div>
+    <div data-wgb="<?= $cfgAttr ?>"<?= $styleVar ?>><?= $inner() ?></div>
     </div>
 
 <?php else : ?>
 
-    <?php
-    $trigEl = $this->el('div', ['class' => ['wgb-booking-trigger']]);
-    $mainBtn = trim('uk-button uk-button-' . $btnStyle . ($btnSize ? ' uk-button-' . $btnSize : '') . (!empty($props['button_fullwidth']) ? ' uk-width-1-1' : ''));
-    ?>
-    <?= $trigEl($props, $attrs) ?>
+    <?php $trig = $this->el('div', ['class' => ['wgb-booking-trigger']]); ?>
+    <?= $trig($props, $attrs) ?>
+        <button class="<?= $trigBtn ?>" type="button" uk-toggle="target: #<?= $uid ?>"<?= $styleVar ?>><?= htmlspecialchars($btnText, ENT_QUOTES, 'UTF-8') ?></button>
         <?php if ($layout === 'popup') : ?>
-        <button class="<?= $mainBtn ?>" type="button" uk-toggle="target: #<?= $uid ?>"<?= $styleVar ?>><?= htmlspecialchars($btnText, ENT_QUOTES, 'UTF-8') ?></button>
         <div id="<?= $uid ?>" uk-modal>
             <div class="uk-modal-dialog uk-modal-body uk-margin-auto-vertical">
                 <button class="uk-modal-close-default" type="button" uk-close></button>
-                <div class="wgb-booking" data-wgb="<?= $cfgAttr ?>"<?= $styleVar ?>><?= $widgetHtml() ?></div>
+                <div class="wgb-booking" data-wgb="<?= $cfgAttr ?>"<?= $styleVar ?>><?= $inner() ?></div>
             </div>
         </div>
         <?php else : ?>
-        <button class="<?= $mainBtn ?>" type="button" uk-toggle="target: #<?= $uid ?>"<?= $styleVar ?>><?= htmlspecialchars($btnText, ENT_QUOTES, 'UTF-8') ?></button>
         <div id="<?= $uid ?>" uk-offcanvas="flip: true; overlay: true">
             <div class="uk-offcanvas-bar">
                 <button class="uk-offcanvas-close" type="button" uk-close></button>
-                <div class="wgb-booking" data-wgb="<?= $cfgAttr ?>"<?= $styleVar ?>><?= $widgetHtml() ?></div>
+                <div class="wgb-booking" data-wgb="<?= $cfgAttr ?>"<?= $styleVar ?>><?= $inner() ?></div>
             </div>
         </div>
         <?php endif ?>
@@ -113,66 +109,94 @@ $widgetHtml = function () use ($title, $service, $cfg) {
 <?php endif ?>
 
 <style>
-.wgb-booking .wgb-day.wgb-active,.wgb-booking .wgb-slot.wgb-active{background-color:var(--wgb-accent,#1e87f0);border-color:var(--wgb-accent,#1e87f0);color:#fff}
-.wgb-booking .wgb-confirm{background-color:var(--wgb-accent,#1e87f0);border-color:var(--wgb-accent,#1e87f0);color:#fff}
-.wgb-days{display:flex;gap:6px;overflow-x:auto;-webkit-overflow-scrolling:touch}
-.wgb-days .wgb-day{flex:1 0 auto;min-width:74px}
+.wgb-booking .wgb-confirm,.wgb-booking .wgb-slot.wgb-active{background-color:var(--wgb-accent,#1e87f0);border-color:var(--wgb-accent,#1e87f0);color:#fff}
+.wgb-cal-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.wgb-cal-head,.wgb-cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.wgb-cal-head{margin-bottom:4px}
+.wgb-cal-head span{text-align:center;font-size:11px;line-height:1.6;color:#999;text-transform:uppercase}
+.wgb-cal-grid .wgb-cell{aspect-ratio:1/1;display:flex;align-items:center;justify-content:center;padding:0;border:1px solid #e5e5e5;border-radius:6px;background:#fff;cursor:pointer;font-size:14px}
+.wgb-cal-grid .wgb-cell:hover:not(:disabled){border-color:var(--wgb-accent,#1e87f0)}
+.wgb-cal-grid .wgb-cell:disabled{color:#ccc;background:#fafafa;cursor:default}
+.wgb-cal-grid .wgb-blank{border:0;background:transparent;cursor:default}
+.wgb-cal-grid .wgb-cell.wgb-active{background:var(--wgb-accent,#1e87f0);border-color:var(--wgb-accent,#1e87f0);color:#fff}
+.wgb-cal-grid .wgb-cell.wgb-today{font-weight:700;border-color:var(--wgb-accent,#1e87f0)}
 .wgb-summary{cursor:pointer}
-@media (max-width:639px){.wgb-slots{grid-template-columns:repeat(2,1fr)!important}}
 </style>
 <script>
 (function(){
   if (window.__wgbInit){ window.__wgbInit(); return; }
-  function pad(n){return (n<10?'0':'')+n;}
   function startToday(){var d=new Date();d.setHours(0,0,0,0);return d;}
-  function addDays(d,n){var x=new Date(d);x.setDate(x.getDate()+n);return x;}
-  function fmt(d,loc){try{return d.toLocaleDateString(loc,{weekday:'short',day:'numeric',month:'short'});}catch(e){return (d.getMonth()+1)+'/'+d.getDate();}}
-  function slots(d){var wd=d.getDay();if(wd===0||wd===6)return [];return ['09:00','09:30','10:00','11:00','14:00','15:00','16:00','17:00'];}
-  function esc(s){var e=document.createElement('span');e.textContent=s;return e.innerHTML;}
+  function sameDay(a,b){return a&&b&&a.getFullYear()==b.getFullYear()&&a.getMonth()==b.getMonth()&&a.getDate()==b.getDate();}
+  function fmtFull(d,loc){try{return d.toLocaleDateString(loc,{weekday:'long',day:'numeric',month:'long'});}catch(e){return (d.getMonth()+1)+'/'+d.getDate();}}
+  function monthLabel(d,loc){try{return d.toLocaleDateString(loc,{month:'long',year:'numeric'});}catch(e){return (d.getMonth()+1)+' '+d.getFullYear();}}
+  function weekdays(loc){var b=new Date(2024,0,1),a=[];for(var i=0;i<7;i++){var d=new Date(b);d.setDate(b.getDate()+i);try{a.push(d.toLocaleDateString(loc,{weekday:'short'}));}catch(e){a.push(['Mo','Tu','We','Th','Fr','Sa','Su'][i]);}}return a;}
+  function avail(d){var t=startToday();if(d<t)return false;var wd=d.getDay();return wd!==0&&wd!==6;}
+  function slots(d){return ['09:00','09:30','10:00','11:00','14:00','15:00','16:00','17:00'];}
+  function esc(s){var e=document.createElement('span');e.textContent=(s==null?'':s);return e.innerHTML;}
+  function emailOk(v){return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);}
   function render(root){
     var cfg={};try{cfg=JSON.parse(root.getAttribute('data-wgb')||'{}');}catch(e){}
-    var L=cfg.labels||{}, loc=cfg.locale||'en', cols=cfg.cols||3;
+    var L=cfg.labels||{},loc=cfg.locale||'en',cols=cfg.cols||3;
     var slotBtn='uk-button uk-button-'+(cfg.slotStyle||'default')+(cfg.slotSize?' '+cfg.slotSize:'');
     var mount=root.querySelector('.wgb-mount')||root;
-    var st={weekStart:startToday(),day:null,time:null};
-    function week(){var a=[];for(var i=0;i<7;i++)a.push(addDays(st.weekStart,i));return a;}
-    function setStep(){
-      var titleEl=root.querySelector('.wgb-title');
+    var st={view:startToday(),date:null,time:null,form:{name:'',email:'',phone:'',notes:'',privacy:false},err:false,step:'cal'};
+    function monthGrid(v){var y=v.getFullYear(),m=v.getMonth();var fday=(new Date(y,m,1).getDay()+6)%7;var dim=new Date(y,m+1,0).getDate();var c=[];for(var i=0;i<fday;i++)c.push(null);for(var d=1;d<=dim;d++)c.push(new Date(y,m,d));return c;}
+    function summary(){
+      var h='<div class="wgb-summary uk-text-meta uk-margin-small-bottom" data-act="back"><span uk-icon="icon:chevron-left;ratio:0.8"></span> ';
+      h+='<b>'+esc(fmtFull(st.date,loc))+'</b>'+(st.time?(' · <b>'+esc(st.time)+'</b>'):'')+'</div>';
+      return h;
+    }
+    function draw(){
       var h=[];
-      // breadcrumb
-      if(st.day){h.push('<div class="wgb-summary uk-text-meta uk-margin-small-bottom" data-act="reset"><span uk-icon="icon:chevron-left;ratio:0.8"></span> '+esc(L.day||'Day')+': <b>'+esc(fmt(st.day,loc))+'</b>'+(st.time?(' · '+esc(L.time||'Time')+': <b>'+esc(st.time)+'</b>'):'')+' — '+esc(L.change||'change')+'</div>');}
-      if(!st.day){
-        h.push('<div class="uk-flex uk-flex-between uk-flex-middle uk-margin-small-bottom"><span class="uk-text-meta uk-text-bold">'+esc(L.stepDay||'Choose a day')+'</span><span><button class="uk-icon-button" uk-icon="chevron-left" type="button" data-act="prev"></button> <button class="uk-icon-button" uk-icon="chevron-right" type="button" data-act="next"></button></span></div>');
-        h.push('<div class="wgb-days">'+week().map(function(d){var has=slots(d).length>0;return '<button type="button" class="uk-button uk-button-default wgb-day" data-day="'+d.toISOString()+'"'+(has?'':' disabled')+'>'+esc(fmt(d,loc))+'</button>';}).join('')+'</div>');
-      } else if(st.day && !st.time){
-        h.push('<div class="uk-text-meta uk-text-bold uk-margin-small-bottom">'+esc(L.stepTime||'Choose a time')+'</div>');
-        var sl=slots(st.day);
-        if(!sl.length){h.push('<div class="uk-alert uk-alert-warning" uk-alert>'+esc(L.noSlots||'No availability')+'</div>');}
-        else{h.push('<div class="wgb-slots" style="display:grid;grid-template-columns:repeat('+cols+',1fr);gap:6px">'+sl.map(function(t){return '<button type="button" class="'+slotBtn+' wgb-slot" data-time="'+esc(t)+'">'+esc(t)+'</button>';}).join('')+'</div>');}
+      if(st.step==='cal'){
+        h.push('<div class="wgb-cal-nav"><button class="uk-icon-button" uk-icon="chevron-left" type="button" data-act="prev"></button><strong>'+esc(monthLabel(st.view,loc))+'</strong><button class="uk-icon-button" uk-icon="chevron-right" type="button" data-act="next"></button></div>');
+        h.push('<div class="wgb-cal-head">'+weekdays(loc).map(function(w){return '<span>'+esc(w)+'</span>';}).join('')+'</div>');
+        var cells=monthGrid(st.view).map(function(d){
+          if(!d)return '<span class="wgb-cell wgb-blank"></span>';
+          var ok=avail(d),cls='wgb-cell'+(sameDay(d,startToday())?' wgb-today':'')+(sameDay(d,st.date)?' wgb-active':'');
+          return '<button type="button" class="'+cls+'" data-date="'+d.toISOString()+'"'+(ok?'':' disabled')+'>'+d.getDate()+'</button>';
+        });
+        h.push('<div class="wgb-cal-grid">'+cells.join('')+'</div>');
+      } else if(st.step==='time'){
+        h.push(summary());
+        h.push('<div class="uk-text-meta uk-text-bold uk-margin-small-bottom">'+esc(L.stepTime)+'</div>');
+        var sl=slots(st.date);
+        if(!sl.length)h.push('<div class="uk-alert uk-alert-warning" uk-alert>'+esc(L.noSlots)+'</div>');
+        else h.push('<div style="display:grid;grid-template-columns:repeat('+cols+',1fr);gap:6px">'+sl.map(function(t){return '<button type="button" class="'+slotBtn+' wgb-slot" data-time="'+esc(t)+'">'+esc(t)+'</button>';}).join('')+'</div>');
+      } else if(st.step==='form'){
+        h.push(summary());
+        h.push('<div class="uk-text-meta uk-text-bold uk-margin-small-bottom">'+esc(L.stepDetails)+'</div>');
+        if(st.err)h.push('<div class="uk-alert uk-alert-danger" uk-alert>'+esc(L.required)+'</div>');
+        h.push('<div class="uk-margin-small"><input class="uk-input wgb-f-name" type="text" placeholder="'+esc(L.fName)+' *" value="'+esc(st.form.name)+'"></div>');
+        h.push('<div class="uk-margin-small"><input class="uk-input wgb-f-email" type="email" placeholder="'+esc(L.fEmail)+' *" value="'+esc(st.form.email)+'"></div>');
+        h.push('<div class="uk-margin-small"><input class="uk-input wgb-f-phone" type="tel" placeholder="'+esc(L.fPhone)+'" value="'+esc(st.form.phone)+'"></div>');
+        h.push('<div class="uk-margin-small"><textarea class="uk-textarea wgb-f-notes" rows="2" placeholder="'+esc(L.fNotes)+'">'+esc(st.form.notes)+'</textarea></div>');
+        h.push('<label class="uk-margin-small uk-display-block"><input class="uk-checkbox wgb-f-privacy" type="checkbox"'+(st.form.privacy?' checked':'')+'> '+esc(L.privacy)+' *</label>');
+        h.push('<button type="button" class="uk-button wgb-confirm uk-width-1-1 uk-margin-small-top" data-act="book">'+esc(L.bookNow)+'</button>');
       } else {
-        h.push('<div class="uk-text-meta uk-text-bold uk-margin-small-bottom">'+esc(L.confirm||'Confirm')+'</div>');
-        h.push('<button type="button" class="uk-button wgb-confirm uk-width-1-1" data-act="confirm">'+esc(L.confirm||'Confirm booking')+'</button>');
+        h.push('<div class="uk-alert uk-alert-success" uk-alert>'+esc(L.done)+'</div>');
       }
-      h.push('<div class="uk-text-meta uk-text-muted uk-margin-small-top">'+esc(L.demo||'')+'</div>');
+      if(st.step!=='done')h.push('<div class="uk-text-meta uk-text-muted uk-margin-small-top">'+esc(L.demo)+'</div>');
       mount.innerHTML=h.join('');
     }
+    function readForm(){var q=function(c){var n=mount.querySelector('.'+c);return n?n.value:'';};st.form={name:q('wgb-f-name').trim(),email:q('wgb-f-email').trim(),phone:q('wgb-f-phone').trim(),notes:q('wgb-f-notes').trim(),privacy:!!(mount.querySelector('.wgb-f-privacy')||{}).checked};}
     mount.addEventListener('click',function(e){
-      var t=e.target.closest('[data-act],[data-day],[data-time]'); if(!t)return;
-      if(t.hasAttribute('data-day')){st.day=new Date(t.getAttribute('data-day'));st.time=null;}
-      else if(t.hasAttribute('data-time')){st.time=t.getAttribute('data-time');}
+      var t=e.target.closest('[data-act],[data-date],[data-time]');if(!t)return;
+      if(t.hasAttribute('data-date')){st.date=new Date(t.getAttribute('data-date'));st.time=null;st.step='time';}
+      else if(t.hasAttribute('data-time')){st.time=t.getAttribute('data-time');st.step='form';st.err=false;}
       else{var a=t.getAttribute('data-act');
-        if(a==='prev')st.weekStart=addDays(st.weekStart,-7);
-        else if(a==='next')st.weekStart=addDays(st.weekStart,7);
-        else if(a==='reset'){st.day=null;st.time=null;}
-        else if(a==='confirm'){mount.innerHTML='<div class="uk-alert uk-alert-success" uk-alert>'+esc(L.done||'Booked!')+'</div>';return;}
+        if(a==='prev')st.view=new Date(st.view.getFullYear(),st.view.getMonth()-1,1);
+        else if(a==='next')st.view=new Date(st.view.getFullYear(),st.view.getMonth()+1,1);
+        else if(a==='back'){if(st.step==='form'){readForm();st.time=null;st.step='time';}else{st.date=null;st.step='cal';}}
+        else if(a==='book'){readForm();if(!st.form.name||!emailOk(st.form.email)||!st.form.privacy){st.err=true;}else{st.step='done';}}
       }
-      setStep();
+      draw();
     });
-    setStep();
+    draw();
   }
   window.__wgbInit=function(){
     Array.prototype.forEach.call(document.querySelectorAll('[data-wgb]'),function(root){
-      if(root.getAttribute('data-wgb-ready'))return; root.setAttribute('data-wgb-ready','1');
+      if(root.getAttribute('data-wgb-ready'))return;root.setAttribute('data-wgb-ready','1');
       if(!root.querySelector('.wgb-mount')){var m=document.createElement('div');m.className='wgb-mount';root.appendChild(m);}
       render(root);
     });
