@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<extension type="plugin" group="system" method="upgrade">
+    <name>PLG_SYSTEM_WEBGBOOKING</name>
+    <author>Marco Galassi (WebG)</author>
+    <authorEmail>marco.galassi@webg.it</authorEmail>
+    <authorUrl>https://www.webg.it</authorUrl>
+    <creationDate>2026-06</creationDate>
+    <copyright>(C) 2026 Marco Galassi / WebG</copyright>
+    <license>GNU General Public License version 2 or later</license>
+    <version>0.1.0</version>
+    <description>PLG_SYSTEM_WEBGBOOKING_XML_DESCRIPTION</description>
+    <updateservers>
+        <server type="extension" name="WebG Booking">https://raw.githubusercontent.com/WebG-it/webgbooking/main/updates.xml</server>
+    </updateservers>
+    <namespace path="src">WebG\Plugin\System\Webgbooking</namespace>
+    <languages folder="language">
+        <language tag="en-GB">en-GB/plg_system_webgbooking.ini</language>
+        <language tag="en-GB">en-GB/plg_system_webgbooking.sys.ini</language>
+    </languages>
+    <files>
+        <folder plugin="webgbooking">services</folder>
+        <folder>src</folder>
+        <folder>yootheme</folder>
+        <folder>language</folder>
+    </files>
+</extension>
