@@ -14,6 +14,7 @@
 use Joomla\CMS\Factory;
 use Joomla\CMS\Language\Text;
 use Joomla\CMS\Plugin\PluginHelper;
+use Joomla\CMS\Uri\Uri;
 use Joomla\Registry\Registry;
 
 $enum = fn($v, array $ok, $def = '') => in_array($v, $ok, true) ? $v : $def;
@@ -60,6 +61,7 @@ $cfg = [
     'workDays'  => $workDays,
     'minNotice' => (int) $pp->get('min_notice', 2),
     'window'    => (int) $pp->get('window_days', 30),
+    'ajaxUrl'   => Uri::root(true) . '/index.php?option=com_ajax&group=system&plugin=webgbooking&format=json',
     'labels'    => [
         'stepDay'     => Text::_('PLG_SYSTEM_WEBGBOOKING_STEP_DAY'),
         'stepTime'    => Text::_('PLG_SYSTEM_WEBGBOOKING_STEP_TIME'),
@@ -75,6 +77,8 @@ $cfg = [
         'required'    => Text::_('PLG_SYSTEM_WEBGBOOKING_REQUIRED'),
         'demo'        => Text::_('PLG_SYSTEM_WEBGBOOKING_DEMO_NOTE'),
         'done'        => Text::_('PLG_SYSTEM_WEBGBOOKING_DONE'),
+        'sending'     => Text::_('PLG_SYSTEM_WEBGBOOKING_SENDING'),
+        'bookErr'     => Text::_('PLG_SYSTEM_WEBGBOOKING_BOOK_ERR'),
     ],
 ];
 
@@ -161,6 +165,29 @@ $trigBtn = trim('uk-button uk-button-' . $btnStyle . ($btnSize ? ' uk-button-' .
     var st={view:startToday(),date:null,time:null,form:{name:'',email:'',phone:'',notes:'',privacy:false},err:false,step:'cal'};
     function avail(d){var t=startToday();if(d<t)return false;var max=new Date(t);max.setDate(max.getDate()+(cfg.window||30));if(d>max)return false;var wd=(cfg.workDays&&cfg.workDays.length)?cfg.workDays:[1,2,3,4,5];return wd.indexOf(d.getDay())!==-1;}
     function slots(d){var ws=(cfg.workStart||'09:00').split(':'),we=(cfg.workEnd||'18:00').split(':');var s=(+ws[0])*60+(+ws[1]),e=(+we[0])*60+(+we[1]),iv=cfg.interval||30;var out=[],now=new Date(),notice=(cfg.minNotice||0)*3600000;for(var m=s;m+iv<=e;m+=iv){var hh=Math.floor(m/60),mm=m%60;var dt=new Date(d);dt.setHours(hh,mm,0,0);if(dt-now<notice)continue;out.push((hh<10?'0':'')+hh+':'+(mm<10?'0':'')+mm);}return out;}
+    function pad2(n){return (n<10?'0':'')+n;}
+    function isoDate(d){return d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate());}
+    function errBox(msg){return '<div class="uk-alert uk-alert-danger" uk-alert>'+esc(msg)+'</div><button type="button" class="uk-button uk-button-default uk-button-small uk-margin-small-top" data-act="retry">'+esc(L.back)+'</button>';}
+    function submit(){
+      mount.innerHTML='<div class="uk-text-center uk-padding-small"><span uk-spinner></span> '+esc(L.sending||'')+'</div>';
+      var url=cfg.ajaxUrl||'';
+      fetch(url+'&action=token',{headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin'})
+        .then(function(r){return r.json();})
+        .then(function(tk){
+          var fd=new FormData();fd.append('action','book');if(tk&&tk.token)fd.append(tk.token,'1');
+          fd.append('date',isoDate(st.date));fd.append('time',st.time||'');
+          fd.append('name',st.form.name);fd.append('email',st.form.email);
+          fd.append('phone',st.form.phone);fd.append('notes',st.form.notes);
+          fd.append('privacy',st.form.privacy?'1':'0');
+          return fetch(url+'&action=book',{method:'POST',body:fd,headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin'});
+        })
+        .then(function(r){return r.json();})
+        .then(function(res){
+          if(res&&res.ok){mount.innerHTML='<div class="uk-alert uk-alert-success" uk-alert>'+esc(res.message||L.done)+'</div>';}
+          else{mount.innerHTML=errBox((res&&res.message)||L.bookErr);}
+        })
+        .catch(function(){mount.innerHTML=errBox(L.bookErr);});
+    }
     function monthGrid(v){var y=v.getFullYear(),m=v.getMonth();var fday=(new Date(y,m,1).getDay()+6)%7;var dim=new Date(y,m+1,0).getDate();var c=[];for(var i=0;i<fday;i++)c.push(null);for(var d=1;d<=dim;d++)c.push(new Date(y,m,d));return c;}
     function summary(){
       var h='<div class="wgb-summary uk-text-meta uk-margin-small-bottom" data-act="back"><span uk-icon="icon:chevron-left;ratio:0.8"></span> ';
@@ -209,7 +236,8 @@ $trigBtn = trim('uk-button uk-button-' . $btnStyle . ($btnSize ? ' uk-button-' .
         if(a==='prev')st.view=new Date(st.view.getFullYear(),st.view.getMonth()-1,1);
         else if(a==='next')st.view=new Date(st.view.getFullYear(),st.view.getMonth()+1,1);
         else if(a==='back'){if(st.step==='form'){readForm();st.time=null;st.step='time';}else{st.date=null;st.step='cal';}}
-        else if(a==='book'){readForm();if(!st.form.name||!emailOk(st.form.email)||!st.form.privacy){st.err=true;}else{st.step='done';}}
+        else if(a==='book'){readForm();if(!st.form.name||!emailOk(st.form.email)||!st.form.privacy){st.err=true;}else{submit();return;}}
+        else if(a==='retry'){st.err=false;st.step='form';}
       }
       draw();
     });
