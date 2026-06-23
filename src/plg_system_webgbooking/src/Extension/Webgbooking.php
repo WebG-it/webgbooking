@@ -200,6 +200,9 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             ];
             $db->updateObject('#__webgbooking_bookings', $upd, 'id');
 
+            // Per-element confirmation email templates (HMAC-verified from the signed form token).
+            [$row->emailSubjectTpl, $row->emailBodyTpl] = $this->verifyForm($input->post->get('form', '', 'RAW'));
+
             $this->notify($row);
 
             // Newsletter opt-in: forward to the configured webhook (MailUp / Zapier / Make) on consent.
@@ -207,9 +210,65 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                 $this->newsletterSignup($row);
             }
 
+            // Generic booking webhook (Zapier / Make / live spreadsheet write).
+            $this->postBookingWebhook($row);
+
             $this->respond(['ok' => true, 'message' => Text::_('PLG_SYSTEM_WEBGBOOKING_BOOK_OK')]);
         } catch (\Throwable $e) {
             $this->respond(['ok' => false, 'message' => Text::_('PLG_SYSTEM_WEBGBOOKING_BOOK_ERR')]);
+        }
+    }
+
+    /** Verify the HMAC-signed per-element email config from the form token. Returns [subject, body]. */
+    private function verifyForm(string $token): array
+    {
+        try {
+            if ($token === '' || strpos($token, '.') === false) {
+                return ['', ''];
+            }
+            [$payload, $sig] = explode('.', $token, 2);
+            $calc = hash_hmac('sha256', $payload, (string) $this->getApplication()->get('secret'));
+            if (!hash_equals($calc, $sig)) {
+                return ['', ''];
+            }
+            $cfg = json_decode((string) base64_decode($payload), true);
+            if (!\is_array($cfg)) {
+                return ['', ''];
+            }
+
+            return [(string) ($cfg['subject'] ?? ''), (string) ($cfg['body'] ?? '')];
+        } catch (\Throwable $e) {
+            return ['', ''];
+        }
+    }
+
+    /** Forward the full booking to a configured generic webhook (Zapier / Make / live spreadsheet). */
+    private function postBookingWebhook(object $row): void
+    {
+        try {
+            $url = trim((string) $this->params->get('booking_webhook', ''));
+            if ($url === '' || !filter_var($url, FILTER_VALIDATE_URL)) {
+                return;
+            }
+
+            (new HttpFactory())->getHttp()->post(
+                $url,
+                json_encode([
+                    'event'       => 'booking.created',
+                    'id'          => (int) $row->id,
+                    'date'        => $row->booking_date,
+                    'time'        => $row->booking_time,
+                    'name'        => $row->customer_name,
+                    'email'       => $row->customer_email,
+                    'phone'       => $row->customer_phone,
+                    'guest'       => $row->guest_email,
+                    'notes'       => $row->notes,
+                    'meeting_url' => $row->meeting_url,
+                    'status'      => $row->status,
+                ]),
+                ['Content-Type' => 'application/json']
+            );
+        } catch (\Throwable $e) {
         }
     }
 
@@ -258,9 +317,11 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                 $subject = strtr(Text::_('PLG_SYSTEM_WEBGBOOKING_RESCHEDULE_EMAIL_SUBJECT'), ['{name}' => $row->customer_name, '{date}' => $dateFmt, '{time}' => $row->booking_time]);
                 $bodyTpl = $this->bodyTemplate('PLG_SYSTEM_WEBGBOOKING_EMAIL_RESCHEDULED');
             } else {
-                $subjectTpl = trim((string) $this->params->get('email_subject', '')) ?: Text::_('PLG_SYSTEM_WEBGBOOKING_EMAIL_CUSTOMER_SUBJECT');
+                $elSub      = (string) ($row->emailSubjectTpl ?? '');
+                $elBody     = (string) ($row->emailBodyTpl ?? '');
+                $subjectTpl = $elSub !== '' ? $elSub : (trim((string) $this->params->get('email_subject', '')) ?: Text::_('PLG_SYSTEM_WEBGBOOKING_EMAIL_CUSTOMER_SUBJECT'));
                 $subject    = strtr($subjectTpl, ['{name}' => $row->customer_name, '{date}' => $dateFmt, '{time}' => $row->booking_time]);
-                $bodyTpl    = trim((string) $this->params->get('email_body', '')) ?: $this->defaultEmailBody();
+                $bodyTpl    = $elBody !== '' ? $elBody : (trim((string) $this->params->get('email_body', '')) ?: $this->defaultEmailBody());
             }
             $html = $this->wrapEmail($this->renderTpl($bodyTpl, $row, $manageUrl, $dateFmt));
 
@@ -669,6 +730,8 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             'notice' => (int) $this->params->get('min_notice', 2) * 3600,
             'window' => max(1, (int) $this->params->get('window_days', 30)),
             'days'   => $wd ?: [1, 2, 3, 4, 5],
+            'bufBefore' => max(0, (int) $this->params->get('buffer_before', 0)) * 60,
+            'bufAfter'  => max(0, (int) $this->params->get('buffer_after', 0)) * 60,
         ];
     }
 
@@ -687,9 +750,12 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                 continue;
             }
 
+            // Buffer padding around the slot keeps a gap before/after other events.
+            $winStart = $slotStart - $c['bufBefore'];
+            $winEnd   = $slotEnd + $c['bufAfter'];
             $conflict = false;
             foreach ($busy as $b) {
-                if ($slotStart < $b[1] && $slotEnd > $b[0]) {
+                if ($winStart < $b[1] && $winEnd > $b[0]) {
                     $conflict = true;
                     break;
                 }
@@ -872,7 +938,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
 
         // Reschedule widget: the booking calendar in calendar-only mode, authorised by the token.
         $asset = Uri::root(true) . '/plugins/system/webgbooking/yootheme/elements/booking/assets';
-        $ver   = '0.18.0';
+        $ver   = '0.19.0';
         // The manage page is standalone (outside the YOOtheme template), so UIkit isn't present;
         // load it so the reschedule widget (icons, spinner, buttons) renders correctly.
         $uikit = 'https://cdn.jsdelivr.net/npm/uikit@3.21.5/dist';
