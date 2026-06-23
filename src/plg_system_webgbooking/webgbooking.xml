@@ -7,7 +7,7 @@
     <creationDate>2026-06</creationDate>
     <copyright>(C) 2026 Marco Galassi / WebG</copyright>
     <license>GNU General Public License version 2 or later</license>
-    <version>0.16.0</version>
+    <version>0.17.0</version>
     <description>PLG_SYSTEM_WEBGBOOKING_XML_DESCRIPTION</description>
     <scriptfile>script.php</scriptfile>
     <namespace path="src">WebG\Plugin\System\Webgbooking</namespace>
@@ -73,6 +73,10 @@
                 <field name="email_body" type="editor" filter="raw" default="" height="220"
                     label="PLG_SYSTEM_WEBGBOOKING_EMAIL_BODY_LABEL"
                     description="PLG_SYSTEM_WEBGBOOKING_EMAIL_PLACEHOLDERS" />
+
+                <field name="newsletter_webhook" type="url" default=""
+                    label="PLG_SYSTEM_WEBGBOOKING_NEWSLETTER_WEBHOOK_LABEL"
+                    description="PLG_SYSTEM_WEBGBOOKING_NEWSLETTER_WEBHOOK_DESC" />
                 <field name="meeting_url" type="url" default=""
                     label="PLG_SYSTEM_WEBGBOOKING_MEETING_URL_LABEL"
                     description="PLG_SYSTEM_WEBGBOOKING_MEETING_URL_DESC" />
