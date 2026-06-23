@@ -3,13 +3,13 @@
 /**
  * WebG Booking element — render template (UIkit markup).
  * YOOtheme contract: $this->el(), $props, $attrs, $children, $builder.
+ * Tracer preview of the real flow: STEP 1 pick a day, STEP 2 pick a time.
  * Common props (margin, maxwidth, block_align, animation, visibility) are applied
- * automatically by the builder; here we apply the element-specific design options.
+ * by the builder; here we apply the element-specific design options.
  *
  * @license GNU General Public License version 2 or later
  */
 
-// Container style → card classes.
 $cards = [
     'card' => 'uk-card uk-card-default uk-card-body',
     'primary' => 'uk-card uk-card-primary uk-card-body',
@@ -22,12 +22,11 @@ $el = $this->el('div', [
     'class' => ['wgb-booking', $cardClass],
 ]);
 
-// Sanitise/escape everything that reaches the markup (see docs/04-security.md).
 $enum = fn($v, array $ok, $def = '') => in_array($v, $ok, true) ? $v : $def;
 
 $title   = htmlspecialchars((string) ($props['title'] ?? ''), ENT_QUOTES, 'UTF-8');
 $service = htmlspecialchars((string) ($props['service'] ?? ''), ENT_QUOTES, 'UTF-8');
-$btnText = htmlspecialchars((string) ($props['button_text'] ?: 'Check availability'), ENT_QUOTES, 'UTF-8');
+$btnText = htmlspecialchars((string) ($props['button_text'] ?: 'Confirm booking'), ENT_QUOTES, 'UTF-8');
 
 $btnStyle = $enum($props['button_style'] ?? '', ['default', 'primary', 'secondary'], 'primary');
 $btnSize  = $enum($props['button_size'] ?? '', ['small', 'large']);
@@ -43,6 +42,10 @@ $accentStyle = $accent ? ' style="background-color:' . $accent . ';border-color:
 $slotBtn = trim("uk-button uk-button-$slotStyle" . ($slotSize ? " uk-button-$slotSize" : '') . ' uk-width-1-1');
 $mainBtn = trim("uk-button uk-button-$btnStyle" . ($btnSize ? " uk-button-$btnSize" : '') . $btnWidth);
 
+// Tracer placeholders. Real days/slots come from the com_webgbooking availability engine.
+$days  = ['Mon 23', 'Tue 24', 'Wed 25', 'Thu 26', 'Fri 27'];
+$slots = ['09:00', '10:30', '14:00', '15:30'];
+
 ?>
 <?= $el($props, $attrs) ?>
 
@@ -54,13 +57,22 @@ $mainBtn = trim("uk-button uk-button-$btnStyle" . ($btnSize ? " uk-button-$btnSi
     <div class="uk-text-meta uk-margin-small-bottom"><?= $service ?></div>
     <?php endif ?>
 
-    <!-- Tracer placeholder slots. The real availability widget is mounted by media/com_webgbooking JS. -->
-    <div class="uk-grid-small uk-child-width-1-<?= $slotCols ?>@s uk-margin-small" uk-grid>
-        <div><button class="<?= $slotBtn ?>" type="button" disabled>09:00</button></div>
-        <div><button class="<?= $slotBtn ?>" type="button" disabled>10:30</button></div>
-        <div><button class="<?= $slotBtn ?>" type="button" disabled>14:00</button></div>
+    <!-- STEP 1 — choose a day -->
+    <div class="uk-text-meta uk-text-bold uk-margin-small-bottom">1. Choose a day</div>
+    <div class="uk-grid-small uk-child-width-expand uk-margin-small uk-flex-nowrap uk-overflow-auto" uk-grid>
+        <?php foreach ($days as $i => $d) : ?>
+        <div><button class="uk-button uk-button-<?= $i === 0 ? 'primary' : 'default' ?> uk-width-1-1" type="button" disabled><?= htmlspecialchars($d, ENT_QUOTES, 'UTF-8') ?></button></div>
+        <?php endforeach ?>
     </div>
 
-    <button class="<?= $mainBtn ?>" type="button"<?= $accentStyle ?>><?= $btnText ?></button>
+    <!-- STEP 2 — choose a time for the selected day -->
+    <div class="uk-text-meta uk-text-bold uk-margin-small-bottom uk-margin-top">2. Choose a time</div>
+    <div class="uk-grid-small uk-child-width-1-<?= $slotCols ?>@s uk-margin-small" uk-grid>
+        <?php foreach ($slots as $s) : ?>
+        <div><button class="<?= $slotBtn ?>" type="button" disabled><?= htmlspecialchars($s, ENT_QUOTES, 'UTF-8') ?></button></div>
+        <?php endforeach ?>
+    </div>
+
+    <button class="<?= $mainBtn ?> uk-margin-small-top" type="button"<?= $accentStyle ?>><?= $btnText ?></button>
 
 </div>
