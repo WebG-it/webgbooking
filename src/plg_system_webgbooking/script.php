@@ -62,6 +62,8 @@ return new class () implements InstallerScriptInterface {
                 . $db->quoteName('guest_email') . ' VARCHAR(190) NULL,'
                 . $db->quoteName('manage_token') . ' VARCHAR(64) NULL,'
                 . $db->quoteName('google_event_id') . ' VARCHAR(255) NULL,'
+                . $db->quoteName('updated') . ' DATETIME NULL,'
+                . $db->quoteName('seq') . ' INT NOT NULL DEFAULT 0,'
                 . 'PRIMARY KEY (' . $db->quoteName('id') . '),'
                 . 'KEY ' . $db->quoteName('idx_date') . ' (' . $db->quoteName('booking_date') . ',' . $db->quoteName('booking_time') . '),'
                 . 'KEY ' . $db->quoteName('idx_token') . ' (' . $db->quoteName('manage_token') . ')'
@@ -74,6 +76,8 @@ return new class () implements InstallerScriptInterface {
                 'guest_email'     => 'VARCHAR(190) NULL',
                 'manage_token'    => 'VARCHAR(64) NULL',
                 'google_event_id' => 'VARCHAR(255) NULL',
+                'updated'         => 'DATETIME NULL',
+                'seq'             => 'INT NOT NULL DEFAULT 0',
             ];
             foreach ($newCols as $name => $def) {
                 try {
