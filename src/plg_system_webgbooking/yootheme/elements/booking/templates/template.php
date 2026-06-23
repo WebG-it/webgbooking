@@ -138,16 +138,17 @@ $trigBtn = trim('uk-button uk-button-' . $btnStyle . ($btnSize ? ' uk-button-' .
 .wgb-booking .wgb-cal-head,.wgb-booking .wgb-cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}
 .wgb-booking .wgb-cal-head span{text-align:center;font-size:10px;line-height:1.4;text-transform:uppercase;color:var(--wgb-head,inherit);opacity:var(--wgb-head-op,.55)}
 /* Colours come from the theme: available number = uk-text-primary, selected = uk-background-primary (added in JS) */
-.wgb-booking .wgb-cell{position:relative;display:flex;align-items:center;justify-content:center;min-height:34px;padding:0;border:0;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;line-height:1;background:transparent}
-.wgb-booking .wgb-cell:hover:not(:disabled){background:rgba(128,128,128,.14)}
+.wgb-booking .wgb-cell{position:relative;display:flex;align-items:center;justify-content:center;min-height:34px;padding:0;border:1px solid transparent;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;line-height:1;background:transparent}
+/* Available day = a clearly identifiable box (neutral, theme-safe) with the theme-coloured number */
+.wgb-booking .wgb-cell.wgb-avail{background:rgba(127,127,127,.08);border-color:rgba(127,127,127,.22)}
+.wgb-booking .wgb-cell.wgb-avail:hover{background:rgba(127,127,127,.18)}
 .wgb-booking .wgb-cell:disabled{color:#bbb;font-weight:400;cursor:default}
-.wgb-booking .wgb-blank{background:transparent}
+.wgb-booking .wgb-blank{background:transparent;border-color:transparent}
 .wgb-booking .wgb-cell.wgb-today::after{content:"";position:absolute;bottom:5px;left:50%;transform:translateX(-50%);width:4px;height:4px;border-radius:50%;background:currentColor}
 .wgb-booking.wgb-comfortable .wgb-cell{min-height:42px;font-size:14px}
 .wgb-booking.wgb-comfortable .wgb-cal-head span{font-size:11px}
-/* Plain variant: squared, bordered */
-.wgb-booking.wgb-style-plain .wgb-cell{border:1px solid #ececec;border-radius:4px;font-weight:400}
-.wgb-booking.wgb-style-plain .wgb-cell:hover:not(:disabled){background:transparent;border-color:currentColor}
+/* Plain variant: squared boxes */
+.wgb-booking.wgb-style-plain .wgb-cell.wgb-avail{border-radius:4px}
 /* Optional accent override (only when the element sets a colour) */
 .wgb-booking.wgb-has-accent .wgb-cell.uk-text-primary{color:var(--wgb-accent)!important}
 .wgb-booking.wgb-has-accent .wgb-cell.wgb-active{background:var(--wgb-accent)!important;color:#fff!important}
@@ -208,7 +209,7 @@ $trigBtn = trim('uk-button uk-button-' . $btnStyle . ($btnSize ? ' uk-button-' .
         var cells=monthGrid(st.view).map(function(d){
           if(!d)return '<span class="wgb-cell wgb-blank"></span>';
           var ok=avail(d),sel=sameDay(d,st.date),cls='wgb-cell'+(sameDay(d,startToday())?' wgb-today':'');
-          if(sel){cls+=' wgb-active uk-background-primary uk-light';}else if(ok){cls+=' uk-text-primary';}
+          if(sel){cls+=' wgb-active uk-background-primary uk-light';}else if(ok){cls+=' wgb-avail uk-text-primary';}
           return '<button type="button" class="'+cls+'" data-date="'+d.toISOString()+'"'+(ok?'':' disabled')+'>'+d.getDate()+'</button>';
         });
         h.push('<div class="wgb-cal-grid">'+cells.join('')+'</div>');
