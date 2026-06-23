@@ -85,6 +85,11 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             $this->respond(['token' => Session::getFormToken()]);
         }
 
+        // Available slots for a given day (computed server-side in the site timezone).
+        if ($action === 'slots') {
+            $this->availableSlots($input->getCmd('date', ''));
+        }
+
         if (!Session::checkToken('request')) {
             $this->respond(['ok' => false, 'message' => Text::_('PLG_SYSTEM_WEBGBOOKING_INVALID_TOKEN')]);
         }
@@ -138,6 +143,14 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                 'meeting_url'    => trim((string) $this->params->get('meeting_url', '')),
             ];
             $db->insertObject('#__webgbooking_bookings', $row);
+
+            // Auto Google Meet (overrides the fixed link if Google is connected).
+            $meet = $this->createGoogleEvent($row);
+            if ($meet !== '') {
+                $row->meeting_url = $meet;
+                $upd = (object) ['id' => $row->id, 'meeting_url' => $meet];
+                $db->updateObject('#__webgbooking_bookings', $upd, 'id');
+            }
 
             $this->notify($row);
 
@@ -260,20 +273,234 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
         }
     }
 
-    private function enc(string $plain): string
+    private function encKey(): string
     {
-        $key = hash('sha256', (string) $this->getApplication()->get('secret'), true);
-        $iv  = random_bytes(16);
-
-        return base64_encode($iv . openssl_encrypt($plain, 'aes-256-cbc', $key, OPENSSL_RAW_DATA, $iv));
+        return hash('sha256', (string) $this->getApplication()->get('secret'), true);
     }
 
-    private function dec(string $b64): string
+    /** Authenticated encryption (AES-256-GCM), prefixed 'g:'. */
+    private function enc(string $plain): string
     {
-        $raw = base64_decode($b64);
-        $key = hash('sha256', (string) $this->getApplication()->get('secret'), true);
+        $iv  = random_bytes(12);
+        $tag = '';
+        $ct  = openssl_encrypt($plain, 'aes-256-gcm', $this->encKey(), OPENSSL_RAW_DATA, $iv, $tag);
+
+        return 'g:' . base64_encode($iv . $tag . $ct);
+    }
+
+    /** Decrypts GCM ('g:' prefix) or legacy CBC values. */
+    private function dec(string $stored): string
+    {
+        $key = $this->encKey();
+
+        if (strncmp($stored, 'g:', 2) === 0) {
+            $raw = base64_decode(substr($stored, 2));
+
+            return (string) openssl_decrypt(substr($raw, 28), 'aes-256-gcm', $key, OPENSSL_RAW_DATA, substr($raw, 0, 12), substr($raw, 12, 16));
+        }
+
+        $raw = base64_decode($stored);
 
         return (string) openssl_decrypt(substr($raw, 16), 'aes-256-cbc', $key, OPENSSL_RAW_DATA, substr($raw, 0, 16));
+    }
+
+    /** Exchange the (encrypted) refresh token for a Google access token. */
+    private function googleAccessToken(string $refreshEnc): string
+    {
+        $resp = (new HttpFactory())->getHttp()->post(
+            'https://oauth2.googleapis.com/token',
+            [
+                'client_id'     => trim((string) $this->params->get('google_client_id', '')),
+                'client_secret' => trim((string) $this->params->get('google_client_secret', '')),
+                'refresh_token' => $this->dec($refreshEnc),
+                'grant_type'    => 'refresh_token',
+            ],
+            ['Content-Type' => 'application/x-www-form-urlencoded']
+        );
+
+        return json_decode((string) $resp->body, true)['access_token'] ?? '';
+    }
+
+    /**
+     * Create a Google Calendar event with an auto-generated Google Meet link.
+     * Returns the Meet URL, or '' if Google is not connected / on any failure.
+     */
+    private function createGoogleEvent(object $row): string
+    {
+        try {
+            $db = Factory::getContainer()->get(DatabaseInterface::class);
+            $g  = $db->setQuery(
+                $db->getQuery(true)->select('*')->from($db->quoteName('#__webgbooking_google'))
+            )->loadObject();
+
+            if (!$g || empty($g->refresh_token)) {
+                return '';
+            }
+
+            $token = $this->googleAccessToken((string) $g->refresh_token);
+
+            if ($token === '') {
+                return '';
+            }
+
+            $cal   = $g->calendar_id ?: 'primary';
+            $tz    = $this->siteTz();
+            $dur   = (int) $this->params->get('slot_duration', 30);
+            $start = $row->booking_date . 'T' . $row->booking_time . ':00';
+            $end   = (new \DateTime($start))->modify('+' . $dur . ' minutes')->format('Y-m-d\TH:i:s');
+
+            $payload = [
+                'summary'        => 'WebG Booking - ' . $row->customer_name,
+                'description'    => (string) $row->notes,
+                'start'          => ['dateTime' => $start, 'timeZone' => $tz],
+                'end'            => ['dateTime' => $end, 'timeZone' => $tz],
+                'attendees'      => [['email' => $row->customer_email]],
+                'conferenceData' => ['createRequest' => [
+                    'requestId'             => 'wgb-' . bin2hex(random_bytes(6)),
+                    'conferenceSolutionKey' => ['type' => 'hangoutsMeet'],
+                ]],
+            ];
+
+            $resp = (new HttpFactory())->getHttp()->post(
+                'https://www.googleapis.com/calendar/v3/calendars/' . rawurlencode($cal) . '/events?conferenceDataVersion=1',
+                json_encode($payload),
+                ['Authorization' => 'Bearer ' . $token, 'Content-Type' => 'application/json']
+            );
+
+            $data = json_decode((string) $resp->body, true) ?: [];
+
+            if (!empty($data['hangoutLink'])) {
+                return $data['hangoutLink'];
+            }
+
+            foreach (($data['conferenceData']['entryPoints'] ?? []) as $ep) {
+                if (($ep['entryPointType'] ?? '') === 'video' && !empty($ep['uri'])) {
+                    return $ep['uri'];
+                }
+            }
+
+            return '';
+        } catch (\Throwable $e) {
+            return '';
+        }
+    }
+
+    /** A valid timezone identifier for the site (authoritative for slot times). */
+    private function siteTz(): string
+    {
+        $tz = (string) ($this->getApplication()->get('offset') ?: date_default_timezone_get());
+
+        try {
+            new \DateTimeZone($tz);
+        } catch (\Throwable $e) {
+            $tz = 'UTC';
+        }
+
+        return $tz;
+    }
+
+    /**
+     * Authoritative slot computation for a day, in the SITE timezone:
+     * working hours / interval / duration, minus min-notice and Google busy times.
+     */
+    private function availableSlots(string $date): void
+    {
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
+            $this->respond(['slots' => []]);
+        }
+
+        try {
+            $tz   = new \DateTimeZone($this->siteTz());
+            $now  = (new \DateTime('now', $tz))->getTimestamp();
+            $ws   = explode(':', (string) $this->params->get('work_start', '09:00'));
+            $we   = explode(':', (string) $this->params->get('work_end', '18:00'));
+            $start = ((int) ($ws[0] ?? 9)) * 60 + (int) ($ws[1] ?? 0);
+            $end   = ((int) ($we[0] ?? 18)) * 60 + (int) ($we[1] ?? 0);
+            $iv     = max(5, (int) $this->params->get('slot_interval', 30));
+            $dur    = max(5, (int) $this->params->get('slot_duration', 30));
+            $notice = (int) $this->params->get('min_notice', 2) * 3600;
+            $busy   = $this->googleBusy($date, $tz);
+
+            $slots = [];
+
+            for ($m = $start; $m + $dur <= $end; $m += $iv) {
+                $hh = intdiv($m, 60);
+                $mm = $m % 60;
+                $slotStart = (new \DateTime(sprintf('%s %02d:%02d:00', $date, $hh, $mm), $tz))->getTimestamp();
+                $slotEnd   = $slotStart + $dur * 60;
+
+                if ($slotStart < $now + $notice) {
+                    continue;
+                }
+
+                $conflict = false;
+                foreach ($busy as $b) {
+                    if ($slotStart < $b[1] && $slotEnd > $b[0]) {
+                        $conflict = true;
+                        break;
+                    }
+                }
+
+                if (!$conflict) {
+                    $slots[] = sprintf('%02d:%02d', $hh, $mm);
+                }
+            }
+
+            $this->respond(['slots' => $slots]);
+        } catch (\Throwable $e) {
+            $this->respond(['slots' => []]);
+        }
+    }
+
+    /** Google busy intervals for a day as [startTs, endTs] pairs (empty if not connected). */
+    private function googleBusy(string $date, \DateTimeZone $tz): array
+    {
+        try {
+            $db = Factory::getContainer()->get(DatabaseInterface::class);
+            $g  = $db->setQuery(
+                $db->getQuery(true)->select('*')->from($db->quoteName('#__webgbooking_google'))
+            )->loadObject();
+
+            if (!$g || empty($g->refresh_token)) {
+                return [];
+            }
+
+            $token = $this->googleAccessToken((string) $g->refresh_token);
+
+            if ($token === '') {
+                return [];
+            }
+
+            $reads = json_decode((string) ($g->read_calendars ?? ''), true);
+            $reads = \is_array($reads) && $reads ? $reads : [$g->calendar_id ?: 'primary'];
+            $min   = (new \DateTime($date . ' 00:00:00', $tz))->format(\DateTime::RFC3339);
+            $max   = (new \DateTime($date . ' 00:00:00', $tz))->modify('+1 day')->format(\DateTime::RFC3339);
+
+            $resp = (new HttpFactory())->getHttp()->post(
+                'https://www.googleapis.com/calendar/v3/freeBusy',
+                json_encode([
+                    'timeMin' => $min,
+                    'timeMax' => $max,
+                    'items'   => array_map(fn($id) => ['id' => $id], $reads),
+                ]),
+                ['Authorization' => 'Bearer ' . $token, 'Content-Type' => 'application/json']
+            );
+
+            $data = (array) json_decode((string) $resp->body, true);
+            $busy = [];
+
+            foreach (($data['calendars'] ?? []) as $c) {
+                foreach (($c['busy'] ?? []) as $b) {
+                    if (isset($b['start'], $b['end'])) {
+                        $busy[] = [strtotime($b['start']), strtotime($b['end'])];
+                    }
+                }
+            }
+
+            return $busy;
+        } catch (\Throwable $e) {
+            return [];
+        }
     }
 
     private function respond(array $data): void
