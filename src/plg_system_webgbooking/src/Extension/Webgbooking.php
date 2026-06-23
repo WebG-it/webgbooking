@@ -17,10 +17,12 @@ namespace WebG\Plugin\System\Webgbooking\Extension;
 \defined('_JEXEC') or die;
 
 use Joomla\CMS\Factory;
+use Joomla\CMS\Http\HttpFactory;
 use Joomla\CMS\Language\Text;
 use Joomla\CMS\Mail\MailerFactoryInterface;
 use Joomla\CMS\Plugin\CMSPlugin;
 use Joomla\CMS\Session\Session;
+use Joomla\CMS\Uri\Uri;
 use Joomla\Database\DatabaseInterface;
 use Joomla\Event\Event;
 use Joomla\Event\Priority;
@@ -65,13 +67,21 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
      */
     public function onAjax(Event $event): void
     {
-        $app   = $this->getApplication();
-        $input = $app->getInput();
+        $app    = $this->getApplication();
+        $input  = $app->getInput();
+        $action = $input->getCmd('action', 'book');
+
+        // OAuth callback from Google (redirects to admin, not JSON).
+        if ($action === 'oauth') {
+            $this->oauthCallback($input->get('code', '', 'RAW'), $input->get('state', '', 'RAW'));
+            return;
+        }
+
         $app->setHeader('Content-Type', 'application/json; charset=utf-8', true);
         $app->sendHeaders();
 
         // Cache-safe CSRF: the widget fetches a fresh token right before submitting.
-        if ($input->getCmd('action', 'book') === 'token') {
+        if ($action === 'token') {
             $this->respond(['token' => Session::getFormToken()]);
         }
 
@@ -161,6 +171,89 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
         } catch (\Throwable $e) {
             // Email is best-effort: the booking is already stored.
         }
+    }
+
+    /**
+     * Google OAuth callback: exchange the code for tokens, store the encrypted
+     * refresh token, then redirect back to the component admin.
+     */
+    private function oauthCallback(string $code, string $state): void
+    {
+        $app   = $this->getApplication();
+        $admin = Uri::root() . 'administrator/index.php?option=com_webgbooking&view=google';
+
+        try {
+            $db  = Factory::getContainer()->get(DatabaseInterface::class);
+            $row = $db->setQuery(
+                $db->getQuery(true)->select('*')->from($db->quoteName('#__webgbooking_google'))
+            )->loadObject();
+
+            if (!$row || $state === '' || !hash_equals((string) $row->oauth_state, $state)) {
+                $app->redirect($admin . '&wgberror=state');
+                return;
+            }
+
+            $cid      = trim((string) $this->params->get('google_client_id', ''));
+            $csec     = trim((string) $this->params->get('google_client_secret', ''));
+            $redirect = Uri::root() . 'index.php?option=com_ajax&group=system&plugin=webgbooking&format=raw&action=oauth';
+
+            $resp = (new HttpFactory())->getHttp()->post(
+                'https://oauth2.googleapis.com/token',
+                [
+                    'code'          => $code,
+                    'client_id'     => $cid,
+                    'client_secret' => $csec,
+                    'redirect_uri'  => $redirect,
+                    'grant_type'    => 'authorization_code',
+                ],
+                ['Content-Type' => 'application/x-www-form-urlencoded']
+            );
+
+            $data    = json_decode((string) $resp->body, true) ?: [];
+            $refresh = $data['refresh_token'] ?? '';
+            $email   = '';
+
+            if (!empty($data['id_token'])) {
+                $parts = explode('.', $data['id_token']);
+                if (isset($parts[1])) {
+                    $payload = json_decode(base64_decode(strtr($parts[1], '-_', '+/')) ?: '', true) ?: [];
+                    $email   = $payload['email'] ?? '';
+                }
+            }
+
+            if ($refresh === '') {
+                $app->redirect($admin . '&wgberror=token');
+                return;
+            }
+
+            $db->updateObject('#__webgbooking_google', (object) [
+                'id'            => $row->id,
+                'refresh_token' => $this->enc($refresh),
+                'account_email' => $email,
+                'oauth_state'   => '',
+                'updated'       => Factory::getDate()->toSql(),
+            ], 'id');
+
+            $app->redirect($admin . '&wgbconnected=1');
+        } catch (\Throwable $e) {
+            $app->redirect($admin . '&wgberror=exchange');
+        }
+    }
+
+    private function enc(string $plain): string
+    {
+        $key = hash('sha256', (string) $this->getApplication()->get('secret'), true);
+        $iv  = random_bytes(16);
+
+        return base64_encode($iv . openssl_encrypt($plain, 'aes-256-cbc', $key, OPENSSL_RAW_DATA, $iv));
+    }
+
+    private function dec(string $b64): string
+    {
+        $raw = base64_decode($b64);
+        $key = hash('sha256', (string) $this->getApplication()->get('secret'), true);
+
+        return (string) openssl_decrypt(substr($raw, 16), 'aes-256-cbc', $key, OPENSSL_RAW_DATA, substr($raw, 0, 16));
     }
 
     private function respond(array $data): void
