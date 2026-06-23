@@ -6,6 +6,8 @@
  * @license GNU General Public License version 2 or later
  */
 
+\defined('_JEXEC') or die;
+
 $title = htmlspecialchars((string) ($props['title'] ?? ''), ENT_QUOTES, 'UTF-8');
 $service = htmlspecialchars((string) ($props['service'] ?? ''), ENT_QUOTES, 'UTF-8');
 
