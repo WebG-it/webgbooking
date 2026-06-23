@@ -7,7 +7,7 @@
     <creationDate>2026-06</creationDate>
     <copyright>(C) 2026 Marco Galassi / WebG</copyright>
     <license>GNU General Public License version 2 or later</license>
-    <version>0.6.0</version>
+    <version>0.7.0</version>
     <description>PLG_SYSTEM_WEBGBOOKING_XML_DESCRIPTION</description>
     <scriptfile>script.php</scriptfile>
     <updateservers>
@@ -63,6 +63,9 @@
                     label="PLG_SYSTEM_WEBGBOOKING_MIN_NOTICE_LABEL" />
                 <field name="window_days" type="number" default="30" min="1"
                     label="PLG_SYSTEM_WEBGBOOKING_WINDOW_DAYS_LABEL" />
+                <field name="notify_email" type="email" default=""
+                    label="PLG_SYSTEM_WEBGBOOKING_NOTIFY_EMAIL_LABEL"
+                    description="PLG_SYSTEM_WEBGBOOKING_NOTIFY_EMAIL_DESC" />
             </fieldset>
         </fields>
     </config>
