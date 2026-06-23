@@ -65,7 +65,17 @@ return [
         ],
         'accent_color' => [
             'label' => 'Accent Color',
-            'description' => 'Drives the main button. Leave empty to use the theme style.',
+            'description' => 'Highlights the selected day and time. Leave empty to use the theme default.',
+            'type' => 'color',
+        ],
+        'cal_density' => [
+            'label' => 'Calendar Density',
+            'type' => 'select',
+            'options' => ['Compact' => 'compact', 'Comfortable' => 'comfortable'],
+        ],
+        'header_color' => [
+            'label' => 'Weekday Header Color',
+            'description' => 'Colour of the weekday column headers. Empty = theme muted colour.',
             'type' => 'color',
         ],
 
@@ -143,6 +153,12 @@ return [
                             'type' => 'group',
                             'divider' => true,
                             'fields' => ['card_style', 'accent_color'],
+                        ],
+                        [
+                            'label' => 'Calendar',
+                            'type' => 'group',
+                            'divider' => true,
+                            'fields' => ['cal_density', 'header_color'],
                         ],
                         [
                             'label' => 'Slots',
