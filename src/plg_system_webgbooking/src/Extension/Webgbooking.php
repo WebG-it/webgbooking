@@ -106,6 +106,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                 'notes'          => $notes,
                 'status'         => 'pending',
                 'source_url'     => substr((string) $input->server->getString('HTTP_REFERER', ''), 0, 255),
+                'meeting_url'    => (trim((string) $this->params->get('meeting_url', '')) ?: 'https://meet.jit.si/WebGBooking-' . bin2hex(random_bytes(6))),
             ];
             $db->insertObject('#__webgbooking_bookings', $row);
 
@@ -137,7 +138,8 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                     $row->customer_name,
                     $row->customer_email,
                     $row->customer_phone ?: '-',
-                    $row->notes ?: '-'
+                    $row->notes ?: '-',
+                    $row->meeting_url
                 ));
                 $m->Send();
             }
@@ -150,7 +152,8 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                 'PLG_SYSTEM_WEBGBOOKING_EMAIL_CUSTOMER_BODY',
                 $row->customer_name,
                 $row->booking_date,
-                $row->booking_time
+                $row->booking_time,
+                $row->meeting_url
             ));
             $c->Send();
         } catch (\Throwable $e) {
