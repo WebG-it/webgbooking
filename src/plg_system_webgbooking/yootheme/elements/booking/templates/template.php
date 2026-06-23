@@ -13,6 +13,8 @@
 
 use Joomla\CMS\Factory;
 use Joomla\CMS\Language\Text;
+use Joomla\CMS\Plugin\PluginHelper;
+use Joomla\Registry\Registry;
 
 $enum = fn($v, array $ok, $def = '') => in_array($v, $ok, true) ? $v : $def;
 
@@ -35,14 +37,29 @@ $title    = (string) ($props['title'] ?? '') !== '' ? $props['title'] : Text::_(
 $service  = (string) ($props['service'] ?? '');
 $btnText  = (string) ($props['button_text'] ?? '') !== '' ? $props['button_text'] : Text::_('PLG_SYSTEM_WEBGBOOKING_DEFAULT_BUTTON');
 
-$locale = Factory::getApplication()->getLanguage()->getTag();
+$locale  = Factory::getApplication()->getLanguage()->getTag();
+$density = $enum($props['cal_density'] ?? '', ['compact', 'comfortable'], 'compact');
+$headCol = preg_match('/^#[0-9a-fA-F]{3,8}$/', (string) ($props['header_color'] ?? '')) ? $props['header_color'] : '';
+
+// Availability comes from the plugin Options (backend); the widget builds real slots from it.
+$pp = new Registry(PluginHelper::getPlugin('system', 'webgbooking')->params ?? '');
+$timeOk = fn($v, $def) => preg_match('/^\d{1,2}:\d{2}$/', (string) $v) ? (string) $v : $def;
+$wd = $pp->get('work_days', [1, 2, 3, 4, 5]);
+$workDays = array_values(array_map('intval', is_array($wd) ? $wd : explode(',', (string) $wd)));
 
 $cfg = [
     'locale'    => $locale,
     'cols'      => $slotCols,
     'slotStyle' => $slotStyle,
     'slotSize'  => $slotSize ? 'uk-button-' . $slotSize : '',
+    'btnStyle'  => $btnStyle,
     'accent'    => $accent,
+    'workStart' => $timeOk($pp->get('work_start', '09:00'), '09:00'),
+    'workEnd'   => $timeOk($pp->get('work_end', '18:00'), '18:00'),
+    'interval'  => (int) $pp->get('slot_interval', 30),
+    'workDays'  => $workDays,
+    'minNotice' => (int) $pp->get('min_notice', 2),
+    'window'    => (int) $pp->get('window_days', 30),
     'labels'    => [
         'stepDay'     => Text::_('PLG_SYSTEM_WEBGBOOKING_STEP_DAY'),
         'stepTime'    => Text::_('PLG_SYSTEM_WEBGBOOKING_STEP_TIME'),
@@ -61,11 +78,14 @@ $cfg = [
     ],
 ];
 
-$cfgAttr  = htmlspecialchars(json_encode($cfg, JSON_UNESCAPED_UNICODE), ENT_QUOTES, 'UTF-8');
-$styleVar = $accent ? ' style="--wgb-accent:' . htmlspecialchars($accent, ENT_QUOTES, 'UTF-8') . '"' : '';
-$uid      = 'wgb-' . substr(md5(uniqid('', true)), 0, 8);
+$cfgAttr = htmlspecialchars(json_encode($cfg, JSON_UNESCAPED_UNICODE), ENT_QUOTES, 'UTF-8');
+$vars = [];
+if ($accent) { $vars[] = '--wgb-accent:' . $accent; }
+if ($headCol) { $vars[] = '--wgb-head:' . $headCol; $vars[] = '--wgb-head-op:1'; }
+$styleVar = $vars ? ' style="' . htmlspecialchars(implode(';', $vars), ENT_QUOTES, 'UTF-8') . '"' : '';
+$uid = 'wgb-' . substr(md5(uniqid('', true)), 0, 8);
 
-$root = $this->el('div', ['class' => ['wgb-booking', $cardClass]]);
+$root = $this->el('div', ['class' => ['wgb-booking', 'wgb-' . $density, $cardClass]]);
 
 $inner = function () use ($title, $service, $cfg) {
     ob_start(); ?>
@@ -93,14 +113,14 @@ $trigBtn = trim('uk-button uk-button-' . $btnStyle . ($btnSize ? ' uk-button-' .
         <div id="<?= $uid ?>" uk-modal>
             <div class="uk-modal-dialog uk-modal-body uk-margin-auto-vertical">
                 <button class="uk-modal-close-default" type="button" uk-close></button>
-                <div class="wgb-booking" data-wgb="<?= $cfgAttr ?>"<?= $styleVar ?>><?= $inner() ?></div>
+                <div class="wgb-booking wgb-<?= $density ?>" data-wgb="<?= $cfgAttr ?>"<?= $styleVar ?>><?= $inner() ?></div>
             </div>
         </div>
         <?php else : ?>
         <div id="<?= $uid ?>" uk-offcanvas="flip: true; overlay: true">
             <div class="uk-offcanvas-bar">
                 <button class="uk-offcanvas-close" type="button" uk-close></button>
-                <div class="wgb-booking" data-wgb="<?= $cfgAttr ?>"<?= $styleVar ?>><?= $inner() ?></div>
+                <div class="wgb-booking wgb-<?= $density ?>" data-wgb="<?= $cfgAttr ?>"<?= $styleVar ?>><?= $inner() ?></div>
             </div>
         </div>
         <?php endif ?>
@@ -109,18 +129,19 @@ $trigBtn = trim('uk-button uk-button-' . $btnStyle . ($btnSize ? ' uk-button-' .
 <?php endif ?>
 
 <style>
-.wgb-booking .wgb-confirm,.wgb-booking .wgb-slot.wgb-active{background-color:var(--wgb-accent,#1e87f0);border-color:var(--wgb-accent,#1e87f0);color:#fff}
-.wgb-cal-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
-.wgb-cal-head,.wgb-cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
-.wgb-cal-head{margin-bottom:4px}
-.wgb-cal-head span{text-align:center;font-size:11px;line-height:1.6;color:#999;text-transform:uppercase}
-.wgb-cal-grid .wgb-cell{aspect-ratio:1/1;display:flex;align-items:center;justify-content:center;padding:0;border:1px solid #e5e5e5;border-radius:6px;background:#fff;cursor:pointer;font-size:14px}
-.wgb-cal-grid .wgb-cell:hover:not(:disabled){border-color:var(--wgb-accent,#1e87f0)}
-.wgb-cal-grid .wgb-cell:disabled{color:#ccc;background:#fafafa;cursor:default}
-.wgb-cal-grid .wgb-blank{border:0;background:transparent;cursor:default}
-.wgb-cal-grid .wgb-cell.wgb-active{background:var(--wgb-accent,#1e87f0);border-color:var(--wgb-accent,#1e87f0);color:#fff}
-.wgb-cal-grid .wgb-cell.wgb-today{font-weight:700;border-color:var(--wgb-accent,#1e87f0)}
-.wgb-summary{cursor:pointer}
+.wgb-booking .wgb-slot.wgb-active{background:var(--wgb-accent,#1e87f0);border-color:var(--wgb-accent,#1e87f0);color:#fff}
+.wgb-booking .wgb-cal-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.wgb-booking .wgb-cal-head,.wgb-booking .wgb-cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
+.wgb-booking .wgb-cal-head span{text-align:center;font-size:10px;line-height:1.4;text-transform:uppercase;color:var(--wgb-head,inherit);opacity:var(--wgb-head-op,.6)}
+.wgb-booking .wgb-cell{display:flex;align-items:center;justify-content:center;min-height:30px;padding:2px;border:1px solid #ececec;border-radius:4px;background:transparent;cursor:pointer;font-size:12px;line-height:1}
+.wgb-booking .wgb-cell:hover:not(:disabled){border-color:var(--wgb-accent,#1e87f0)}
+.wgb-booking .wgb-cell:disabled{opacity:.35;cursor:default}
+.wgb-booking .wgb-blank{border:0;background:transparent;cursor:default}
+.wgb-booking .wgb-cell.wgb-active{background:var(--wgb-accent,#1e87f0);border-color:var(--wgb-accent,#1e87f0);color:#fff}
+.wgb-booking .wgb-cell.wgb-today{font-weight:700}
+.wgb-booking.wgb-comfortable .wgb-cell{min-height:38px;font-size:14px;border-radius:6px}
+.wgb-booking.wgb-comfortable .wgb-cal-head span{font-size:11px}
+.wgb-booking .wgb-summary{cursor:pointer}
 </style>
 <script>
 (function(){
@@ -130,8 +151,6 @@ $trigBtn = trim('uk-button uk-button-' . $btnStyle . ($btnSize ? ' uk-button-' .
   function fmtFull(d,loc){try{return d.toLocaleDateString(loc,{weekday:'long',day:'numeric',month:'long'});}catch(e){return (d.getMonth()+1)+'/'+d.getDate();}}
   function monthLabel(d,loc){try{return d.toLocaleDateString(loc,{month:'long',year:'numeric'});}catch(e){return (d.getMonth()+1)+' '+d.getFullYear();}}
   function weekdays(loc){var b=new Date(2024,0,1),a=[];for(var i=0;i<7;i++){var d=new Date(b);d.setDate(b.getDate()+i);try{a.push(d.toLocaleDateString(loc,{weekday:'short'}));}catch(e){a.push(['Mo','Tu','We','Th','Fr','Sa','Su'][i]);}}return a;}
-  function avail(d){var t=startToday();if(d<t)return false;var wd=d.getDay();return wd!==0&&wd!==6;}
-  function slots(d){return ['09:00','09:30','10:00','11:00','14:00','15:00','16:00','17:00'];}
   function esc(s){var e=document.createElement('span');e.textContent=(s==null?'':s);return e.innerHTML;}
   function emailOk(v){return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);}
   function render(root){
@@ -140,6 +159,8 @@ $trigBtn = trim('uk-button uk-button-' . $btnStyle . ($btnSize ? ' uk-button-' .
     var slotBtn='uk-button uk-button-'+(cfg.slotStyle||'default')+(cfg.slotSize?' '+cfg.slotSize:'');
     var mount=root.querySelector('.wgb-mount')||root;
     var st={view:startToday(),date:null,time:null,form:{name:'',email:'',phone:'',notes:'',privacy:false},err:false,step:'cal'};
+    function avail(d){var t=startToday();if(d<t)return false;var max=new Date(t);max.setDate(max.getDate()+(cfg.window||30));if(d>max)return false;var wd=(cfg.workDays&&cfg.workDays.length)?cfg.workDays:[1,2,3,4,5];return wd.indexOf(d.getDay())!==-1;}
+    function slots(d){var ws=(cfg.workStart||'09:00').split(':'),we=(cfg.workEnd||'18:00').split(':');var s=(+ws[0])*60+(+ws[1]),e=(+we[0])*60+(+we[1]),iv=cfg.interval||30;var out=[],now=new Date(),notice=(cfg.minNotice||0)*3600000;for(var m=s;m+iv<=e;m+=iv){var hh=Math.floor(m/60),mm=m%60;var dt=new Date(d);dt.setHours(hh,mm,0,0);if(dt-now<notice)continue;out.push((hh<10?'0':'')+hh+':'+(mm<10?'0':'')+mm);}return out;}
     function monthGrid(v){var y=v.getFullYear(),m=v.getMonth();var fday=(new Date(y,m,1).getDay()+6)%7;var dim=new Date(y,m+1,0).getDate();var c=[];for(var i=0;i<fday;i++)c.push(null);for(var d=1;d<=dim;d++)c.push(new Date(y,m,d));return c;}
     function summary(){
       var h='<div class="wgb-summary uk-text-meta uk-margin-small-bottom" data-act="back"><span uk-icon="icon:chevron-left;ratio:0.8"></span> ';
@@ -172,7 +193,7 @@ $trigBtn = trim('uk-button uk-button-' . $btnStyle . ($btnSize ? ' uk-button-' .
         h.push('<div class="uk-margin-small"><input class="uk-input wgb-f-phone" type="tel" placeholder="'+esc(L.fPhone)+'" value="'+esc(st.form.phone)+'"></div>');
         h.push('<div class="uk-margin-small"><textarea class="uk-textarea wgb-f-notes" rows="2" placeholder="'+esc(L.fNotes)+'">'+esc(st.form.notes)+'</textarea></div>');
         h.push('<label class="uk-margin-small uk-display-block"><input class="uk-checkbox wgb-f-privacy" type="checkbox"'+(st.form.privacy?' checked':'')+'> '+esc(L.privacy)+' *</label>');
-        h.push('<button type="button" class="uk-button wgb-confirm uk-width-1-1 uk-margin-small-top" data-act="book">'+esc(L.bookNow)+'</button>');
+        h.push('<button type="button" class="uk-button uk-button-'+(cfg.btnStyle||'primary')+' uk-width-1-1 uk-margin-small-top" data-act="book">'+esc(L.bookNow)+'</button>');
       } else {
         h.push('<div class="uk-alert uk-alert-success" uk-alert>'+esc(L.done)+'</div>');
       }
