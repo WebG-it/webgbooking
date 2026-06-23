@@ -90,7 +90,7 @@ if ($headCol) { $vars[] = '--wgb-head:' . $headCol; $vars[] = '--wgb-head-op:1';
 $styleVar = $vars ? ' style="' . htmlspecialchars(implode(';', $vars), ENT_QUOTES, 'UTF-8') . '"' : '';
 $uid = 'wgb-' . substr(md5(uniqid('', true)), 0, 8);
 
-$root = $this->el('div', ['class' => ['wgb-booking', 'wgb-' . $density, 'wgb-style-' . $calStyle, $cardClass]]);
+$root = $this->el('div', ['class' => ['wgb-booking', 'wgb-' . $density, 'wgb-style-' . $calStyle, ($accent ? 'wgb-has-accent' : ''), $cardClass]]);
 
 $inner = function () use ($title, $service, $cfg) {
     ob_start(); ?>
@@ -118,14 +118,14 @@ $trigBtn = trim('uk-button uk-button-' . $btnStyle . ($btnSize ? ' uk-button-' .
         <div id="<?= $uid ?>" uk-modal>
             <div class="uk-modal-dialog uk-modal-body uk-margin-auto-vertical">
                 <button class="uk-modal-close-default" type="button" uk-close></button>
-                <div class="wgb-booking wgb-<?= $density ?> wgb-style-<?= $calStyle ?>" data-wgb="<?= $cfgAttr ?>"<?= $styleVar ?>><?= $inner() ?></div>
+                <div class="wgb-booking wgb-<?= $density ?> wgb-style-<?= $calStyle ?><?= $accent ? ' wgb-has-accent' : '' ?>" data-wgb="<?= $cfgAttr ?>"<?= $styleVar ?>><?= $inner() ?></div>
             </div>
         </div>
         <?php else : ?>
         <div id="<?= $uid ?>" uk-offcanvas="flip: true; overlay: true">
             <div class="uk-offcanvas-bar">
                 <button class="uk-offcanvas-close" type="button" uk-close></button>
-                <div class="wgb-booking wgb-<?= $density ?> wgb-style-<?= $calStyle ?>" data-wgb="<?= $cfgAttr ?>"<?= $styleVar ?>><?= $inner() ?></div>
+                <div class="wgb-booking wgb-<?= $density ?> wgb-style-<?= $calStyle ?><?= $accent ? ' wgb-has-accent' : '' ?>" data-wgb="<?= $cfgAttr ?>"<?= $styleVar ?>><?= $inner() ?></div>
             </div>
         </div>
         <?php endif ?>
@@ -137,21 +137,20 @@ $trigBtn = trim('uk-button uk-button-' . $btnStyle . ($btnSize ? ' uk-button-' .
 .wgb-booking .wgb-cal-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
 .wgb-booking .wgb-cal-head,.wgb-booking .wgb-cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}
 .wgb-booking .wgb-cal-head span{text-align:center;font-size:10px;line-height:1.4;text-transform:uppercase;color:var(--wgb-head,inherit);opacity:var(--wgb-head-op,.55)}
-/* Calendly look (default): rounded tinted cells, blue number, today dot, solid when selected */
-.wgb-booking .wgb-cell{position:relative;display:flex;align-items:center;justify-content:center;min-height:34px;padding:0;border:0;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;line-height:1;background:#eef5fd;background:color-mix(in srgb,var(--wgb-accent,#1e87f0) 10%,transparent);color:var(--wgb-accent,#1e87f0)}
-.wgb-booking .wgb-cell:hover:not(:disabled){background:color-mix(in srgb,var(--wgb-accent,#1e87f0) 22%,transparent)}
-.wgb-booking .wgb-cell:disabled{background:transparent;color:#c4c4c4;font-weight:400;cursor:default}
+/* Colours come from the theme: available number = uk-text-primary, selected = uk-background-primary (added in JS) */
+.wgb-booking .wgb-cell{position:relative;display:flex;align-items:center;justify-content:center;min-height:34px;padding:0;border:0;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;line-height:1;background:transparent}
+.wgb-booking .wgb-cell:hover:not(:disabled){background:rgba(128,128,128,.14)}
+.wgb-booking .wgb-cell:disabled{color:#bbb;font-weight:400;cursor:default}
 .wgb-booking .wgb-blank{background:transparent}
-.wgb-booking .wgb-cell.wgb-active{background:var(--wgb-accent,#1e87f0);color:#fff}
 .wgb-booking .wgb-cell.wgb-today::after{content:"";position:absolute;bottom:5px;left:50%;transform:translateX(-50%);width:4px;height:4px;border-radius:50%;background:currentColor}
 .wgb-booking.wgb-comfortable .wgb-cell{min-height:42px;font-size:14px}
 .wgb-booking.wgb-comfortable .wgb-cal-head span{font-size:11px}
-/* Plain variant: squared, bordered, transparent */
-.wgb-booking.wgb-style-plain .wgb-cell{background:transparent;border:1px solid #ececec;border-radius:4px;color:inherit;font-weight:400}
-.wgb-booking.wgb-style-plain .wgb-cell:hover:not(:disabled){background:transparent;border-color:var(--wgb-accent,#1e87f0)}
-.wgb-booking.wgb-style-plain .wgb-cell:disabled{opacity:.35;color:inherit;border-color:#ececec}
-.wgb-booking.wgb-style-plain .wgb-cell.wgb-active{background:var(--wgb-accent,#1e87f0);border-color:var(--wgb-accent,#1e87f0);color:#fff}
-.wgb-booking .wgb-slot.wgb-active{background:var(--wgb-accent,#1e87f0);border-color:var(--wgb-accent,#1e87f0);color:#fff}
+/* Plain variant: squared, bordered */
+.wgb-booking.wgb-style-plain .wgb-cell{border:1px solid #ececec;border-radius:4px;font-weight:400}
+.wgb-booking.wgb-style-plain .wgb-cell:hover:not(:disabled){background:transparent;border-color:currentColor}
+/* Optional accent override (only when the element sets a colour) */
+.wgb-booking.wgb-has-accent .wgb-cell.uk-text-primary{color:var(--wgb-accent)!important}
+.wgb-booking.wgb-has-accent .wgb-cell.wgb-active{background:var(--wgb-accent)!important;color:#fff!important}
 .wgb-booking .wgb-summary{cursor:pointer}
 </style>
 <script>
@@ -208,7 +207,8 @@ $trigBtn = trim('uk-button uk-button-' . $btnStyle . ($btnSize ? ' uk-button-' .
         h.push('<div class="wgb-cal-head">'+weekdays(loc).map(function(w){return '<span>'+esc(w)+'</span>';}).join('')+'</div>');
         var cells=monthGrid(st.view).map(function(d){
           if(!d)return '<span class="wgb-cell wgb-blank"></span>';
-          var ok=avail(d),cls='wgb-cell'+(sameDay(d,startToday())?' wgb-today':'')+(sameDay(d,st.date)?' wgb-active':'');
+          var ok=avail(d),sel=sameDay(d,st.date),cls='wgb-cell'+(sameDay(d,startToday())?' wgb-today':'');
+          if(sel){cls+=' wgb-active uk-background-primary uk-light';}else if(ok){cls+=' uk-text-primary';}
           return '<button type="button" class="'+cls+'" data-date="'+d.toISOString()+'"'+(ok?'':' disabled')+'>'+d.getDate()+'</button>';
         });
         h.push('<div class="wgb-cal-grid">'+cells.join('')+'</div>');
@@ -231,7 +231,6 @@ $trigBtn = trim('uk-button uk-button-' . $btnStyle . ($btnSize ? ' uk-button-' .
       } else {
         h.push('<div class="uk-alert uk-alert-success" uk-alert>'+esc(L.done)+'</div>');
       }
-      if(st.step!=='done')h.push('<div class="uk-text-meta uk-text-muted uk-margin-small-top">'+esc(L.demo)+'</div>');
       mount.innerHTML=h.join('');
     }
     function readForm(){var q=function(c){var n=mount.querySelector('.'+c);return n?n.value:'';};st.form={name:q('wgb-f-name').trim(),email:q('wgb-f-email').trim(),phone:q('wgb-f-phone').trim(),notes:q('wgb-f-notes').trim(),privacy:!!(mount.querySelector('.wgb-f-privacy')||{}).checked};}
