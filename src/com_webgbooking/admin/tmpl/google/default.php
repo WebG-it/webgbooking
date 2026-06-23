@@ -33,7 +33,39 @@ $s = $this->status;
                     <span class="icon-check" aria-hidden="true"></span>
                     <?php echo Text::sprintf('COM_WEBGBOOKING_GOOGLE_CONNECTED_AS', htmlspecialchars((string) $s->email, ENT_QUOTES, 'UTF-8')); ?>
                 </div>
-                <div class="alert alert-info"><?php echo Text::_('COM_WEBGBOOKING_GOOGLE_NEXT_NOTE'); ?></div>
+                <?php if (!empty($s->calendars)) : ?>
+                    <h3 class="h5 mt-4"><?php echo Text::_('COM_WEBGBOOKING_GOOGLE_CAL_HEADING'); ?></h3>
+                    <p class="text-muted"><?php echo Text::_('COM_WEBGBOOKING_GOOGLE_CAL_INTRO'); ?></p>
+                    <form action="<?php echo Route::_('index.php?option=com_webgbooking&task=google.savecalendars'); ?>" method="post">
+                        <table class="table table-sm align-middle">
+                            <thead>
+                                <tr>
+                                    <th><?php echo Text::_('COM_WEBGBOOKING_GOOGLE_CAL_NAME'); ?></th>
+                                    <th class="text-center"><?php echo Text::_('COM_WEBGBOOKING_GOOGLE_CAL_BUSY'); ?></th>
+                                    <th class="text-center"><?php echo Text::_('COM_WEBGBOOKING_GOOGLE_CAL_WRITE'); ?></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                            <?php foreach ($s->calendars as $c) : ?>
+                                <tr>
+                                    <td>
+                                        <?php echo htmlspecialchars((string) $c->summary, ENT_QUOTES, 'UTF-8'); ?>
+                                        <?php if ($c->primary) : ?> <span class="badge bg-secondary">primary</span><?php endif; ?>
+                                    </td>
+                                    <td class="text-center"><input type="checkbox" name="read[]" value="<?php echo htmlspecialchars((string) $c->id, ENT_QUOTES, 'UTF-8'); ?>"<?php echo $c->read ? ' checked' : ''; ?>></td>
+                                    <td class="text-center"><input type="radio" name="write" value="<?php echo htmlspecialchars((string) $c->id, ENT_QUOTES, 'UTF-8'); ?>"<?php echo $c->write ? ' checked' : ''; ?>></td>
+                                </tr>
+                            <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                        <button type="submit" class="btn btn-primary"><?php echo Text::_('COM_WEBGBOOKING_GOOGLE_CAL_SAVE'); ?></button>
+                        <?php echo HTMLHelper::_('form.token'); ?>
+                    </form>
+                <?php elseif (!empty($s->apiError)) : ?>
+                    <div class="alert alert-warning"><?php echo Text::sprintf('COM_WEBGBOOKING_GOOGLE_CAL_ERROR', htmlspecialchars((string) $s->apiError, ENT_QUOTES, 'UTF-8')); ?></div>
+                <?php endif; ?>
+
+                <hr>
                 <form action="<?php echo Route::_('index.php?option=com_webgbooking&task=google.disconnect'); ?>" method="post">
                     <button type="submit" class="btn btn-outline-danger"><?php echo Text::_('COM_WEBGBOOKING_GOOGLE_DISCONNECT'); ?></button>
                     <?php echo HTMLHelper::_('form.token'); ?>
