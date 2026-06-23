@@ -57,6 +57,11 @@ return [
             'type' => 'checkbox',
             'text' => 'Allow inviting a guest',
         ],
+        'analytics_event' => [
+            'label' => 'Analytics event',
+            'description' => 'Event pushed to dataLayer / gtag on a completed booking (GA4 / GTM). Empty = "wgb_booking_completed".',
+            'type' => 'text',
+        ],
         'layout' => [
             'label' => 'Layout',
             'type' => 'select',
@@ -159,7 +164,7 @@ return [
             'fields' => [
                 [
                     'title' => 'Content',
-                    'fields' => ['title', 'service', 'button_text', 'allow_guest', 'layout'],
+                    'fields' => ['title', 'service', 'button_text', 'allow_guest', 'analytics_event', 'layout'],
                 ],
                 [
                     'title' => 'Settings',
