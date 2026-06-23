@@ -68,6 +68,11 @@ return [
             'description' => 'Highlights the selected day and time. Leave empty to use the theme default.',
             'type' => 'color',
         ],
+        'cal_style' => [
+            'label' => 'Calendar Style',
+            'type' => 'select',
+            'options' => ['Calendly (rounded)' => 'calendly', 'Plain (bordered)' => 'plain'],
+        ],
         'cal_density' => [
             'label' => 'Calendar Density',
             'type' => 'select',
@@ -158,7 +163,7 @@ return [
                             'label' => 'Calendar',
                             'type' => 'group',
                             'divider' => true,
-                            'fields' => ['cal_density', 'header_color'],
+                            'fields' => ['cal_style', 'cal_density', 'header_color'],
                         ],
                         [
                             'label' => 'Slots',
