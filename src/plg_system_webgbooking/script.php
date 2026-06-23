@@ -59,18 +59,30 @@ return new class () implements InstallerScriptInterface {
                 . $db->quoteName('status') . " VARCHAR(20) NOT NULL DEFAULT 'pending',"
                 . $db->quoteName('source_url') . ' VARCHAR(255) NULL,'
                 . $db->quoteName('meeting_url') . ' VARCHAR(255) NULL,'
+                . $db->quoteName('guest_email') . ' VARCHAR(190) NULL,'
+                . $db->quoteName('manage_token') . ' VARCHAR(64) NULL,'
+                . $db->quoteName('google_event_id') . ' VARCHAR(255) NULL,'
                 . 'PRIMARY KEY (' . $db->quoteName('id') . '),'
-                . 'KEY ' . $db->quoteName('idx_date') . ' (' . $db->quoteName('booking_date') . ',' . $db->quoteName('booking_time') . ')'
+                . 'KEY ' . $db->quoteName('idx_date') . ' (' . $db->quoteName('booking_date') . ',' . $db->quoteName('booking_time') . '),'
+                . 'KEY ' . $db->quoteName('idx_token') . ' (' . $db->quoteName('manage_token') . ')'
                 . ') DEFAULT CHARSET=utf8mb4'
             )->execute();
 
-            // Add meeting_url to pre-existing tables (upgrade path).
-            try {
-                $col = $db->setQuery('SHOW COLUMNS FROM ' . $db->quoteName('#__webgbooking_bookings') . " LIKE 'meeting_url'")->loadResult();
-                if (!$col) {
-                    $db->setQuery('ALTER TABLE ' . $db->quoteName('#__webgbooking_bookings') . ' ADD COLUMN ' . $db->quoteName('meeting_url') . ' VARCHAR(255) NULL')->execute();
+            // Upgrade path: add any columns missing from a pre-existing table.
+            $newCols = [
+                'meeting_url'     => 'VARCHAR(255) NULL',
+                'guest_email'     => 'VARCHAR(190) NULL',
+                'manage_token'    => 'VARCHAR(64) NULL',
+                'google_event_id' => 'VARCHAR(255) NULL',
+            ];
+            foreach ($newCols as $name => $def) {
+                try {
+                    $has = $db->setQuery('SHOW COLUMNS FROM ' . $db->quoteName('#__webgbooking_bookings') . ' LIKE ' . $db->quote($name))->loadResult();
+                    if (!$has) {
+                        $db->setQuery('ALTER TABLE ' . $db->quoteName('#__webgbooking_bookings') . ' ADD COLUMN ' . $db->quoteName($name) . ' ' . $def)->execute();
+                    }
+                } catch (\Throwable $e) {
                 }
-            } catch (\Throwable $e) {
             }
 
             // Google connection store (single row): encrypted refresh token + account.
