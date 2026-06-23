@@ -10,15 +10,17 @@ Estensione di **prenotazione appuntamenti per Joomla 5/6** con elemento nativo *
 - Joomla **5** o **6**
 - **YOOtheme Pro 5** (l'elemento si registra nel builder senza child theme)
 
-## Installazione
+## Installazione (pacchetto unico)
+Un solo pacchetto installa **componente + plugin** insieme e aggiorna tutto in un colpo solo.
+
 1. Joomla → *Sistema → Installa → Installa da URL*, incolla:
    ```
-   https://raw.githubusercontent.com/WebG-it/webgbooking/main/dist/plg_system_webgbooking-0.13.3.zip
+   https://raw.githubusercontent.com/WebG-it/webgbooking/main/dist/pkg_webgbooking-0.14.0.zip
    ```
-2. *Sistema → Plugin* → abilita **"System - WebG Booking"**.
-3. YOOtheme Customizer → **Add Element** → gruppo **WebG** → **Booking**.
+2. Il plugin si **attiva da solo**. YOOtheme Customizer → **Add Element** → gruppo **WebG** → **Booking**.
+3. Backend prenotazioni e connessione Google: **Componenti → WebG Booking**.
 
-Gli aggiornamenti successivi arrivano via **Sistema → Aggiorna** (Joomla Update System).
+Gli aggiornamenti successivi arrivano via **Sistema → Aggiorna** come **un unico "WebG Booking"** (Joomla Update System).
 
 ## Licenza
 GNU General Public License v2 o successiva (vedi [LICENSE](./LICENSE)).
