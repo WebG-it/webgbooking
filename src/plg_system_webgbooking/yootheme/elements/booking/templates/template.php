@@ -39,8 +39,9 @@ $service  = (string) ($props['service'] ?? '');
 $btnText  = (string) ($props['button_text'] ?? '') !== '' ? $props['button_text'] : Text::_('PLG_SYSTEM_WEBGBOOKING_DEFAULT_BUTTON');
 
 $locale  = Factory::getApplication()->getLanguage()->getTag();
-$density = $enum($props['cal_density'] ?? '', ['compact', 'comfortable'], 'compact');
-$headCol = preg_match('/^#[0-9a-fA-F]{3,8}$/', (string) ($props['header_color'] ?? '')) ? $props['header_color'] : '';
+$density  = $enum($props['cal_density'] ?? '', ['compact', 'comfortable'], 'compact');
+$calStyle = $enum($props['cal_style'] ?? '', ['calendly', 'plain'], 'calendly');
+$headCol  = preg_match('/^#[0-9a-fA-F]{3,8}$/', (string) ($props['header_color'] ?? '')) ? $props['header_color'] : '';
 
 // Availability comes from the plugin Options (backend); the widget builds real slots from it.
 $pp = new Registry(PluginHelper::getPlugin('system', 'webgbooking')->params ?? '');
@@ -89,7 +90,7 @@ if ($headCol) { $vars[] = '--wgb-head:' . $headCol; $vars[] = '--wgb-head-op:1';
 $styleVar = $vars ? ' style="' . htmlspecialchars(implode(';', $vars), ENT_QUOTES, 'UTF-8') . '"' : '';
 $uid = 'wgb-' . substr(md5(uniqid('', true)), 0, 8);
 
-$root = $this->el('div', ['class' => ['wgb-booking', 'wgb-' . $density, $cardClass]]);
+$root = $this->el('div', ['class' => ['wgb-booking', 'wgb-' . $density, 'wgb-style-' . $calStyle, $cardClass]]);
 
 $inner = function () use ($title, $service, $cfg) {
     ob_start(); ?>
@@ -117,14 +118,14 @@ $trigBtn = trim('uk-button uk-button-' . $btnStyle . ($btnSize ? ' uk-button-' .
         <div id="<?= $uid ?>" uk-modal>
             <div class="uk-modal-dialog uk-modal-body uk-margin-auto-vertical">
                 <button class="uk-modal-close-default" type="button" uk-close></button>
-                <div class="wgb-booking wgb-<?= $density ?>" data-wgb="<?= $cfgAttr ?>"<?= $styleVar ?>><?= $inner() ?></div>
+                <div class="wgb-booking wgb-<?= $density ?> wgb-style-<?= $calStyle ?>" data-wgb="<?= $cfgAttr ?>"<?= $styleVar ?>><?= $inner() ?></div>
             </div>
         </div>
         <?php else : ?>
         <div id="<?= $uid ?>" uk-offcanvas="flip: true; overlay: true">
             <div class="uk-offcanvas-bar">
                 <button class="uk-offcanvas-close" type="button" uk-close></button>
-                <div class="wgb-booking wgb-<?= $density ?>" data-wgb="<?= $cfgAttr ?>"<?= $styleVar ?>><?= $inner() ?></div>
+                <div class="wgb-booking wgb-<?= $density ?> wgb-style-<?= $calStyle ?>" data-wgb="<?= $cfgAttr ?>"<?= $styleVar ?>><?= $inner() ?></div>
             </div>
         </div>
         <?php endif ?>
@@ -133,18 +134,24 @@ $trigBtn = trim('uk-button uk-button-' . $btnStyle . ($btnSize ? ' uk-button-' .
 <?php endif ?>
 
 <style>
-.wgb-booking .wgb-slot.wgb-active{background:var(--wgb-accent,#1e87f0);border-color:var(--wgb-accent,#1e87f0);color:#fff}
-.wgb-booking .wgb-cal-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
-.wgb-booking .wgb-cal-head,.wgb-booking .wgb-cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
-.wgb-booking .wgb-cal-head span{text-align:center;font-size:10px;line-height:1.4;text-transform:uppercase;color:var(--wgb-head,inherit);opacity:var(--wgb-head-op,.6)}
-.wgb-booking .wgb-cell{display:flex;align-items:center;justify-content:center;min-height:30px;padding:2px;border:1px solid #ececec;border-radius:4px;background:transparent;cursor:pointer;font-size:12px;line-height:1}
-.wgb-booking .wgb-cell:hover:not(:disabled){border-color:var(--wgb-accent,#1e87f0)}
-.wgb-booking .wgb-cell:disabled{opacity:.35;cursor:default}
-.wgb-booking .wgb-blank{border:0;background:transparent;cursor:default}
-.wgb-booking .wgb-cell.wgb-active{background:var(--wgb-accent,#1e87f0);border-color:var(--wgb-accent,#1e87f0);color:#fff}
-.wgb-booking .wgb-cell.wgb-today{font-weight:700}
-.wgb-booking.wgb-comfortable .wgb-cell{min-height:38px;font-size:14px;border-radius:6px}
+.wgb-booking .wgb-cal-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.wgb-booking .wgb-cal-head,.wgb-booking .wgb-cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}
+.wgb-booking .wgb-cal-head span{text-align:center;font-size:10px;line-height:1.4;text-transform:uppercase;color:var(--wgb-head,inherit);opacity:var(--wgb-head-op,.55)}
+/* Calendly look (default): rounded tinted cells, blue number, today dot, solid when selected */
+.wgb-booking .wgb-cell{position:relative;display:flex;align-items:center;justify-content:center;min-height:34px;padding:0;border:0;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;line-height:1;background:#eef5fd;background:color-mix(in srgb,var(--wgb-accent,#1e87f0) 10%,transparent);color:var(--wgb-accent,#1e87f0)}
+.wgb-booking .wgb-cell:hover:not(:disabled){background:color-mix(in srgb,var(--wgb-accent,#1e87f0) 22%,transparent)}
+.wgb-booking .wgb-cell:disabled{background:transparent;color:#c4c4c4;font-weight:400;cursor:default}
+.wgb-booking .wgb-blank{background:transparent}
+.wgb-booking .wgb-cell.wgb-active{background:var(--wgb-accent,#1e87f0);color:#fff}
+.wgb-booking .wgb-cell.wgb-today::after{content:"";position:absolute;bottom:5px;left:50%;transform:translateX(-50%);width:4px;height:4px;border-radius:50%;background:currentColor}
+.wgb-booking.wgb-comfortable .wgb-cell{min-height:42px;font-size:14px}
 .wgb-booking.wgb-comfortable .wgb-cal-head span{font-size:11px}
+/* Plain variant: squared, bordered, transparent */
+.wgb-booking.wgb-style-plain .wgb-cell{background:transparent;border:1px solid #ececec;border-radius:4px;color:inherit;font-weight:400}
+.wgb-booking.wgb-style-plain .wgb-cell:hover:not(:disabled){background:transparent;border-color:var(--wgb-accent,#1e87f0)}
+.wgb-booking.wgb-style-plain .wgb-cell:disabled{opacity:.35;color:inherit;border-color:#ececec}
+.wgb-booking.wgb-style-plain .wgb-cell.wgb-active{background:var(--wgb-accent,#1e87f0);border-color:var(--wgb-accent,#1e87f0);color:#fff}
+.wgb-booking .wgb-slot.wgb-active{background:var(--wgb-accent,#1e87f0);border-color:var(--wgb-accent,#1e87f0);color:#fff}
 .wgb-booking .wgb-summary{cursor:pointer}
 </style>
 <script>
