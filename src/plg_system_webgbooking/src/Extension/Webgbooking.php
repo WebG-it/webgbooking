@@ -85,7 +85,12 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             $this->respond(['token' => Session::getFormToken()]);
         }
 
-        // Available slots for a given day (computed server-side in the site timezone).
+        // Whole-month availability: the single source for selectable days + their slots.
+        if ($action === 'month') {
+            $this->monthSlots($input->getCmd('from', ''), $input->getCmd('to', ''));
+        }
+
+        // Single-day slots (widget fallback), computed server-side in the site timezone.
         if ($action === 'slots') {
             $this->availableSlots($input->getCmd('date', ''));
         }
@@ -403,6 +408,57 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
      * Authoritative slot computation for a day, in the SITE timezone:
      * working hours / interval / duration, minus min-notice and Google busy times.
      */
+    /** Availability rules read once from the plugin params. */
+    private function slotConfig(): array
+    {
+        $ws = explode(':', (string) $this->params->get('work_start', '09:00'));
+        $we = explode(':', (string) $this->params->get('work_end', '18:00'));
+        $wd = $this->params->get('work_days', [1, 2, 3, 4, 5]);
+        $wd = array_values(array_map('intval', \is_array($wd) ? $wd : explode(',', (string) $wd)));
+
+        return [
+            'start'  => ((int) ($ws[0] ?? 9)) * 60 + (int) ($ws[1] ?? 0),
+            'end'    => ((int) ($we[0] ?? 18)) * 60 + (int) ($we[1] ?? 0),
+            'iv'     => max(5, (int) $this->params->get('slot_interval', 30)),
+            'dur'    => max(5, (int) $this->params->get('slot_duration', 30)),
+            'notice' => (int) $this->params->get('min_notice', 2) * 3600,
+            'window' => max(1, (int) $this->params->get('window_days', 30)),
+            'days'   => $wd ?: [1, 2, 3, 4, 5],
+        ];
+    }
+
+    /** Available "HH:MM" slots for one day, given pre-fetched busy intervals. */
+    private function computeDay(string $dayStr, \DateTimeZone $tz, array $busy, int $now, array $c): array
+    {
+        $slots = [];
+
+        for ($m = $c['start']; $m + $c['dur'] <= $c['end']; $m += $c['iv']) {
+            $hh = intdiv($m, 60);
+            $mm = $m % 60;
+            $slotStart = (new \DateTime(sprintf('%s %02d:%02d:00', $dayStr, $hh, $mm), $tz))->getTimestamp();
+            $slotEnd   = $slotStart + $c['dur'] * 60;
+
+            if ($slotStart < $now + $c['notice']) {
+                continue;
+            }
+
+            $conflict = false;
+            foreach ($busy as $b) {
+                if ($slotStart < $b[1] && $slotEnd > $b[0]) {
+                    $conflict = true;
+                    break;
+                }
+            }
+
+            if (!$conflict) {
+                $slots[] = sprintf('%02d:%02d', $hh, $mm);
+            }
+        }
+
+        return $slots;
+    }
+
+    /** Slots for a single day (used as a fallback by the widget). */
     private function availableSlots(string $date): void
     {
         if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
@@ -412,48 +468,67 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
         try {
             $tz   = new \DateTimeZone($this->siteTz());
             $now  = (new \DateTime('now', $tz))->getTimestamp();
-            $ws   = explode(':', (string) $this->params->get('work_start', '09:00'));
-            $we   = explode(':', (string) $this->params->get('work_end', '18:00'));
-            $start = ((int) ($ws[0] ?? 9)) * 60 + (int) ($ws[1] ?? 0);
-            $end   = ((int) ($we[0] ?? 18)) * 60 + (int) ($we[1] ?? 0);
-            $iv     = max(5, (int) $this->params->get('slot_interval', 30));
-            $dur    = max(5, (int) $this->params->get('slot_duration', 30));
-            $notice = (int) $this->params->get('min_notice', 2) * 3600;
-            $busy   = $this->googleBusy($date, $tz);
+            $next = (new \DateTime($date . ' 00:00:00', $tz))->modify('+1 day')->format('Y-m-d');
+            $busy = $this->googleBusy($date, $next, $tz);
 
-            $slots = [];
-
-            for ($m = $start; $m + $dur <= $end; $m += $iv) {
-                $hh = intdiv($m, 60);
-                $mm = $m % 60;
-                $slotStart = (new \DateTime(sprintf('%s %02d:%02d:00', $date, $hh, $mm), $tz))->getTimestamp();
-                $slotEnd   = $slotStart + $dur * 60;
-
-                if ($slotStart < $now + $notice) {
-                    continue;
-                }
-
-                $conflict = false;
-                foreach ($busy as $b) {
-                    if ($slotStart < $b[1] && $slotEnd > $b[0]) {
-                        $conflict = true;
-                        break;
-                    }
-                }
-
-                if (!$conflict) {
-                    $slots[] = sprintf('%02d:%02d', $hh, $mm);
-                }
-            }
-
-            $this->respond(['slots' => $slots]);
+            $this->respond(['slots' => $this->computeDay($date, $tz, $busy, $now, $this->slotConfig())]);
         } catch (\Throwable $e) {
             $this->respond(['slots' => []]);
         }
     }
 
-    /** Google busy intervals for a day as [startTs, endTs] pairs (empty if not connected). */
-    private function googleBusy(string $date, \DateTimeZone $tz): array
+    /**
+     * Authoritative month availability: the SINGLE source the calendar uses to
+     * decide which days are selectable AND which slots each day offers.
+     * Returns { days: { "Y-m-d": ["HH:MM", ...] } } only for days with >=1 slot.
+     */
+    private function monthSlots(string $from, string $to): void
+    {
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $from) || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $to)) {
+            $this->respond(['days' => (object) []]);
+        }
+
+        try {
+            $tz    = new \DateTimeZone($this->siteTz());
+            $now   = (new \DateTime('now', $tz))->getTimestamp();
+            $c     = $this->slotConfig();
+            $maxTs = (new \DateTime('today', $tz))->modify('+' . $c['window'] . ' days')->getTimestamp();
+
+            $cur  = new \DateTime($from . ' 00:00:00', $tz);
+            $last = new \DateTime($to . ' 00:00:00', $tz);
+
+            // Cap the scanned range to a sane bound regardless of the requested window.
+            if ($last->getTimestamp() - $cur->getTimestamp() > 86400 * 62) {
+                $last = (clone $cur)->modify('+62 days');
+            }
+
+            $busyTo = (clone $last)->modify('+1 day')->format('Y-m-d');
+            $busy   = $this->googleBusy($cur->format('Y-m-d'), $busyTo, $tz);
+
+            $days = [];
+
+            while ($cur <= $last) {
+                $dts    = $cur->getTimestamp();
+                $dayStr = $cur->format('Y-m-d');
+
+                if ($dts + 86400 > $now && $dts <= $maxTs && \in_array((int) $cur->format('w'), $c['days'], true)) {
+                    $slots = $this->computeDay($dayStr, $tz, $busy, $now, $c);
+                    if ($slots) {
+                        $days[$dayStr] = $slots;
+                    }
+                }
+
+                $cur->modify('+1 day');
+            }
+
+            $this->respond(['days' => $days ?: (object) []]);
+        } catch (\Throwable $e) {
+            $this->respond(['days' => (object) []]);
+        }
+    }
+
+    /** Google busy intervals over [from, toExclusive) as [startTs, endTs] pairs (empty if not connected). */
+    private function googleBusy(string $from, string $toExclusive, \DateTimeZone $tz): array
     {
         try {
             $db = Factory::getContainer()->get(DatabaseInterface::class);
@@ -473,8 +548,8 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
 
             $reads = json_decode((string) ($g->read_calendars ?? ''), true);
             $reads = \is_array($reads) && $reads ? $reads : [$g->calendar_id ?: 'primary'];
-            $min   = (new \DateTime($date . ' 00:00:00', $tz))->format(\DateTime::RFC3339);
-            $max   = (new \DateTime($date . ' 00:00:00', $tz))->modify('+1 day')->format(\DateTime::RFC3339);
+            $min   = (new \DateTime($from . ' 00:00:00', $tz))->format(\DateTime::RFC3339);
+            $max   = (new \DateTime($toExclusive . ' 00:00:00', $tz))->format(\DateTime::RFC3339);
 
             $resp = (new HttpFactory())->getHttp()->post(
                 'https://www.googleapis.com/calendar/v3/freeBusy',
