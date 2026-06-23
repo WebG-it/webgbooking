@@ -106,7 +106,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                 'notes'          => $notes,
                 'status'         => 'pending',
                 'source_url'     => substr((string) $input->server->getString('HTTP_REFERER', ''), 0, 255),
-                'meeting_url'    => (trim((string) $this->params->get('meeting_url', '')) ?: 'https://meet.jit.si/WebGBooking-' . bin2hex(random_bytes(6))),
+                'meeting_url'    => trim((string) $this->params->get('meeting_url', '')),
             ];
             $db->insertObject('#__webgbooking_bookings', $row);
 
@@ -126,6 +126,10 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             $admin  = trim((string) $this->params->get('notify_email', '')) ?: (string) $config->get('mailfrom');
             $mf     = Factory::getContainer()->get(MailerFactoryInterface::class);
 
+            $meetLine = $row->meeting_url !== ''
+                ? ' ' . Text::sprintf('PLG_SYSTEM_WEBGBOOKING_MEET_LINE', $row->meeting_url)
+                : '';
+
             // Admin notification
             if ($admin !== '') {
                 $m = $mf->createMailer();
@@ -138,9 +142,8 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                     $row->customer_name,
                     $row->customer_email,
                     $row->customer_phone ?: '-',
-                    $row->notes ?: '-',
-                    $row->meeting_url
-                ));
+                    $row->notes ?: '-'
+                ) . $meetLine);
                 $m->Send();
             }
 
@@ -152,9 +155,8 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                 'PLG_SYSTEM_WEBGBOOKING_EMAIL_CUSTOMER_BODY',
                 $row->customer_name,
                 $row->booking_date,
-                $row->booking_time,
-                $row->meeting_url
-            ));
+                $row->booking_time
+            ) . $meetLine);
             $c->Send();
         } catch (\Throwable $e) {
             // Email is best-effort: the booking is already stored.
