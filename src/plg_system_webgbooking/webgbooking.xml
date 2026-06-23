@@ -7,7 +7,7 @@
     <creationDate>2026-06</creationDate>
     <copyright>(C) 2026 Marco Galassi / WebG</copyright>
     <license>GNU General Public License version 2 or later</license>
-    <version>0.5.0</version>
+    <version>0.6.0</version>
     <description>PLG_SYSTEM_WEBGBOOKING_XML_DESCRIPTION</description>
     <scriptfile>script.php</scriptfile>
     <updateservers>
@@ -26,4 +26,44 @@
         <folder>yootheme</folder>
         <folder>language</folder>
     </files>
+    <config>
+        <fields name="params">
+            <fieldset name="basic" label="PLG_SYSTEM_WEBGBOOKING_AVAIL_FIELDSET">
+                <field name="work_start" type="text" default="09:00" size="6"
+                    label="PLG_SYSTEM_WEBGBOOKING_WORK_START_LABEL"
+                    description="PLG_SYSTEM_WEBGBOOKING_TIME_DESC" />
+                <field name="work_end" type="text" default="18:00" size="6"
+                    label="PLG_SYSTEM_WEBGBOOKING_WORK_END_LABEL"
+                    description="PLG_SYSTEM_WEBGBOOKING_TIME_DESC" />
+                <field name="work_days" type="checkboxes" default="1,2,3,4,5"
+                    label="PLG_SYSTEM_WEBGBOOKING_WORK_DAYS_LABEL">
+                    <option value="1">PLG_SYSTEM_WEBGBOOKING_MON</option>
+                    <option value="2">PLG_SYSTEM_WEBGBOOKING_TUE</option>
+                    <option value="3">PLG_SYSTEM_WEBGBOOKING_WED</option>
+                    <option value="4">PLG_SYSTEM_WEBGBOOKING_THU</option>
+                    <option value="5">PLG_SYSTEM_WEBGBOOKING_FRI</option>
+                    <option value="6">PLG_SYSTEM_WEBGBOOKING_SAT</option>
+                    <option value="0">PLG_SYSTEM_WEBGBOOKING_SUN</option>
+                </field>
+                <field name="slot_interval" type="list" default="30"
+                    label="PLG_SYSTEM_WEBGBOOKING_SLOT_INTERVAL_LABEL">
+                    <option value="15">15</option>
+                    <option value="20">20</option>
+                    <option value="30">30</option>
+                    <option value="45">45</option>
+                    <option value="60">60</option>
+                </field>
+                <field name="buffer_before" type="number" default="0" min="0"
+                    label="PLG_SYSTEM_WEBGBOOKING_BUFFER_BEFORE_LABEL"
+                    description="PLG_SYSTEM_WEBGBOOKING_BUFFER_DESC" />
+                <field name="buffer_after" type="number" default="0" min="0"
+                    label="PLG_SYSTEM_WEBGBOOKING_BUFFER_AFTER_LABEL"
+                    description="PLG_SYSTEM_WEBGBOOKING_BUFFER_DESC" />
+                <field name="min_notice" type="number" default="2" min="0"
+                    label="PLG_SYSTEM_WEBGBOOKING_MIN_NOTICE_LABEL" />
+                <field name="window_days" type="number" default="30" min="1"
+                    label="PLG_SYSTEM_WEBGBOOKING_WINDOW_DAYS_LABEL" />
+            </fieldset>
+        </fields>
+    </config>
 </extension>
