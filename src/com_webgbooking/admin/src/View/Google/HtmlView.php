@@ -21,7 +21,11 @@ class HtmlView extends BaseHtmlView
 
     public function display($tpl = null)
     {
-        $this->status = $this->getModel()->getStatus();
+        $model = $this->getModel();
+        $this->status = $model ? $model->getStatus() : (object) [
+            'connected' => false, 'email' => '', 'hasClientId' => false,
+            'redirect' => '', 'connectUrl' => '', 'error' => 'GoogleModel not found',
+        ];
 
         $app = Factory::getApplication();
         if ($app->getInput()->getInt('wgbconnected')) {
