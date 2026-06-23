@@ -25,6 +25,7 @@ return [
         // default title/button (PLG_SYSTEM_WEBGBOOKING_DEFAULT_*), so the front end is i18n-correct.
         'title' => '',
         'button_text' => '',
+        'allow_guest' => true,
         'layout' => 'inline',
         'card_style' => 'card',
         'slot_columns' => '3',
@@ -50,6 +51,12 @@ return [
             'type' => 'text',
         ],
         'button_text' => ['label' => 'Button Text', 'type' => 'text'],
+        'allow_guest' => [
+            'label' => 'Invite a colleague',
+            'description' => 'Shows an optional "colleague email" field so the visitor can add a guest to the meeting invite.',
+            'type' => 'checkbox',
+            'text' => 'Allow inviting a guest',
+        ],
         'layout' => [
             'label' => 'Layout',
             'type' => 'select',
@@ -152,7 +159,7 @@ return [
             'fields' => [
                 [
                     'title' => 'Content',
-                    'fields' => ['title', 'service', 'button_text', 'layout'],
+                    'fields' => ['title', 'service', 'button_text', 'allow_guest', 'layout'],
                 ],
                 [
                     'title' => 'Settings',
