@@ -57,6 +57,7 @@ $cfg = [
     'slotStyle' => $slotStyle,
     'slotSize'  => $slotSize ? 'uk-button-' . $slotSize : '',
     'btnStyle'  => $btnStyle,
+    'allowGuest' => !empty($props['allow_guest']),
     'accent'    => $accent,
     'workStart' => $timeOk($pp->get('work_start', '09:00'), '09:00'),
     'workEnd'   => $timeOk($pp->get('work_end', '18:00'), '18:00'),
@@ -76,6 +77,7 @@ $cfg = [
         'fEmail'      => Text::_('PLG_SYSTEM_WEBGBOOKING_FIELD_EMAIL'),
         'fPhone'      => Text::_('PLG_SYSTEM_WEBGBOOKING_FIELD_PHONE'),
         'fNotes'      => Text::_('PLG_SYSTEM_WEBGBOOKING_FIELD_NOTES'),
+        'fGuest'      => Text::_('PLG_SYSTEM_WEBGBOOKING_FIELD_GUEST'),
         'privacy'     => Text::_('PLG_SYSTEM_WEBGBOOKING_PRIVACY'),
         'bookNow'     => Text::_('PLG_SYSTEM_WEBGBOOKING_BOOK_NOW'),
         'required'    => Text::_('PLG_SYSTEM_WEBGBOOKING_REQUIRED'),
@@ -107,7 +109,7 @@ $uid = 'wgb-' . substr(md5(uniqid('', true)), 0, 8);
 // Widget assets are enqueued ONCE as external files. Inline <script> injected by the YOOtheme
 // builder via innerHTML does NOT execute on re-render (calendar went blank); an external file
 // plus a MutationObserver (in wgb.js) re-initialises every (re)rendered instance.
-$wgbVer   = '0.15.0';
+$wgbVer   = '0.16.0';
 $wgbAsset = Uri::root(true) . '/plugins/system/webgbooking/yootheme/elements/booking/assets';
 $wgbDoc   = Factory::getApplication()->getDocument();
 if (method_exists($wgbDoc, 'getWebAssetManager')) {
