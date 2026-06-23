@@ -11,6 +11,8 @@
 
 namespace YOOtheme;
 
+\defined('_JEXEC') or die;
+
 use YOOtheme\Builder;
 
 return [
