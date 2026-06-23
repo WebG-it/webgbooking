@@ -7,7 +7,7 @@
     <creationDate>2026-06</creationDate>
     <copyright>(C) 2026 Marco Galassi / WebG</copyright>
     <license>GNU General Public License version 2 or later</license>
-    <version>0.11.0</version>
+    <version>0.12.0</version>
     <description>PLG_SYSTEM_WEBGBOOKING_XML_DESCRIPTION</description>
     <scriptfile>script.php</scriptfile>
     <updateservers>
@@ -69,6 +69,20 @@
                 <field name="meeting_url" type="url" default=""
                     label="PLG_SYSTEM_WEBGBOOKING_MEETING_URL_LABEL"
                     description="PLG_SYSTEM_WEBGBOOKING_MEETING_URL_DESC" />
+            </fieldset>
+            <fieldset name="google" label="PLG_SYSTEM_WEBGBOOKING_GOOGLE_FIELDSET"
+                description="PLG_SYSTEM_WEBGBOOKING_GOOGLE_FIELDSET_DESC">
+                <field name="google_client_id" type="text" default="" size="70"
+                    label="PLG_SYSTEM_WEBGBOOKING_GOOGLE_CLIENT_ID_LABEL"
+                    description="PLG_SYSTEM_WEBGBOOKING_GOOGLE_HELP" />
+                <field name="google_client_secret" type="password" default="" autocomplete="off"
+                    label="PLG_SYSTEM_WEBGBOOKING_GOOGLE_CLIENT_SECRET_LABEL"
+                    description="PLG_SYSTEM_WEBGBOOKING_GOOGLE_HELP" />
+                <field name="google_calendar_id" type="text" default="primary" size="40"
+                    label="PLG_SYSTEM_WEBGBOOKING_GOOGLE_CALENDAR_LABEL"
+                    description="PLG_SYSTEM_WEBGBOOKING_GOOGLE_CALENDAR_DESC" />
+                <field name="slot_duration" type="number" default="30" min="5"
+                    label="PLG_SYSTEM_WEBGBOOKING_SLOT_DURATION_LABEL" />
             </fieldset>
         </fields>
     </config>
