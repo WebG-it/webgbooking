@@ -134,6 +134,9 @@ $trigBtn = trim('uk-button uk-button-' . $btnStyle . ($btnSize ? ' uk-button-' .
 <?php endif ?>
 
 <style>
+/* The interactive area sits on its own readable surface, regardless of the section colour behind. */
+.wgb-booking .wgb-mount{background:#fff;color:#2b2b2b;border-radius:8px;padding:14px}
+.wgb-booking .wgb-mount .uk-text-meta,.wgb-booking .wgb-mount .uk-text-muted{color:#6a6a6a}
 .wgb-booking .wgb-cal-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
 .wgb-booking .wgb-cal-head,.wgb-booking .wgb-cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}
 .wgb-booking .wgb-cal-head span{text-align:center;font-size:10px;line-height:1.4;text-transform:uppercase;color:var(--wgb-head,inherit);opacity:var(--wgb-head-op,.55)}
