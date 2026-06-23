@@ -146,10 +146,17 @@ class GoogleModel extends BaseDatabaseModel
         return $data['items'] ?? [];
     }
 
-    private function dec(string $b64): string
+    private function dec(string $stored): string
     {
-        $raw = base64_decode($b64);
         $key = hash('sha256', (string) Factory::getApplication()->get('secret'), true);
+
+        if (strncmp($stored, 'g:', 2) === 0) {
+            $raw = base64_decode(substr($stored, 2));
+
+            return (string) openssl_decrypt(substr($raw, 28), 'aes-256-gcm', $key, OPENSSL_RAW_DATA, substr($raw, 0, 12), substr($raw, 12, 16));
+        }
+
+        $raw = base64_decode($stored);
 
         return (string) openssl_decrypt(substr($raw, 16), 'aes-256-cbc', $key, OPENSSL_RAW_DATA, substr($raw, 0, 16));
     }
