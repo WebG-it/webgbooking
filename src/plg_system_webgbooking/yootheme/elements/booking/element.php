@@ -9,6 +9,8 @@
 
 namespace YOOtheme;
 
+\defined('_JEXEC') or die;
+
 return [
     'name' => 'wgb_booking',
     'title' => 'Booking',
