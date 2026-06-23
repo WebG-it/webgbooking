@@ -35,9 +35,18 @@
         })
         .then(function(r){return r.json();})
         .then(function(res){
-          if(res&&res.ok){mount.innerHTML='<div class="uk-alert uk-alert-success" role="alert" uk-alert>'+esc(res.message||L.done)+'</div>';}
+          if(res&&res.ok){track();mount.innerHTML='<div class="uk-alert uk-alert-success" role="alert" uk-alert>'+esc(res.message||L.done)+'</div>';}
           else{mount.innerHTML=errBox((res&&res.message)||L.bookErr);}
         })
+        .catch(function(){mount.innerHTML=errBox(L.bookErr);});
+    }
+    function track(ev){try{var name=ev||cfg.analyticsEvent||'wgb_booking_completed';window.dataLayer=window.dataLayer||[];window.dataLayer.push({event:name});if(typeof window.gtag==='function'){window.gtag('event',name);}}catch(e){}}
+    function submitReschedule(){
+      mount.innerHTML='<div class="uk-text-center uk-padding-small" role="status"><span uk-spinner></span> '+esc(L.loading||L.sending||'')+'</div>';
+      var url=cfg.ajaxUrl||'';var fd=new FormData();fd.append('action','reschedule');fd.append('token',cfg.token||'');fd.append('date',isoDate(st.date));fd.append('time',st.time||'');
+      fetch(url+'&action=reschedule',{method:'POST',body:fd,headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin'})
+        .then(function(r){return r.json();})
+        .then(function(res){if(res&&res.ok){track('wgb_reschedule');mount.innerHTML='<div class="uk-alert uk-alert-success" role="alert" uk-alert>'+esc(res.message||L.rsOk||'')+'</div>';}else{mount.innerHTML=errBox((res&&res.message)||L.bookErr);}})
         .catch(function(){mount.innerHTML=errBox(L.bookErr);});
     }
     function monthGrid(v){var y=v.getFullYear(),m=v.getMonth();var fday=(new Date(y,m,1).getDay()+6)%7;var dim=new Date(y,m+1,0).getDate();var c=[];for(var i=0;i<fday;i++)c.push(null);for(var d=1;d<=dim;d++)c.push(new Date(y,m,d));return c;}
@@ -81,6 +90,10 @@
         h.push('<label class="uk-margin-small uk-display-block"><input class="uk-checkbox wgb-f-privacy" type="checkbox" aria-required="true"'+(st.form.privacy?' checked':'')+'> '+esc(L.privacy)+' <span class="wgb-req">*</span></label>');
         h.push('<input type="text" class="wgb-f-website" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute!important;left:-9999px;top:-9999px;height:1px;width:1px;opacity:0">');
         h.push('<button type="button" class="uk-button uk-button-'+(cfg.btnStyle||'primary')+' uk-width-1-1 uk-margin-small-top" data-act="book">'+esc(L.bookNow)+'</button>');
+      } else if(st.step==='confirm'){
+        h.push(summary());
+        h.push('<div class="uk-text-meta uk-margin-small-bottom">'+esc(L.rsIntro||'')+'</div>');
+        h.push('<button type="button" class="uk-button uk-button-'+(cfg.btnStyle||'primary')+' uk-width-1-1 uk-margin-small-top" data-act="rebook">'+esc(L.rsConfirm||'')+'</button>');
       } else {
         h.push('<div class="uk-alert uk-alert-success" uk-alert>'+esc(L.done)+'</div>');
       }
@@ -93,6 +106,7 @@
       else if(f==='form')el=mount.querySelector('.wgb-f-name');
       else if(f==='time')el=mount.querySelector('.wgb-slot')||mount.querySelector('.wgb-summary');
       else if(f==='back')el=mount.querySelector('.wgb-summary')||mount.querySelector('[data-act="prev"]')||mount.querySelector('.wgb-avail');
+      else if(f==='confirm')el=mount.querySelector('[data-act="rebook"]')||mount.querySelector('.wgb-summary');
       if(!el)el=mount.querySelector('.wgb-summary')||mount.querySelector('button:not([disabled])');
       if(el&&el.focus){try{el.focus();}catch(e){}}
     }
@@ -100,12 +114,13 @@
     mount.addEventListener('click',function(e){
       var t=e.target.closest('[data-act],[data-date],[data-time]');if(!t)return;
       if(t.hasAttribute('data-date')){var k=t.getAttribute('data-date');st.date=new Date(k+'T00:00:00');st.time=null;st.daySlots=(st.monthDays&&st.monthDays[k])?st.monthDays[k]:[];st.step='time';st.focus='time';}
-      else if(t.hasAttribute('data-time')){st.time=t.getAttribute('data-time');st.step='form';st.err=false;st.focus='form';}
+      else if(t.hasAttribute('data-time')){st.time=t.getAttribute('data-time');st.err=false;if(cfg.mode==='reschedule'){st.step='confirm';st.focus='confirm';}else{st.step='form';st.focus='form';}}
       else{var a=t.getAttribute('data-act');
         if(a==='prev'){st.view=new Date(st.view.getFullYear(),st.view.getMonth()-1,1);st.focus='prev';}
         else if(a==='next'){st.view=new Date(st.view.getFullYear(),st.view.getMonth()+1,1);st.focus='next';}
-        else if(a==='back'){if(st.step==='form'){readForm();st.time=null;st.step='time';}else{st.date=null;st.step='cal';}st.focus='back';}
+        else if(a==='back'){if(st.step==='form'||st.step==='confirm'){if(st.step==='form')readForm();st.time=null;st.step='time';}else{st.date=null;st.step='cal';}st.focus='back';}
         else if(a==='book'){readForm();if(!st.form.name||!emailOk(st.form.email)||!st.form.privacy){st.err=true;st.focus='form';}else{submit();return;}}
+        else if(a==='rebook'){submitReschedule();return;}
         else if(a==='retry'){st.err=false;st.step='form';st.focus='form';}
       }
       draw();
