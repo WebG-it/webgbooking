@@ -13,7 +13,7 @@ Estensione di **prenotazione appuntamenti per Joomla 5/6** con elemento nativo *
 ## Installazione
 1. Joomla → *Sistema → Installa → Installa da URL*, incolla:
    ```
-   https://raw.githubusercontent.com/WebG-it/webgbooking/main/dist/plg_system_webgbooking-0.13.2.zip
+   https://raw.githubusercontent.com/WebG-it/webgbooking/main/dist/plg_system_webgbooking-0.13.3.zip
    ```
 2. *Sistema → Plugin* → abilita **"System - WebG Booking"**.
 3. YOOtheme Customizer → **Add Element** → gruppo **WebG** → **Booking**.
