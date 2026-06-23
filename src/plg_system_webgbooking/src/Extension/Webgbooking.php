@@ -152,6 +152,25 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                 $this->respond(['ok' => false, 'message' => Text::_('PLG_SYSTEM_WEBGBOOKING_BOOK_ERR')]);
             }
 
+            // Re-validate the slot server-side: working rules + Google busy + not already taken
+            // (anti double-booking — the client availability could be stale).
+            $vtz   = new \DateTimeZone($this->siteTz());
+            $vnow  = (new \DateTime('now', $vtz))->getTimestamp();
+            $vnext = (new \DateTime($date . ' 00:00:00', $vtz))->modify('+1 day')->format('Y-m-d');
+            $vslots = $this->computeDay($date, $vtz, $this->googleBusy($date, $vnext, $vtz), $vnow, $this->slotConfig());
+            $taken = (int) $db->setQuery(
+                $db->getQuery(true)
+                    ->select('COUNT(*)')
+                    ->from($db->quoteName('#__webgbooking_bookings'))
+                    ->where($db->quoteName('booking_date') . ' = ' . $db->quote($date))
+                    ->where($db->quoteName('booking_time') . ' = ' . $db->quote($time))
+                    ->where($db->quoteName('status') . ' != ' . $db->quote('cancelled'))
+            )->loadResult();
+
+            if (!\in_array($time, $vslots, true) || $taken > 0) {
+                $this->respond(['ok' => false, 'message' => Text::_('PLG_SYSTEM_WEBGBOOKING_SLOT_TAKEN')]);
+            }
+
             $row = (object) [
                 'created'        => Factory::getDate()->toSql(),
                 'booking_date'   => $date,
@@ -183,9 +202,38 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
 
             $this->notify($row);
 
+            // Newsletter opt-in: forward to the configured webhook (MailUp / Zapier / Make) on consent.
+            if ($input->post->getInt('newsletter', 0) === 1) {
+                $this->newsletterSignup($row);
+            }
+
             $this->respond(['ok' => true, 'message' => Text::_('PLG_SYSTEM_WEBGBOOKING_BOOK_OK')]);
         } catch (\Throwable $e) {
             $this->respond(['ok' => false, 'message' => Text::_('PLG_SYSTEM_WEBGBOOKING_BOOK_ERR')]);
+        }
+    }
+
+    /** Forward a consented subscriber to the configured newsletter webhook (admin-set URL). */
+    private function newsletterSignup(object $row): void
+    {
+        try {
+            $url = trim((string) $this->params->get('newsletter_webhook', ''));
+            if ($url === '' || !filter_var($url, FILTER_VALIDATE_URL)) {
+                return;
+            }
+
+            (new HttpFactory())->getHttp()->post(
+                $url,
+                json_encode([
+                    'email'  => $row->customer_email,
+                    'name'   => $row->customer_name,
+                    'phone'  => $row->customer_phone,
+                    'source' => 'webgbooking',
+                    'date'   => $row->booking_date,
+                ]),
+                ['Content-Type' => 'application/json']
+            );
+        } catch (\Throwable $e) {
         }
     }
 
@@ -824,7 +872,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
 
         // Reschedule widget: the booking calendar in calendar-only mode, authorised by the token.
         $asset = Uri::root(true) . '/plugins/system/webgbooking/yootheme/elements/booking/assets';
-        $ver   = '0.17.0';
+        $ver   = '0.18.0';
         // The manage page is standalone (outside the YOOtheme template), so UIkit isn't present;
         // load it so the reschedule widget (icons, spinner, buttons) renders correctly.
         $uikit = 'https://cdn.jsdelivr.net/npm/uikit@3.21.5/dist';
