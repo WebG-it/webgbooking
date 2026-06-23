@@ -58,6 +58,7 @@ $cfg = [
     'slotSize'  => $slotSize ? 'uk-button-' . $slotSize : '',
     'btnStyle'  => $btnStyle,
     'allowGuest' => !empty($props['allow_guest']),
+    'analyticsEvent' => trim((string) ($props['analytics_event'] ?? '')),
     'accent'    => $accent,
     'workStart' => $timeOk($pp->get('work_start', '09:00'), '09:00'),
     'workEnd'   => $timeOk($pp->get('work_end', '18:00'), '18:00'),
@@ -109,7 +110,7 @@ $uid = 'wgb-' . substr(md5(uniqid('', true)), 0, 8);
 // Widget assets are enqueued ONCE as external files. Inline <script> injected by the YOOtheme
 // builder via innerHTML does NOT execute on re-render (calendar went blank); an external file
 // plus a MutationObserver (in wgb.js) re-initialises every (re)rendered instance.
-$wgbVer   = '0.16.0';
+$wgbVer   = '0.17.0';
 $wgbAsset = Uri::root(true) . '/plugins/system/webgbooking/yootheme/elements/booking/assets';
 $wgbDoc   = Factory::getApplication()->getDocument();
 if (method_exists($wgbDoc, 'getWebAssetManager')) {
