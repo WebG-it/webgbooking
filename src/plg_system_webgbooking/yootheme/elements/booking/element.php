@@ -44,13 +44,14 @@ return [
 
     'fields' => [
         // --- Content ---
-        'title' => ['label' => 'Title', 'type' => 'text'],
+        'title' => ['label' => 'Title', 'type' => 'text', 'source' => true],
         'service' => [
             'label' => 'Service / Booking Type',
-            'description' => 'Tracer placeholder. Will become a select bound to com_webgbooking services.',
+            'description' => 'Free text or bind to a Joomla field via Dynamic Content.',
             'type' => 'text',
+            'source' => true,
         ],
-        'button_text' => ['label' => 'Button Text', 'type' => 'text'],
+        'button_text' => ['label' => 'Button Text', 'type' => 'text', 'source' => true],
         'allow_guest' => [
             'label' => 'Invite a colleague',
             'description' => 'Shows an optional "colleague email" field so the visitor can add a guest to the meeting invite.',
@@ -61,6 +62,12 @@ return [
             'label' => 'Analytics event',
             'description' => 'Event pushed to dataLayer / gtag on a completed booking (GA4 / GTM). Empty = "wgb_booking_completed".',
             'type' => 'text',
+        ],
+        'show_newsletter' => [
+            'label' => 'Newsletter opt-in',
+            'description' => 'Shows a newsletter consent checkbox. On consent the contact is forwarded to the webhook set in the plugin options (MailUp / Zapier / Make).',
+            'type' => 'checkbox',
+            'text' => 'Show newsletter opt-in',
         ],
         'layout' => [
             'label' => 'Layout',
@@ -164,7 +171,7 @@ return [
             'fields' => [
                 [
                     'title' => 'Content',
-                    'fields' => ['title', 'service', 'button_text', 'allow_guest', 'analytics_event', 'layout'],
+                    'fields' => ['title', 'service', 'button_text', 'allow_guest', 'show_newsletter', 'analytics_event', 'layout'],
                 ],
                 [
                     'title' => 'Settings',
