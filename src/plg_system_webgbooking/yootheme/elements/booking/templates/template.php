@@ -176,10 +176,10 @@ $trigBtn = trim('uk-button uk-button-' . $btnStyle . ($btnSize ? ' uk-button-' .
     var slotBtn='uk-button uk-button-'+(cfg.slotStyle||'default')+(cfg.slotSize?' '+cfg.slotSize:'');
     var mount=root.querySelector('.wgb-mount')||root;
     var st={view:startToday(),date:null,time:null,form:{name:'',email:'',phone:'',notes:'',privacy:false},err:false,step:'cal'};
-    function avail(d){var t=startToday();if(d<t)return false;var max=new Date(t);max.setDate(max.getDate()+(cfg.window||30));if(d>max)return false;var wd=(cfg.workDays&&cfg.workDays.length)?cfg.workDays:[1,2,3,4,5];if(wd.indexOf(d.getDay())===-1)return false;return slots(d).length>0;}
+    function avail(d){return !!(st.monthDays&&st.monthDays[isoDate(d)]);}
     function genTimes(d){var ws=(cfg.workStart||'09:00').split(':'),we=(cfg.workEnd||'18:00').split(':');var s=(+ws[0])*60+(+ws[1]),e=(+we[0])*60+(+we[1]),iv=cfg.interval||30,dur=cfg.duration||iv;var out=[],now=new Date(),notice=(cfg.minNotice||0)*3600000;for(var m=s;m+dur<=e;m+=iv){var hh=Math.floor(m/60),mm=m%60;var dt=new Date(d);dt.setHours(hh,mm,0,0);if(dt-now<notice)continue;out.push((hh<10?'0':'')+hh+':'+(mm<10?'0':'')+mm);}return out;}
-    function slots(d){return genTimes(d);}
-    function fetchSlots(d,cb){st.daySlots=null;var url=cfg.ajaxUrl||'';if(!url){st.daySlots=genTimes(d);cb();return;}fetch(url+'&action=slots&date='+isoDate(d),{headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin'}).then(function(r){return r.json();}).then(function(res){st.daySlots=(res&&res.slots)?res.slots:genTimes(d);cb();}).catch(function(){st.daySlots=genTimes(d);cb();});}
+    function clientMonth(y,m){var o={},t=startToday(),max=new Date(t);max.setDate(max.getDate()+(cfg.window||30));var wd=(cfg.workDays&&cfg.workDays.length)?cfg.workDays:[1,2,3,4,5];var dim=new Date(y,m+1,0).getDate();for(var dd=1;dd<=dim;dd++){var dt=new Date(y,m,dd);if(dt<t||dt>max||wd.indexOf(dt.getDay())===-1)continue;var s=genTimes(dt);if(s.length)o[isoDate(dt)]=s;}return o;}
+    function ensureMonth(){var key=st.view.getFullYear()+'-'+st.view.getMonth();if(st.monthKey===key||st.monthLoading===key)return;st.monthLoading=key;st.monthDays={};var y=st.view.getFullYear(),m=st.view.getMonth(),url=cfg.ajaxUrl||'';var from=isoDate(new Date(y,m,1)),to=isoDate(new Date(y,m+1,0));if(!url){st.monthDays=clientMonth(y,m);st.monthKey=key;st.monthLoading=null;return;}fetch(url+'&action=month&from='+from+'&to='+to,{headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin'}).then(function(r){return r.json();}).then(function(res){st.monthDays=(res&&res.days&&typeof res.days==='object')?res.days:{};st.monthKey=key;st.monthLoading=null;draw();}).catch(function(){st.monthDays=clientMonth(y,m);st.monthKey=key;st.monthLoading=null;draw();});}
     function pad2(n){return (n<10?'0':'')+n;}
     function isoDate(d){return d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate());}
     function errBox(msg){return '<div class="uk-alert uk-alert-danger" uk-alert>'+esc(msg)+'</div><button type="button" class="uk-button uk-button-default uk-button-small uk-margin-small-top" data-act="retry">'+esc(L.back)+'</button>';}
@@ -212,15 +212,19 @@ $trigBtn = trim('uk-button uk-button-' . $btnStyle . ($btnSize ? ' uk-button-' .
     function draw(){
       var h=[];
       if(st.step==='cal'){
+        ensureMonth();
         h.push('<div class="wgb-cal-nav"><button class="uk-icon-button" uk-icon="chevron-left" type="button" data-act="prev"></button><strong>'+esc(monthLabel(st.view,loc))+'</strong><button class="uk-icon-button" uk-icon="chevron-right" type="button" data-act="next"></button></div>');
-        h.push('<div class="wgb-cal-head">'+weekdays(loc).map(function(w){return '<span>'+esc(w)+'</span>';}).join('')+'</div>');
-        var cells=monthGrid(st.view).map(function(d){
-          if(!d)return '<span class="wgb-cell wgb-blank"></span>';
-          var ok=avail(d),sel=sameDay(d,st.date),cls='wgb-cell'+(sameDay(d,startToday())?' wgb-today':'');
-          if(sel){cls+=' wgb-active';}else if(ok){cls+=' wgb-avail';}
-          return '<button type="button" class="'+cls+'" data-date="'+isoDate(d)+'"'+(ok?'':' disabled')+'>'+d.getDate()+'</button>';
-        });
-        h.push('<div class="wgb-cal-grid">'+cells.join('')+'</div>');
+        if(st.monthLoading){h.push('<div class="uk-text-center uk-padding"><span uk-spinner></span></div>');}
+        else{
+          h.push('<div class="wgb-cal-head">'+weekdays(loc).map(function(w){return '<span>'+esc(w)+'</span>';}).join('')+'</div>');
+          var cells=monthGrid(st.view).map(function(d){
+            if(!d)return '<span class="wgb-cell wgb-blank"></span>';
+            var ok=avail(d),sel=sameDay(d,st.date),cls='wgb-cell'+(sameDay(d,startToday())?' wgb-today':'');
+            if(sel){cls+=' wgb-active';}else if(ok){cls+=' wgb-avail';}
+            return '<button type="button" class="'+cls+'" data-date="'+isoDate(d)+'"'+(ok?'':' disabled')+'>'+d.getDate()+'</button>';
+          });
+          h.push('<div class="wgb-cal-grid">'+cells.join('')+'</div>');
+        }
       } else if(st.step==='time'){
         h.push(summary());
         h.push('<div class="uk-text-meta uk-text-bold uk-margin-small-bottom">'+esc(L.stepTime)+'</div>');
@@ -247,7 +251,7 @@ $trigBtn = trim('uk-button uk-button-' . $btnStyle . ($btnSize ? ' uk-button-' .
     function readForm(){var q=function(c){var n=mount.querySelector('.'+c);return n?n.value:'';};st.form={name:q('wgb-f-name').trim(),email:q('wgb-f-email').trim(),phone:q('wgb-f-phone').trim(),notes:q('wgb-f-notes').trim(),website:q('wgb-f-website'),privacy:!!(mount.querySelector('.wgb-f-privacy')||{}).checked};}
     mount.addEventListener('click',function(e){
       var t=e.target.closest('[data-act],[data-date],[data-time]');if(!t)return;
-      if(t.hasAttribute('data-date')){st.date=new Date(t.getAttribute('data-date')+'T00:00:00');st.time=null;st.step='time';st.loadingBusy=true;st.daySlots=null;draw();fetchSlots(st.date,function(){st.loadingBusy=false;draw();});return;}
+      if(t.hasAttribute('data-date')){var k=t.getAttribute('data-date');st.date=new Date(k+'T00:00:00');st.time=null;st.daySlots=(st.monthDays&&st.monthDays[k])?st.monthDays[k]:[];st.step='time';}
       else if(t.hasAttribute('data-time')){st.time=t.getAttribute('data-time');st.step='form';st.err=false;}
       else{var a=t.getAttribute('data-act');
         if(a==='prev')st.view=new Date(st.view.getFullYear(),st.view.getMonth()-1,1);
