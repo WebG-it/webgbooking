@@ -37,7 +37,7 @@ class GoogleController extends BaseController
         $this->checkToken();
 
         $input   = Factory::getApplication()->getInput();
-        $clean   = fn($v) => preg_replace('/[^A-Za-z0-9@._\-]/', '', (string) $v);
+        $clean   = fn($v) => preg_replace('/[^A-Za-z0-9@._#+\-]/', '', (string) $v);
         $readRaw = (array) $input->get('read', [], 'array');
         $read    = array_values(array_filter(array_map($clean, $readRaw)));
         $write   = $clean($input->getString('write', 'primary'));
