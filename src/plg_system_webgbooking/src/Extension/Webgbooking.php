@@ -77,6 +77,16 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             return;
         }
 
+        // Self-service management page + cancellation (HTML, authorised by the per-booking token).
+        if ($action === 'manage') {
+            $this->managePage($input->getString('token', ''));
+            return;
+        }
+        if ($action === 'cancel') {
+            $this->cancelBooking($input->getString('token', ''));
+            return;
+        }
+
         $app->setHeader('Content-Type', 'application/json; charset=utf-8', true);
         $app->sendHeaders();
 
@@ -106,6 +116,8 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
         $phone   = trim($input->post->getString('phone', ''));
         $notes   = trim((string) $input->post->get('notes', '', 'STRING'));
         $privacy = (int) $input->post->getInt('privacy', 0);
+        $guest   = trim($input->post->getString('guest', ''));
+        $guest   = ($guest !== '' && filter_var($guest, FILTER_VALIDATE_EMAIL)) ? $guest : '';
 
         // Honeypot: bots fill the hidden field. Pretend success and drop the submission.
         if (trim((string) $input->post->getString('website', '')) !== '') {
@@ -143,19 +155,26 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                 'customer_email' => $email,
                 'customer_phone' => $phone,
                 'notes'          => $notes,
-                'status'         => 'pending',
-                'source_url'     => substr((string) $input->server->getString('HTTP_REFERER', ''), 0, 255),
-                'meeting_url'    => trim((string) $this->params->get('meeting_url', '')),
+                'status'          => 'pending',
+                'source_url'      => substr((string) $input->server->getString('HTTP_REFERER', ''), 0, 255),
+                'meeting_url'     => trim((string) $this->params->get('meeting_url', '')),
+                'guest_email'     => $guest,
+                'manage_token'    => bin2hex(random_bytes(16)),
+                'google_event_id' => '',
             ];
-            $db->insertObject('#__webgbooking_bookings', $row);
+            $db->insertObject('#__webgbooking_bookings', $row, 'id');
 
-            // Auto Google Meet (overrides the fixed link if Google is connected).
+            // Auto Google Meet + calendar event (sets $row->google_event_id; overrides a fixed link).
             $meet = $this->createGoogleEvent($row);
             if ($meet !== '') {
                 $row->meeting_url = $meet;
-                $upd = (object) ['id' => $row->id, 'meeting_url' => $meet];
-                $db->updateObject('#__webgbooking_bookings', $upd, 'id');
             }
+            $upd = (object) [
+                'id'              => $row->id,
+                'meeting_url'     => $row->meeting_url,
+                'google_event_id' => (string) ($row->google_event_id ?? ''),
+            ];
+            $db->updateObject('#__webgbooking_bookings', $upd, 'id');
 
             $this->notify($row);
 
@@ -172,13 +191,36 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             $config = $app->getConfig();
             $admin  = trim((string) $this->params->get('notify_email', '')) ?: (string) $config->get('mailfrom');
             $mf     = Factory::getContainer()->get(MailerFactoryInterface::class);
+            $manageUrl = $this->manageUrl($row);
+            $ics    = $this->buildIcs($row);
 
-            $meetLine = $row->meeting_url !== ''
-                ? ' ' . Text::sprintf('PLG_SYSTEM_WEBGBOOKING_MEET_LINE', $row->meeting_url)
-                : '';
+            $dateFmt = $row->booking_date;
+            try {
+                $dateFmt = (new \DateTime($row->booking_date))->format('d/m/Y');
+            } catch (\Throwable $e) {
+            }
 
-            // Admin notification
+            // ---- Customer (and invited guest) confirmation: editable HTML + placeholders + .ics ----
+            $subjectTpl = trim((string) $this->params->get('email_subject', '')) ?: Text::_('PLG_SYSTEM_WEBGBOOKING_EMAIL_CUSTOMER_SUBJECT');
+            $subject    = strtr($subjectTpl, ['{name}' => $row->customer_name, '{date}' => $dateFmt, '{time}' => $row->booking_time]);
+            $bodyTpl    = trim((string) $this->params->get('email_body', '')) ?: $this->defaultEmailBody();
+            $html       = $this->wrapEmail($this->renderTpl($bodyTpl, $row, $manageUrl, $dateFmt));
+
+            // Customer confirmation (includes the private manage/cancel link).
+            $this->sendHtmlMail($mf, $row->customer_email, $subject, $html, $ics);
+
+            // Guest invite: a distinct email WITHOUT the cancel link/token (the guest must not be
+            // able to cancel the organiser's booking).
+            if (!empty($row->guest_email)) {
+                $gSubject = strtr(Text::_('PLG_SYSTEM_WEBGBOOKING_EMAIL_GUEST_SUBJECT'), ['{name}' => $row->customer_name, '{date}' => $dateFmt, '{time}' => $row->booking_time]);
+                $gHtml    = $this->wrapEmail($this->guestEmailBody($row, $dateFmt));
+                $this->sendHtmlMail($mf, $row->guest_email, $gSubject, $gHtml, $ics);
+            }
+
+            // ---- Admin notification (plain text) ----
             if ($admin !== '') {
+                $meetLine  = $row->meeting_url !== '' ? ' ' . Text::sprintf('PLG_SYSTEM_WEBGBOOKING_MEET_LINE', $row->meeting_url) : '';
+                $guestLine = !empty($row->guest_email) ? "\n" . Text::sprintf('PLG_SYSTEM_WEBGBOOKING_EMAIL_GUEST_LINE', $row->guest_email) : '';
                 $m = $mf->createMailer();
                 $m->addRecipient($admin);
                 $m->setSubject(Text::sprintf('PLG_SYSTEM_WEBGBOOKING_EMAIL_ADMIN_SUBJECT', $row->booking_date, $row->booking_time));
@@ -190,23 +232,151 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                     $row->customer_email,
                     $row->customer_phone ?: '-',
                     $row->notes ?: '-'
-                ) . $meetLine);
+                ) . $meetLine . $guestLine);
                 $m->Send();
             }
-
-            // Customer confirmation
-            $c = $mf->createMailer();
-            $c->addRecipient($row->customer_email);
-            $c->setSubject(Text::_('PLG_SYSTEM_WEBGBOOKING_EMAIL_CUSTOMER_SUBJECT'));
-            $c->setBody(Text::sprintf(
-                'PLG_SYSTEM_WEBGBOOKING_EMAIL_CUSTOMER_BODY',
-                $row->customer_name,
-                $row->booking_date,
-                $row->booking_time
-            ) . $meetLine);
-            $c->Send();
         } catch (\Throwable $e) {
             // Email is best-effort: the booking is already stored.
+        }
+    }
+
+    /** Self-service management URL (cancel / future reschedule), authorised by the per-booking token. */
+    private function manageUrl(object $row): string
+    {
+        return Uri::root() . 'index.php?option=com_ajax&group=system&plugin=webgbooking&format=html&action=manage&token=' . rawurlencode((string) $row->manage_token);
+    }
+
+    /** Replace placeholders in a (default or admin-edited) HTML email template. */
+    private function renderTpl(string $tpl, object $row, string $manageUrl, string $dateFmt): string
+    {
+        $e = fn($s) => htmlspecialchars((string) $s, ENT_QUOTES, 'UTF-8');
+
+        $meetBlock = '';
+        if (!empty($row->meeting_url)) {
+            $meetBlock = '<p style="margin:20px 0;"><a href="' . $e($row->meeting_url) . '" style="display:inline-block;background:#1f2937;color:#ffffff;text-decoration:none;padding:11px 22px;border-radius:8px;font-weight:600;">'
+                . $e(Text::_('PLG_SYSTEM_WEBGBOOKING_EMAIL_MEET_BTN')) . '</a></p>';
+        }
+        $cancelBlock = '<p style="margin:18px 0 0;font-size:13px;color:#6a6a6a;"><a href="' . $e($manageUrl) . '" style="color:#1f2937;">'
+            . $e(Text::_('PLG_SYSTEM_WEBGBOOKING_EMAIL_MANAGE_LINK')) . '</a></p>';
+
+        return strtr($tpl, [
+            '{name}'         => $e($row->customer_name),
+            '{date}'         => $e($dateFmt),
+            '{time}'         => $e($row->booking_time),
+            '{phone}'        => $e($row->customer_phone ?: ''),
+            '{notes}'        => $e($row->notes ?: ''),
+            '{meet_url}'     => $e($row->meeting_url),
+            '{cancel_url}'   => $e($manageUrl),
+            '{meet_block}'   => $meetBlock,
+            '{cancel_block}' => $cancelBlock,
+        ]);
+    }
+
+    /** Default, nicely-designed email body (translatable; uses {placeholders}). */
+    private function defaultEmailBody(): string
+    {
+        $t   = fn($k) => htmlspecialchars(Text::_($k), ENT_QUOTES, 'UTF-8');
+        $cell = 'padding:6px 0;font-size:14px;';
+
+        return '<p style="margin:0 0 14px;">' . $t('PLG_SYSTEM_WEBGBOOKING_EMAIL_HELLO') . ' {name},</p>'
+            . '<p style="margin:0 0 18px;">' . $t('PLG_SYSTEM_WEBGBOOKING_EMAIL_CONFIRMED') . '</p>'
+            . '<table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;border:1px solid #e6e9ee;border-radius:8px;">'
+            . '<tr><td style="' . $cell . 'padding-left:14px;color:#6a6a6a;width:90px;">' . $t('PLG_SYSTEM_WEBGBOOKING_EMAIL_LABEL_DATE') . '</td><td style="' . $cell . 'font-weight:600;">{date}</td></tr>'
+            . '<tr><td style="' . $cell . 'padding-left:14px;color:#6a6a6a;border-top:1px solid #eef1f4;">' . $t('PLG_SYSTEM_WEBGBOOKING_EMAIL_LABEL_TIME') . '</td><td style="' . $cell . 'font-weight:600;border-top:1px solid #eef1f4;">{time}</td></tr>'
+            . '</table>'
+            . '{meet_block}'
+            . '<p style="margin:18px 0 0;font-size:13px;color:#6a6a6a;">' . $t('PLG_SYSTEM_WEBGBOOKING_EMAIL_ICS_HINT') . '</p>'
+            . '{cancel_block}'
+            . '<p style="margin:22px 0 0;">' . $t('PLG_SYSTEM_WEBGBOOKING_EMAIL_SIGNOFF') . '</p>';
+    }
+
+    /** Wrap the email body in a responsive, email-client-safe shell. */
+    private function wrapEmail(string $inner): string
+    {
+        $brand = htmlspecialchars((string) $this->getApplication()->get('sitename', 'WebG Booking'), ENT_QUOTES, 'UTF-8');
+        $foot  = htmlspecialchars(Text::_('PLG_SYSTEM_WEBGBOOKING_EMAIL_FOOTER'), ENT_QUOTES, 'UTF-8');
+
+        return '<!DOCTYPE html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>'
+            . '<body style="margin:0;padding:0;background:#f2f4f7;">'
+            . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f2f4f7;padding:24px 12px;"><tr><td align="center">'
+            . '<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e6e9ee;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#1f2937;">'
+            . '<tr><td style="background:#1f2937;padding:18px 28px;color:#ffffff;font-size:16px;font-weight:600;">' . $brand . '</td></tr>'
+            . '<tr><td style="padding:26px 28px;font-size:15px;line-height:1.55;">' . $inner . '</td></tr>'
+            . '<tr><td style="padding:16px 28px;background:#f6f8fa;color:#8a929b;font-size:12px;line-height:1.5;border-top:1px solid #eef1f4;">' . $foot . '</td></tr>'
+            . '</table></td></tr></table></body></html>';
+    }
+
+    /** Send one HTML email with the optional .ics attachment. */
+    private function sendHtmlMail($mf, string $to, string $subject, string $html, string $ics): void
+    {
+        $m = $mf->createMailer();
+        $m->isHtml(true);
+        $m->addRecipient($to);
+        $m->setSubject($subject);
+        $m->setBody($html);
+        if ($ics !== '') {
+            $m->addStringAttachment($ics, 'appuntamento.ics', 'base64', 'text/calendar; charset=utf-8; method=PUBLISH');
+        }
+        $m->Send();
+    }
+
+    /** Guest-facing email body: an invitation, without any management/cancel link. */
+    private function guestEmailBody(object $row, string $dateFmt): string
+    {
+        $t    = fn($k) => htmlspecialchars(Text::_($k), ENT_QUOTES, 'UTF-8');
+        $e    = fn($s) => htmlspecialchars((string) $s, ENT_QUOTES, 'UTF-8');
+        $cell = 'padding:6px 0;font-size:14px;';
+
+        $meetBlock = '';
+        if (!empty($row->meeting_url)) {
+            $meetBlock = '<p style="margin:20px 0;"><a href="' . $e($row->meeting_url) . '" style="display:inline-block;background:#1f2937;color:#ffffff;text-decoration:none;padding:11px 22px;border-radius:8px;font-weight:600;">'
+                . $t('PLG_SYSTEM_WEBGBOOKING_EMAIL_MEET_BTN') . '</a></p>';
+        }
+
+        return '<p style="margin:0 0 14px;">' . $t('PLG_SYSTEM_WEBGBOOKING_EMAIL_HELLO') . ',</p>'
+            . '<p style="margin:0 0 18px;">' . htmlspecialchars(Text::sprintf('PLG_SYSTEM_WEBGBOOKING_EMAIL_GUEST_INTRO', $row->customer_name), ENT_QUOTES, 'UTF-8') . '</p>'
+            . '<table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;border:1px solid #e6e9ee;border-radius:8px;">'
+            . '<tr><td style="' . $cell . 'padding-left:14px;color:#6a6a6a;width:90px;">' . $t('PLG_SYSTEM_WEBGBOOKING_EMAIL_LABEL_DATE') . '</td><td style="' . $cell . 'font-weight:600;">' . $e($dateFmt) . '</td></tr>'
+            . '<tr><td style="' . $cell . 'padding-left:14px;color:#6a6a6a;border-top:1px solid #eef1f4;">' . $t('PLG_SYSTEM_WEBGBOOKING_EMAIL_LABEL_TIME') . '</td><td style="' . $cell . 'font-weight:600;border-top:1px solid #eef1f4;">' . $e($row->booking_time) . '</td></tr>'
+            . '</table>'
+            . $meetBlock
+            . '<p style="margin:18px 0 0;font-size:13px;color:#6a6a6a;">' . $t('PLG_SYSTEM_WEBGBOOKING_EMAIL_ICS_HINT') . '</p>';
+    }
+
+    /** Build an .ics (iCalendar) attachment for the appointment. */
+    private function buildIcs(object $row): string
+    {
+        try {
+            $tz    = new \DateTimeZone($this->siteTz());
+            $utc   = new \DateTimeZone('UTC');
+            $dur   = (int) $this->params->get('slot_duration', 30);
+            $start = new \DateTime($row->booking_date . ' ' . $row->booking_time . ':00', $tz);
+            $end   = (clone $start)->modify('+' . $dur . ' minutes');
+            $fmt   = fn(\DateTime $d) => (clone $d)->setTimezone($utc)->format('Ymd\THis\Z');
+            $host  = parse_url(Uri::root(), PHP_URL_HOST) ?: 'webg';
+            $esc   = fn($s) => str_replace(["\\", "\n", ',', ';'], ['\\\\', '\\n', '\\,', '\\;'], (string) $s);
+
+            $lines = [
+                'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//WebG Booking//IT', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH',
+                'BEGIN:VEVENT',
+                'UID:wgb-' . $row->id . '-' . $row->manage_token . '@' . $host,
+                'DTSTAMP:' . $fmt(new \DateTime('now', $utc)),
+                'DTSTART:' . $fmt($start),
+                'DTEND:' . $fmt($end),
+                'SUMMARY:' . $esc(Text::_('PLG_SYSTEM_WEBGBOOKING_ICS_SUMMARY')),
+            ];
+            if (!empty($row->meeting_url)) {
+                $lines[] = 'DESCRIPTION:' . $esc($row->meeting_url);
+                $lines[] = 'LOCATION:' . $esc($row->meeting_url);
+                $lines[] = 'URL:' . $esc($row->meeting_url);
+            }
+            $lines[] = 'STATUS:CONFIRMED';
+            $lines[] = 'END:VEVENT';
+            $lines[] = 'END:VCALENDAR';
+
+            return implode("\r\n", $lines) . "\r\n";
+        } catch (\Throwable $e) {
+            return '';
         }
     }
 
@@ -354,25 +524,35 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             $start = $row->booking_date . 'T' . $row->booking_time . ':00';
             $end   = (new \DateTime($start))->modify('+' . $dur . ' minutes')->format('Y-m-d\TH:i:s');
 
+            $attendees = [['email' => $row->customer_email]];
+            if (!empty($row->guest_email)) {
+                $attendees[] = ['email' => $row->guest_email];
+            }
+
             $payload = [
                 'summary'        => 'WebG Booking - ' . $row->customer_name,
                 'description'    => (string) $row->notes,
                 'start'          => ['dateTime' => $start, 'timeZone' => $tz],
                 'end'            => ['dateTime' => $end, 'timeZone' => $tz],
-                'attendees'      => [['email' => $row->customer_email]],
+                'attendees'      => $attendees,
                 'conferenceData' => ['createRequest' => [
                     'requestId'             => 'wgb-' . bin2hex(random_bytes(6)),
                     'conferenceSolutionKey' => ['type' => 'hangoutsMeet'],
                 ]],
             ];
 
+            // sendUpdates=all => Google emails the calendar invite to the customer and the guest.
             $resp = (new HttpFactory())->getHttp()->post(
-                'https://www.googleapis.com/calendar/v3/calendars/' . rawurlencode($cal) . '/events?conferenceDataVersion=1',
+                'https://www.googleapis.com/calendar/v3/calendars/' . rawurlencode($cal) . '/events?conferenceDataVersion=1&sendUpdates=all',
                 json_encode($payload),
                 ['Authorization' => 'Bearer ' . $token, 'Content-Type' => 'application/json']
             );
 
             $data = json_decode((string) $resp->body, true) ?: [];
+
+            if (!empty($data['id'])) {
+                $row->google_event_id = (string) $data['id'];
+            }
 
             if (!empty($data['hangoutLink'])) {
                 return $data['hangoutLink'];
@@ -576,6 +756,183 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
         } catch (\Throwable $e) {
             return [];
         }
+    }
+
+    /** Load a non-cancelled booking by its management token. */
+    private function bookingByToken(string $token): ?object
+    {
+        if (strlen($token) < 16) {
+            return null;
+        }
+
+        try {
+            $db  = Factory::getContainer()->get(DatabaseInterface::class);
+            $row = $db->setQuery(
+                $db->getQuery(true)
+                    ->select('*')
+                    ->from($db->quoteName('#__webgbooking_bookings'))
+                    ->where($db->quoteName('manage_token') . ' = ' . $db->quote($token))
+                    ->where($db->quoteName('status') . ' != ' . $db->quote('cancelled'))
+            )->loadObject();
+
+            return $row ?: null;
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+
+    /** Self-service page: shows the appointment and a cancel button (POST). */
+    private function managePage(string $token): void
+    {
+        $row = $this->bookingByToken($token);
+        $e   = fn($s) => htmlspecialchars((string) $s, ENT_QUOTES, 'UTF-8');
+
+        if (!$row) {
+            $this->htmlPage(
+                Text::_('PLG_SYSTEM_WEBGBOOKING_MANAGE_NOT_FOUND_TITLE'),
+                '<h1>' . $e(Text::_('PLG_SYSTEM_WEBGBOOKING_MANAGE_NOT_FOUND_TITLE')) . '</h1>'
+                . '<p class="muted">' . $e(Text::_('PLG_SYSTEM_WEBGBOOKING_MANAGE_NOT_FOUND')) . '</p>'
+            );
+        }
+
+        $dateFmt = $row->booking_date;
+        try {
+            $dateFmt = (new \DateTime($row->booking_date))->format('d/m/Y');
+        } catch (\Throwable $ex) {
+        }
+
+        $meet = $row->meeting_url
+            ? '<tr><td>' . $e(Text::_('PLG_SYSTEM_WEBGBOOKING_EMAIL_MEET_BTN')) . '</td><td><a href="' . $e($row->meeting_url) . '">' . $e($row->meeting_url) . '</a></td></tr>'
+            : '';
+
+        $cancelAction = Uri::root() . 'index.php?option=com_ajax&group=system&plugin=webgbooking&format=html&action=cancel';
+
+        $body = '<h1>' . $e(Text::_('PLG_SYSTEM_WEBGBOOKING_MANAGE_TITLE')) . '</h1>'
+            . '<p class="muted">' . $e(Text::_('PLG_SYSTEM_WEBGBOOKING_MANAGE_INTRO')) . '</p>'
+            . '<table>'
+            . '<tr><td>' . $e(Text::_('PLG_SYSTEM_WEBGBOOKING_EMAIL_LABEL_DATE')) . '</td><td>' . $e($dateFmt) . '</td></tr>'
+            . '<tr><td>' . $e(Text::_('PLG_SYSTEM_WEBGBOOKING_EMAIL_LABEL_TIME')) . '</td><td>' . $e($row->booking_time) . '</td></tr>'
+            . '<tr><td>' . $e(Text::_('PLG_SYSTEM_WEBGBOOKING_FIELD_NAME')) . '</td><td>' . $e($row->customer_name) . '</td></tr>'
+            . $meet
+            . '</table>'
+            . '<form method="post" action="' . $e($cancelAction) . '">'
+            . '<input type="hidden" name="token" value="' . $e($row->manage_token) . '">'
+            . '<button type="submit" class="btn btn-danger">' . $e(Text::_('PLG_SYSTEM_WEBGBOOKING_MANAGE_CANCEL_BTN')) . '</button>'
+            . '</form>';
+
+        $this->htmlPage(Text::_('PLG_SYSTEM_WEBGBOOKING_MANAGE_TITLE'), $body);
+    }
+
+    /** Cancel a booking (POST only): delete the calendar event, notify, confirm. */
+    private function cancelBooking(string $token): void
+    {
+        if (strtoupper((string) $this->getApplication()->getInput()->getMethod()) !== 'POST') {
+            $this->managePage($token); // A GET just shows the page (prevents prefetch cancellation).
+            return;
+        }
+
+        $row = $this->bookingByToken($token);
+        $e   = fn($s) => htmlspecialchars((string) $s, ENT_QUOTES, 'UTF-8');
+
+        if (!$row) {
+            $this->htmlPage(
+                Text::_('PLG_SYSTEM_WEBGBOOKING_MANAGE_NOT_FOUND_TITLE'),
+                '<h1>' . $e(Text::_('PLG_SYSTEM_WEBGBOOKING_MANAGE_NOT_FOUND_TITLE')) . '</h1>'
+                . '<p class="muted">' . $e(Text::_('PLG_SYSTEM_WEBGBOOKING_MANAGE_NOT_FOUND')) . '</p>'
+            );
+        }
+
+        try {
+            $db = Factory::getContainer()->get(DatabaseInterface::class);
+            $db->updateObject('#__webgbooking_bookings', (object) ['id' => $row->id, 'status' => 'cancelled'], 'id');
+
+            if (!empty($row->google_event_id)) {
+                $this->deleteGoogleEvent((string) $row->google_event_id);
+            }
+
+            $this->notifyCancellation($row);
+        } catch (\Throwable $ex) {
+        }
+
+        $this->htmlPage(
+            Text::_('PLG_SYSTEM_WEBGBOOKING_MANAGE_CANCELLED_TITLE'),
+            '<h1 class="ok">' . $e(Text::_('PLG_SYSTEM_WEBGBOOKING_MANAGE_CANCELLED_TITLE')) . '</h1>'
+            . '<p class="muted">' . $e(Text::_('PLG_SYSTEM_WEBGBOOKING_MANAGE_CANCELLED_MSG')) . '</p>'
+        );
+    }
+
+    /** Delete the Google Calendar event (and notify its attendees) on cancellation. */
+    private function deleteGoogleEvent(string $eventId): void
+    {
+        try {
+            if ($eventId === '') {
+                return;
+            }
+
+            $db = Factory::getContainer()->get(DatabaseInterface::class);
+            $g  = $db->setQuery(
+                $db->getQuery(true)->select('*')->from($db->quoteName('#__webgbooking_google'))
+            )->loadObject();
+
+            if (!$g || empty($g->refresh_token)) {
+                return;
+            }
+
+            $token = $this->googleAccessToken((string) $g->refresh_token);
+            if ($token === '') {
+                return;
+            }
+
+            $cal = $g->calendar_id ?: 'primary';
+            (new HttpFactory())->getHttp()->delete(
+                'https://www.googleapis.com/calendar/v3/calendars/' . rawurlencode($cal) . '/events/' . rawurlencode($eventId) . '?sendUpdates=all',
+                ['Authorization' => 'Bearer ' . $token]
+            );
+        } catch (\Throwable $e) {
+        }
+    }
+
+    /** Notify admin (and the customer) that a booking was cancelled. */
+    private function notifyCancellation(object $row): void
+    {
+        try {
+            $mf    = Factory::getContainer()->get(MailerFactoryInterface::class);
+            $admin = trim((string) $this->params->get('notify_email', '')) ?: (string) $this->getApplication()->getConfig()->get('mailfrom');
+
+            if ($admin !== '') {
+                $m = $mf->createMailer();
+                $m->addRecipient($admin);
+                $m->setSubject(Text::sprintf('PLG_SYSTEM_WEBGBOOKING_CANCEL_ADMIN_SUBJECT', $row->booking_date, $row->booking_time));
+                $m->setBody(Text::sprintf('PLG_SYSTEM_WEBGBOOKING_CANCEL_ADMIN_BODY', $row->booking_date, $row->booking_time, $row->customer_name, $row->customer_email));
+                $m->Send();
+            }
+
+            $c = $mf->createMailer();
+            $c->addRecipient($row->customer_email);
+            $c->setSubject(Text::_('PLG_SYSTEM_WEBGBOOKING_CANCEL_CUSTOMER_SUBJECT'));
+            $c->setBody(Text::sprintf('PLG_SYSTEM_WEBGBOOKING_CANCEL_CUSTOMER_BODY', $row->customer_name, $row->booking_date, $row->booking_time));
+            $c->Send();
+        } catch (\Throwable $e) {
+        }
+    }
+
+    /** Output a small, self-contained styled HTML page and stop. */
+    private function htmlPage(string $title, string $body): void
+    {
+        $css = 'body{margin:0;background:#f2f4f7;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#1f2937}'
+            . '.wrap{max-width:520px;margin:48px auto;padding:0 16px}'
+            . '.card{background:#fff;border:1px solid #e6e9ee;border-radius:12px;padding:26px 28px}'
+            . 'h1{font-size:20px;margin:0 0 10px}.muted{color:#6a6a6a;font-size:14px;line-height:1.5}'
+            . 'table{width:100%;border-collapse:collapse;margin:18px 0}td{padding:9px 0;font-size:14px;border-top:1px solid #eef1f4}'
+            . 'tr:first-child td{border-top:0}td:first-child{color:#6a6a6a;width:130px}'
+            . '.btn{display:inline-block;border:0;border-radius:8px;padding:11px 22px;font-weight:600;font-size:14px;cursor:pointer;text-decoration:none}'
+            . '.btn-danger{background:#c0392b;color:#fff}.ok{color:#1d6b3f}a{color:#1f2937}';
+
+        echo '<!DOCTYPE html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
+            . '<title>' . htmlspecialchars($title, ENT_QUOTES, 'UTF-8') . '</title><style>' . $css . '</style></head>'
+            . '<body><div class="wrap"><div class="card">' . $body . '</div></div></body></html>';
+
+        $this->getApplication()->close();
     }
 
     private function respond(array $data): void
