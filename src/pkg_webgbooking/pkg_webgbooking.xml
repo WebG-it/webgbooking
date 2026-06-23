@@ -8,7 +8,7 @@
     <copyright>(C) 2026 Marco Galassi / WebG</copyright>
     <license>GNU General Public License version 2 or later</license>
     <packagename>webgbooking</packagename>
-    <version>0.14.2</version>
+    <version>0.14.3</version>
     <url>https://github.com/WebG-it/webgbooking</url>
     <packagerurl>https://www.webg.it</packagerurl>
     <description>WebG Booking - appointment booking for Joomla 5/6 with a native YOOtheme Pro element, availability rules, email notifications and Google Calendar/Meet. Installs the booking component and the system plugin together.</description>
