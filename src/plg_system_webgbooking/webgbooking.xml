@@ -7,7 +7,7 @@
     <creationDate>2026-06</creationDate>
     <copyright>(C) 2026 Marco Galassi / WebG</copyright>
     <license>GNU General Public License version 2 or later</license>
-    <version>0.7.0</version>
+    <version>0.8.0</version>
     <description>PLG_SYSTEM_WEBGBOOKING_XML_DESCRIPTION</description>
     <scriptfile>script.php</scriptfile>
     <updateservers>
@@ -66,6 +66,9 @@
                 <field name="notify_email" type="email" default=""
                     label="PLG_SYSTEM_WEBGBOOKING_NOTIFY_EMAIL_LABEL"
                     description="PLG_SYSTEM_WEBGBOOKING_NOTIFY_EMAIL_DESC" />
+                <field name="meeting_url" type="url" default=""
+                    label="PLG_SYSTEM_WEBGBOOKING_MEETING_URL_LABEL"
+                    description="PLG_SYSTEM_WEBGBOOKING_MEETING_URL_DESC" />
             </fieldset>
         </fields>
     </config>
