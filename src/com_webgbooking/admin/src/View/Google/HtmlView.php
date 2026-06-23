@@ -31,7 +31,7 @@ class HtmlView extends BaseHtmlView
         if ($app->getInput()->getInt('wgbconnected')) {
             $app->enqueueMessage(Text::_('COM_WEBGBOOKING_GOOGLE_OK'), 'success');
         }
-        if ($err = $app->getInput()->getCmd('wgberror', '')) {
+        if ($err = $app->getInput()->getString('wgberror', '')) {
             $app->enqueueMessage(Text::sprintf('COM_WEBGBOOKING_GOOGLE_ERR', $err), 'error');
         }
 
