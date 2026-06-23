@@ -73,6 +73,20 @@ return new class () implements InstallerScriptInterface {
             } catch (\Throwable $e) {
             }
 
+            // Google connection store (single row): encrypted refresh token + account.
+            $db->setQuery(
+                'CREATE TABLE IF NOT EXISTS ' . $db->quoteName('#__webgbooking_google') . ' ('
+                . $db->quoteName('id') . ' INT UNSIGNED NOT NULL AUTO_INCREMENT,'
+                . $db->quoteName('refresh_token') . ' TEXT NULL,'
+                . $db->quoteName('account_email') . ' VARCHAR(190) NULL,'
+                . $db->quoteName('calendar_id') . ' VARCHAR(190) NULL,'
+                . $db->quoteName('oauth_state') . ' VARCHAR(64) NULL,'
+                . $db->quoteName('created') . ' DATETIME NULL,'
+                . $db->quoteName('updated') . ' DATETIME NULL,'
+                . 'PRIMARY KEY (' . $db->quoteName('id') . ')'
+                . ') DEFAULT CHARSET=utf8mb4'
+            )->execute();
+
             if ($type === 'install') {
                 $db->setQuery(
                     $db->getQuery(true)
