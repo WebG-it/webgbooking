@@ -7,12 +7,9 @@
     <creationDate>2026-06</creationDate>
     <copyright>(C) 2026 Marco Galassi / WebG</copyright>
     <license>GNU General Public License version 2 or later</license>
-    <version>0.2.3</version>
+    <version>0.2.4</version>
     <description>COM_WEBGBOOKING_XML_DESCRIPTION</description>
     <namespace path="src">WebG\Component\Webgbooking</namespace>
-    <updateservers>
-        <server type="extension" name="WebG Booking (component)">https://raw.githubusercontent.com/WebG-it/webgbooking/main/updates-com.xml</server>
-    </updateservers>
     <administration>
         <menu link="option=com_webgbooking" img="class:default">COM_WEBGBOOKING</menu>
         <submenu>
