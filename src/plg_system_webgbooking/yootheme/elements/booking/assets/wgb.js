@@ -31,7 +31,7 @@
           fd.append('date',isoDate(st.date));fd.append('time',st.time||'');
           fd.append('name',st.form.name);fd.append('email',st.form.email);
           fd.append('phone',st.form.phone);fd.append('notes',st.form.notes);fd.append('guest',st.form.guest||'');
-          fd.append('privacy',st.form.privacy?'1':'0');fd.append('website',st.form.website||'');fd.append('newsletter',st.form.news?'1':'0');
+          fd.append('privacy',st.form.privacy?'1':'0');fd.append('website',st.form.website||'');fd.append('newsletter',st.form.news?'1':'0');fd.append('form',cfg.form||'');
           return fetch(url+'&action=book',{method:'POST',body:fd,headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin'});
         })
         .then(function(r){return r.json();})
@@ -74,7 +74,7 @@
         }
       } else if(st.step==='time'){
         h.push(summary());
-        h.push('<div class="uk-text-meta uk-text-bold uk-margin-small-bottom">'+esc(L.stepTime)+'</div>');
+        h.push('<div class="uk-text-meta uk-text-bold uk-margin-small-bottom">'+esc(L.stepTime)+(cfg.duration?' · '+cfg.duration+' min':'')+'</div>');
         if(st.loadingBusy){h.push('<div class="uk-text-center uk-padding-small"><span uk-spinner></span></div>');}
         else{var sl=st.daySlots||[];
         if(!sl.length)h.push('<div class="uk-alert uk-alert-warning" role="status" uk-alert>'+esc(L.noSlots)+'</div>');
@@ -91,6 +91,7 @@
         if(cfg.showNewsletter)h.push('<label class="uk-margin-small uk-display-block"><input class="uk-checkbox wgb-f-news" type="checkbox"'+(st.form.news?' checked':'')+'> '+esc(L.fNewsletter)+'</label>');
         h.push('<label class="uk-margin-small uk-display-block"><input class="uk-checkbox wgb-f-privacy" type="checkbox" aria-required="true"'+(st.form.privacy?' checked':'')+'> '+esc(L.privacy)+' <span class="wgb-req">*</span></label>');
         h.push('<input type="text" class="wgb-f-website" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute!important;left:-9999px;top:-9999px;height:1px;width:1px;opacity:0">');
+        if(L.emailNote)h.push('<div class="uk-text-meta uk-margin-small-top">'+esc(L.emailNote)+'</div>');
         h.push('<button type="button" class="uk-button uk-button-'+(cfg.btnStyle||'primary')+' uk-width-1-1 uk-margin-small-top" data-act="book">'+esc(L.bookNow)+'</button>');
       } else if(st.step==='confirm'){
         h.push(summary());
