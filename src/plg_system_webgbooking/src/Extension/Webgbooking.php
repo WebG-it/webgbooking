@@ -226,13 +226,14 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                 return;
             }
 
-            $db->updateObject('#__webgbooking_google', (object) [
+            $upd = (object) [
                 'id'            => $row->id,
                 'refresh_token' => $this->enc($refresh),
                 'account_email' => $email,
                 'oauth_state'   => '',
                 'updated'       => Factory::getDate()->toSql(),
-            ], 'id');
+            ];
+            $db->updateObject('#__webgbooking_google', $upd, 'id');
 
             $app->redirect($admin . '&wgbconnected=1');
         } catch (\Throwable $e) {
