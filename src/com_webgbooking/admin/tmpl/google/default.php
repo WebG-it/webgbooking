@@ -15,6 +15,9 @@ use Joomla\CMS\Router\Route;
 $s = $this->status;
 ?>
 <div class="p-3" style="max-width:760px">
+    <?php if (!empty($s->error)) : ?>
+        <div class="alert alert-danger"><strong>Error:</strong> <?php echo htmlspecialchars((string) $s->error, ENT_QUOTES, 'UTF-8'); ?></div>
+    <?php endif; ?>
     <?php if (!$s->hasClientId) : ?>
         <div class="alert alert-warning"><?php echo Text::_('COM_WEBGBOOKING_GOOGLE_NO_CREDS'); ?></div>
     <?php elseif ($s->connected) : ?>
