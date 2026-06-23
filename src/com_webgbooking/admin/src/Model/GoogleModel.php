@@ -82,9 +82,11 @@ class GoogleModel extends BaseDatabaseModel
         )->loadResult();
 
         if ($id) {
-            $db->updateObject('#__webgbooking_google', (object) ['id' => $id, 'oauth_state' => $state, 'updated' => $now], 'id');
+            $obj = (object) ['id' => $id, 'oauth_state' => $state, 'updated' => $now];
+            $db->updateObject('#__webgbooking_google', $obj, 'id');
         } else {
-            $db->insertObject('#__webgbooking_google', (object) ['oauth_state' => $state, 'calendar_id' => 'primary', 'created' => $now]);
+            $obj = (object) ['oauth_state' => $state, 'calendar_id' => 'primary', 'created' => $now];
+            $db->insertObject('#__webgbooking_google', $obj);
         }
 
         return 'https://accounts.google.com/o/oauth2/v2/auth?' . http_build_query([
