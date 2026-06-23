@@ -170,7 +170,7 @@ $trigBtn = trim('uk-button uk-button-' . $btnStyle . ($btnSize ? ' uk-button-' .
     var slotBtn='uk-button uk-button-'+(cfg.slotStyle||'default')+(cfg.slotSize?' '+cfg.slotSize:'');
     var mount=root.querySelector('.wgb-mount')||root;
     var st={view:startToday(),date:null,time:null,form:{name:'',email:'',phone:'',notes:'',privacy:false},err:false,step:'cal'};
-    function avail(d){var t=startToday();if(d<t)return false;var max=new Date(t);max.setDate(max.getDate()+(cfg.window||30));if(d>max)return false;var wd=(cfg.workDays&&cfg.workDays.length)?cfg.workDays:[1,2,3,4,5];return wd.indexOf(d.getDay())!==-1;}
+    function avail(d){var t=startToday();if(d<t)return false;var max=new Date(t);max.setDate(max.getDate()+(cfg.window||30));if(d>max)return false;var wd=(cfg.workDays&&cfg.workDays.length)?cfg.workDays:[1,2,3,4,5];if(wd.indexOf(d.getDay())===-1)return false;return slots(d).length>0;}
     function slots(d){var ws=(cfg.workStart||'09:00').split(':'),we=(cfg.workEnd||'18:00').split(':');var s=(+ws[0])*60+(+ws[1]),e=(+we[0])*60+(+we[1]),iv=cfg.interval||30;var out=[],now=new Date(),notice=(cfg.minNotice||0)*3600000;for(var m=s;m+iv<=e;m+=iv){var hh=Math.floor(m/60),mm=m%60;var dt=new Date(d);dt.setHours(hh,mm,0,0);if(dt-now<notice)continue;out.push((hh<10?'0':'')+hh+':'+(mm<10?'0':'')+mm);}return out;}
     function pad2(n){return (n<10?'0':'')+n;}
     function isoDate(d){return d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate());}
