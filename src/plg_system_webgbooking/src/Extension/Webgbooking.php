@@ -237,7 +237,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
 
             $app->redirect($admin . '&wgbconnected=1');
         } catch (\Throwable $e) {
-            $app->redirect($admin . '&wgberror=exchange');
+            $app->redirect($admin . '&wgberror=' . rawurlencode('exchange: ' . $e->getMessage()));
         }
     }
 
