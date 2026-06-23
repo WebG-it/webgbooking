@@ -7,7 +7,7 @@
     <creationDate>2026-06</creationDate>
     <copyright>(C) 2026 Marco Galassi / WebG</copyright>
     <license>GNU General Public License version 2 or later</license>
-    <version>0.2.2</version>
+    <version>0.2.3</version>
     <description>COM_WEBGBOOKING_XML_DESCRIPTION</description>
     <namespace path="src">WebG\Component\Webgbooking</namespace>
     <updateservers>
