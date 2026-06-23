@@ -20,27 +20,60 @@ class GoogleModel extends BaseDatabaseModel
 {
     public function getStatus(): object
     {
-        $db  = $this->getDatabase();
-        $row = $db->setQuery(
-            $db->getQuery(true)->select('*')->from($db->quoteName('#__webgbooking_google'))
-        )->loadObject();
-
-        $params   = new Registry(PluginHelper::getPlugin('system', 'webgbooking')->params ?? '');
-        $clientId = trim((string) $params->get('google_client_id', ''));
-        $redirect = Uri::root() . 'index.php?option=com_ajax&group=system&plugin=webgbooking&format=raw&action=oauth';
-
-        return (object) [
-            'connected'   => $row && !empty($row->refresh_token),
-            'email'       => $row->account_email ?? '',
-            'hasClientId' => $clientId !== '',
-            'redirect'    => $redirect,
-            'connectUrl'  => $clientId !== '' ? $this->buildConnectUrl($clientId, $redirect) : '',
+        $status = (object) [
+            'connected'   => false,
+            'email'       => '',
+            'hasClientId' => false,
+            'redirect'    => Uri::root() . 'index.php?option=com_ajax&group=system&plugin=webgbooking&format=raw&action=oauth',
+            'connectUrl'  => '',
+            'error'       => '',
         ];
+
+        try {
+            $plugin   = PluginHelper::getPlugin('system', 'webgbooking');
+            $params   = new Registry(\is_object($plugin) ? ($plugin->params ?? '') : '');
+            $clientId = trim((string) $params->get('google_client_id', ''));
+            $status->hasClientId = $clientId !== '';
+
+            $db  = $this->getDatabase();
+            $this->ensureTable($db);
+
+            $row = $db->setQuery(
+                $db->getQuery(true)->select('*')->from($db->quoteName('#__webgbooking_google'))
+            )->loadObject();
+
+            $status->connected = $row && !empty($row->refresh_token);
+            $status->email     = $row->account_email ?? '';
+
+            if ($clientId !== '' && !$status->connected) {
+                $status->connectUrl = $this->buildConnectUrl($db, $clientId, $status->redirect);
+            }
+        } catch (\Throwable $e) {
+            $status->error = $e->getMessage();
+        }
+
+        return $status;
     }
 
-    private function buildConnectUrl(string $clientId, string $redirect): string
+    /** Defensive: create the shared table if the plugin install script never ran. */
+    private function ensureTable($db): void
     {
-        $db    = $this->getDatabase();
+        $db->setQuery(
+            'CREATE TABLE IF NOT EXISTS ' . $db->quoteName('#__webgbooking_google') . ' ('
+            . $db->quoteName('id') . ' INT UNSIGNED NOT NULL AUTO_INCREMENT,'
+            . $db->quoteName('refresh_token') . ' TEXT NULL,'
+            . $db->quoteName('account_email') . ' VARCHAR(190) NULL,'
+            . $db->quoteName('calendar_id') . ' VARCHAR(190) NULL,'
+            . $db->quoteName('oauth_state') . ' VARCHAR(64) NULL,'
+            . $db->quoteName('created') . ' DATETIME NULL,'
+            . $db->quoteName('updated') . ' DATETIME NULL,'
+            . 'PRIMARY KEY (' . $db->quoteName('id') . ')'
+            . ') DEFAULT CHARSET=utf8mb4'
+        )->execute();
+    }
+
+    private function buildConnectUrl($db, string $clientId, string $redirect): string
+    {
         $state = bin2hex(random_bytes(16));
         $now   = Factory::getDate()->toSql();
 
