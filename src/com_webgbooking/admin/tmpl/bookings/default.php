@@ -1,0 +1,61 @@
+<?php
+
+/**
+ * @package     com_webgbooking
+ * @copyright   (C) 2026 Marco Galassi / WebG
+ * @license     GNU General Public License version 2 or later
+ */
+
+\defined('_JEXEC') or die;
+
+use Joomla\CMS\HTML\HTMLHelper;
+use Joomla\CMS\Language\Text;
+use Joomla\CMS\Router\Route;
+?>
+<form action="<?php echo Route::_('index.php?option=com_webgbooking&view=bookings'); ?>" method="post" name="adminForm" id="adminForm">
+    <div class="table-responsive">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th><?php echo Text::_('COM_WEBGBOOKING_COL_DATE'); ?></th>
+                    <th><?php echo Text::_('COM_WEBGBOOKING_COL_TIME'); ?></th>
+                    <th><?php echo Text::_('COM_WEBGBOOKING_COL_NAME'); ?></th>
+                    <th><?php echo Text::_('COM_WEBGBOOKING_COL_EMAIL'); ?></th>
+                    <th><?php echo Text::_('COM_WEBGBOOKING_COL_PHONE'); ?></th>
+                    <th><?php echo Text::_('COM_WEBGBOOKING_COL_MEETING'); ?></th>
+                    <th><?php echo Text::_('COM_WEBGBOOKING_COL_STATUS'); ?></th>
+                    <th><?php echo Text::_('COM_WEBGBOOKING_COL_CREATED'); ?></th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php if (empty($this->items)) : ?>
+                    <tr><td colspan="8"><?php echo Text::_('COM_WEBGBOOKING_EMPTY'); ?></td></tr>
+                <?php else : ?>
+                    <?php foreach ($this->items as $i) : ?>
+                        <tr>
+                            <td><?php echo htmlspecialchars((string) $i->booking_date, ENT_QUOTES, 'UTF-8'); ?></td>
+                            <td><?php echo htmlspecialchars((string) $i->booking_time, ENT_QUOTES, 'UTF-8'); ?></td>
+                            <td><?php echo htmlspecialchars((string) $i->customer_name, ENT_QUOTES, 'UTF-8'); ?></td>
+                            <td><a href="mailto:<?php echo htmlspecialchars((string) $i->customer_email, ENT_QUOTES, 'UTF-8'); ?>"><?php echo htmlspecialchars((string) $i->customer_email, ENT_QUOTES, 'UTF-8'); ?></a></td>
+                            <td><?php echo htmlspecialchars((string) ($i->customer_phone ?? ''), ENT_QUOTES, 'UTF-8'); ?></td>
+                            <td>
+                                <?php if (!empty($i->meeting_url)) : ?>
+                                    <a href="<?php echo htmlspecialchars((string) $i->meeting_url, ENT_QUOTES, 'UTF-8'); ?>" target="_blank" rel="noopener noreferrer"><?php echo Text::_('COM_WEBGBOOKING_MEETING_LINK'); ?></a>
+                                <?php endif; ?>
+                            </td>
+                            <td><?php echo htmlspecialchars((string) $i->status, ENT_QUOTES, 'UTF-8'); ?></td>
+                            <td><?php echo htmlspecialchars((string) $i->created, ENT_QUOTES, 'UTF-8'); ?></td>
+                        </tr>
+                    <?php endforeach; ?>
+                <?php endif; ?>
+            </tbody>
+        </table>
+    </div>
+
+    <?php if (!empty($this->pagination)) : ?>
+        <?php echo $this->pagination->getListFooter(); ?>
+    <?php endif; ?>
+
+    <input type="hidden" name="task" value="">
+    <?php echo HTMLHelper::_('form.token'); ?>
+</form>
