@@ -6,14 +6,14 @@
         <description>WebG Booking component - bookings backend.</description>
         <element>com_webgbooking</element>
         <type>component</type>
-        <version>0.2.0</version>
+        <version>0.2.1</version>
         <maintainer>Marco Galassi (WebG)</maintainer>
         <maintainerurl>https://www.webg.it</maintainerurl>
         <infourl title="WebG Booking">https://github.com/WebG-it/webgbooking</infourl>
         <downloads>
-            <downloadurl type="full" format="zip">https://raw.githubusercontent.com/WebG-it/webgbooking/main/dist/com_webgbooking-0.2.0.zip</downloadurl>
+            <downloadurl type="full" format="zip">https://raw.githubusercontent.com/WebG-it/webgbooking/main/dist/com_webgbooking-0.2.1.zip</downloadurl>
         </downloads>
-        <sha256>3ac609d21aca5e344e0866dc9364b7bea53aa5e29118b08d6a6578e19697f88d</sha256>
+        <sha256>456f5da24cc7c1764253ea50696d507ccfd94f4955b582ae70d9ba3d7482054f</sha256>
         <targetplatform name="joomla" version="(5|6)\.[0-9]+" />
     </update>
 </updates>
