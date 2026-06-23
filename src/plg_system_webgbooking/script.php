@@ -58,10 +58,20 @@ return new class () implements InstallerScriptInterface {
                 . $db->quoteName('notes') . ' TEXT NULL,'
                 . $db->quoteName('status') . " VARCHAR(20) NOT NULL DEFAULT 'pending',"
                 . $db->quoteName('source_url') . ' VARCHAR(255) NULL,'
+                . $db->quoteName('meeting_url') . ' VARCHAR(255) NULL,'
                 . 'PRIMARY KEY (' . $db->quoteName('id') . '),'
                 . 'KEY ' . $db->quoteName('idx_date') . ' (' . $db->quoteName('booking_date') . ',' . $db->quoteName('booking_time') . ')'
                 . ') DEFAULT CHARSET=utf8mb4'
             )->execute();
+
+            // Add meeting_url to pre-existing tables (upgrade path).
+            try {
+                $col = $db->setQuery('SHOW COLUMNS FROM ' . $db->quoteName('#__webgbooking_bookings') . " LIKE 'meeting_url'")->loadResult();
+                if (!$col) {
+                    $db->setQuery('ALTER TABLE ' . $db->quoteName('#__webgbooking_bookings') . ' ADD COLUMN ' . $db->quoteName('meeting_url') . ' VARCHAR(255) NULL')->execute();
+                }
+            } catch (\Throwable $e) {
+            }
 
             if ($type === 'install') {
                 $db->setQuery(
