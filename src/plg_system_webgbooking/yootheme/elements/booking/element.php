@@ -58,16 +58,52 @@ return [
             'type' => 'checkbox',
             'text' => 'Allow inviting a guest',
         ],
-        // --- Per-element confirmation email (empty = plugin/default; signed server-side, not client-editable) ---
+        // --- ACTIONS (per element, signed server-side via HMAC, not client-tamperable) ---
+        'act_customer_on' => ['label' => 'Customer email', 'type' => 'checkbox', 'text' => 'Send the confirmation email to the customer', 'default' => true],
         'email_subject' => [
-            'label' => 'Email subject',
-            'description' => 'Confirmation email subject for THIS element. Empty = plugin default. Placeholders: {name} {date} {time}.',
+            'label' => 'Subject',
+            'description' => 'Placeholders: {name} {date} {time}. Empty = default.',
             'type' => 'text',
+            'source' => true,
+            'enable' => 'act_customer_on',
         ],
         'email_body' => [
-            'label' => 'Email body (HTML)',
-            'description' => 'Confirmation email body for THIS element. Empty = plugin default. Placeholders: {name} {date} {time} {phone} {notes} {meet_url} {cancel_url} {meet_block} {cancel_block}.',
-            'type' => 'textarea',
+            'label' => 'Body (HTML)',
+            'description' => 'Placeholders: {name} {date} {time} {phone} {email} {notes} {meet_url} {cancel_url} {meet_block} {cancel_block}. Empty = styled default.',
+            'type' => 'editor',
+            'editor' => 'code',
+            'mode' => 'text/html',
+            'attrs' => ['debounce' => 500],
+            'source' => true,
+            'enable' => 'act_customer_on',
+            'default' => "<p>Ciao {name},</p><p>il tuo appuntamento è confermato per il <strong>{date}</strong> alle <strong>{time}</strong>.</p>{meet_block}<p style='font-size:13px;color:#6a6a6a'>In allegato trovi il file .ics per aggiungerlo al tuo calendario.</p>{cancel_block}<p>A presto!</p>",
+        ],
+        'act_staff_on' => ['label' => 'Staff email', 'type' => 'checkbox', 'text' => 'Send a notification email to the staff', 'default' => true],
+        'staff_to' => [
+            'label' => 'Staff recipient(s)',
+            'description' => 'Comma-separated. Empty = the plugin Notify e-mail / site sender.',
+            'type' => 'text',
+            'source' => true,
+            'enable' => 'act_staff_on',
+        ],
+        'staff_subject' => ['label' => 'Staff subject', 'type' => 'text', 'source' => true, 'enable' => 'act_staff_on'],
+        'staff_body' => [
+            'label' => 'Staff body (HTML)',
+            'description' => 'Placeholders: {name} {email} {phone} {date} {time} {notes}.',
+            'type' => 'editor',
+            'editor' => 'code',
+            'mode' => 'text/html',
+            'attrs' => ['debounce' => 500],
+            'source' => true,
+            'enable' => 'act_staff_on',
+            'default' => "<p>Nuova prenotazione: <strong>{date}</strong> alle <strong>{time}</strong>.</p><p>Nome: {name}<br>Email: {email}<br>Telefono: {phone}</p><p>Note: {notes}</p>",
+        ],
+        'act_webhook_on' => ['label' => 'Webhook', 'type' => 'checkbox', 'text' => 'POST the booking to a webhook (Zapier / Make / Sheets)'],
+        'webhook_url' => [
+            'label' => 'Webhook URL',
+            'description' => 'Receives the booking as JSON. Empty = the plugin Bookings webhook.',
+            'type' => 'text',
+            'enable' => 'act_webhook_on',
         ],
         'analytics_event' => [
             'label' => 'Analytics event',
@@ -182,7 +218,30 @@ return [
             'fields' => [
                 [
                     'title' => 'Content',
-                    'fields' => ['title', 'service', 'button_text', 'allow_guest', 'email_subject', 'email_body', 'show_newsletter', 'analytics_event', 'layout'],
+                    'fields' => ['title', 'service', 'button_text', 'allow_guest', 'show_newsletter', 'analytics_event', 'layout'],
+                ],
+                [
+                    'title' => 'Actions',
+                    'fields' => [
+                        [
+                            'label' => 'Customer email',
+                            'type' => 'group',
+                            'divider' => true,
+                            'fields' => ['act_customer_on', 'email_subject', 'email_body'],
+                        ],
+                        [
+                            'label' => 'Staff email',
+                            'type' => 'group',
+                            'divider' => true,
+                            'fields' => ['act_staff_on', 'staff_to', 'staff_subject', 'staff_body'],
+                        ],
+                        [
+                            'label' => 'Webhook',
+                            'type' => 'group',
+                            'divider' => true,
+                            'fields' => ['act_webhook_on', 'webhook_url'],
+                        ],
+                    ],
                 ],
                 [
                     'title' => 'Settings',
