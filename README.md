@@ -15,7 +15,7 @@ Un solo pacchetto installa **componente + plugin** insieme e aggiorna tutto in u
 
 1. Joomla → *Sistema → Installa → Installa da URL*, incolla:
    ```
-   https://raw.githubusercontent.com/WebG-it/webgbooking/main/dist/pkg_webgbooking-0.24.0.zip
+   https://raw.githubusercontent.com/WebG-it/webgbooking/main/dist/pkg_webgbooking-0.25.0.zip
    ```
 2. Il plugin si **attiva da solo**. YOOtheme Customizer → **Add Element** → gruppo **WebG** → **Booking**.
 3. Backend prenotazioni e connessione Google: **Componenti → WebG Booking**.
