@@ -207,7 +207,7 @@ class GoogleModel extends BaseDatabaseModel
             'client_id'              => $clientId,
             'redirect_uri'           => $redirect,
             'response_type'          => 'code',
-            'scope'                  => 'openid email https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.readonly',
+            'scope'                  => 'openid email https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/spreadsheets',
             'access_type'            => 'offline',
             'prompt'                 => 'consent',
             'include_granted_scopes' => 'true',
