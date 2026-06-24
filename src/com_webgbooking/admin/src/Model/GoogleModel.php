@@ -35,6 +35,11 @@ class GoogleModel extends BaseDatabaseModel
             'redirect'    => Uri::root() . 'index.php?option=com_ajax&group=system&plugin=webgbooking&format=raw&action=oauth',
             'connectUrl'  => '',
             'calendars'   => [],
+            'sheetId'     => '',
+            'sheetTab'    => '',
+            'sheets'      => [],
+            'tabs'        => [],
+            'sheetsError' => '',
             'apiError'    => '',
             'error'       => '',
         ];
@@ -53,6 +58,8 @@ class GoogleModel extends BaseDatabaseModel
 
             $status->connected = $row && !empty($row->refresh_token);
             $status->email     = $row->account_email ?? '';
+            $status->sheetId   = $row->sheet_id ?? '';
+            $status->sheetTab  = $row->sheet_tab ?? '';
 
             if (!$status->connected) {
                 if ($clientId !== '') {
@@ -77,6 +84,19 @@ class GoogleModel extends BaseDatabaseModel
                         'read'    => \in_array($cal['id'], $readList, true),
                         'write'   => $cal['id'] === $write,
                     ];
+                }
+
+                // Google Sheets: list the user's spreadsheets and the tabs of the selected one.
+                try {
+                    $status->sheets = $this->listSpreadsheets($token);
+                } catch (\Throwable $eSheets) {
+                    $status->sheetsError = $eSheets->getMessage();
+                }
+                if ($status->sheetId !== '') {
+                    try {
+                        $status->tabs = $this->listTabs($token, $status->sheetId);
+                    } catch (\Throwable $eTabs) {
+                    }
                 }
             } catch (\Throwable $e) {
                 $status->apiError = $e->getMessage();
@@ -106,6 +126,78 @@ class GoogleModel extends BaseDatabaseModel
             'updated'        => Factory::getDate()->toSql(),
         ];
         $db->updateObject('#__webgbooking_google', $obj, 'id');
+    }
+
+    public function saveSheet(string $sheetId, string $tab): void
+    {
+        $db  = $this->getDatabase();
+        $row = $db->setQuery(
+            $db->getQuery(true)->select($db->quoteName(['id', 'sheet_id']))->from($db->quoteName('#__webgbooking_google'))
+        )->loadObject();
+
+        if (!$row) {
+            return;
+        }
+
+        // Spreadsheet changed → drop the previous tab so we never append to a tab that no longer exists.
+        if ((string) ($row->sheet_id ?? '') !== $sheetId) {
+            $tab = '';
+        }
+
+        $obj = (object) [
+            'id'        => $row->id,
+            'sheet_id'  => $sheetId,
+            'sheet_tab' => $tab,
+            'updated'   => Factory::getDate()->toSql(),
+        ];
+        $db->updateObject('#__webgbooking_google', $obj, 'id');
+    }
+
+    /** List the user's Google spreadsheets (needs the drive.metadata.readonly scope). @return array<int,object> */
+    private function listSpreadsheets(string $token): array
+    {
+        $resp = (new HttpFactory())->getHttp()->get(
+            'https://www.googleapis.com/drive/v3/files?' . http_build_query([
+                'q'        => "mimeType='application/vnd.google-apps.spreadsheet' and trashed=false",
+                'fields'   => 'files(id,name)',
+                'orderBy'  => 'modifiedTime desc',
+                'pageSize' => 100,
+            ]),
+            ['Authorization' => 'Bearer ' . $token]
+        );
+
+        $data = json_decode((string) $resp->body, true) ?: [];
+
+        if (isset($data['error'])) {
+            throw new \RuntimeException((string) ($data['error']['message'] ?? 'Drive API error'));
+        }
+
+        $out = [];
+        foreach ($data['files'] ?? [] as $f) {
+            $out[] = (object) ['id' => $f['id'], 'name' => $f['name'] ?? $f['id']];
+        }
+
+        return $out;
+    }
+
+    /** Tab (worksheet) titles of a spreadsheet. @return array<int,string> */
+    private function listTabs(string $token, string $sheetId): array
+    {
+        $resp = (new HttpFactory())->getHttp()->get(
+            'https://sheets.googleapis.com/v4/spreadsheets/' . rawurlencode($sheetId) . '?fields=sheets.properties.title',
+            ['Authorization' => 'Bearer ' . $token]
+        );
+
+        $data = json_decode((string) $resp->body, true) ?: [];
+        $out  = [];
+        foreach ($data['sheets'] ?? [] as $s) {
+            $title = $s['properties']['title'] ?? '';
+            if ($title !== '') {
+                $out[] = $title;
+            }
+        }
+
+        return $out;
     }
 
     /** Exchange the (encrypted) refresh token for an access token. */
@@ -170,6 +262,8 @@ class GoogleModel extends BaseDatabaseModel
             . $db->quoteName('account_email') . ' VARCHAR(190) NULL,'
             . $db->quoteName('calendar_id') . ' VARCHAR(190) NULL,'
             . $db->quoteName('read_calendars') . ' TEXT NULL,'
+            . $db->quoteName('sheet_id') . ' VARCHAR(190) NULL,'
+            . $db->quoteName('sheet_tab') . ' VARCHAR(190) NULL,'
             . $db->quoteName('oauth_state') . ' VARCHAR(64) NULL,'
             . $db->quoteName('created') . ' DATETIME NULL,'
             . $db->quoteName('updated') . ' DATETIME NULL,'
@@ -177,12 +271,14 @@ class GoogleModel extends BaseDatabaseModel
             . ') DEFAULT CHARSET=utf8mb4'
         )->execute();
 
-        try {
-            $col = $db->setQuery('SHOW COLUMNS FROM ' . $db->quoteName('#__webgbooking_google') . " LIKE 'read_calendars'")->loadResult();
-            if (!$col) {
-                $db->setQuery('ALTER TABLE ' . $db->quoteName('#__webgbooking_google') . ' ADD COLUMN ' . $db->quoteName('read_calendars') . ' TEXT NULL')->execute();
+        foreach (['read_calendars' => 'TEXT', 'sheet_id' => 'VARCHAR(190)', 'sheet_tab' => 'VARCHAR(190)'] as $name => $type) {
+            try {
+                $col = $db->setQuery('SHOW COLUMNS FROM ' . $db->quoteName('#__webgbooking_google') . ' LIKE ' . $db->quote($name))->loadResult();
+                if (!$col) {
+                    $db->setQuery('ALTER TABLE ' . $db->quoteName('#__webgbooking_google') . ' ADD COLUMN ' . $db->quoteName($name) . ' ' . $type . ' NULL')->execute();
+                }
+            } catch (\Throwable $e) {
             }
-        } catch (\Throwable $e) {
         }
     }
 
@@ -207,7 +303,7 @@ class GoogleModel extends BaseDatabaseModel
             'client_id'              => $clientId,
             'redirect_uri'           => $redirect,
             'response_type'          => 'code',
-            'scope'                  => 'openid email https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/spreadsheets',
+            'scope'                  => 'openid email https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.metadata.readonly',
             'access_type'            => 'offline',
             'prompt'                 => 'consent',
             'include_granted_scopes' => 'true',
