@@ -1,19 +1,3 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Extension Update Server per com_webgbooking (componente backend). -->
-<updates>
-    <update>
-        <name>WebG Booking</name>
-        <description>WebG Booking component - bookings backend.</description>
-        <element>com_webgbooking</element>
-        <type>component</type>
-        <version>0.2.3</version>
-        <maintainer>Marco Galassi (WebG)</maintainer>
-        <maintainerurl>https://www.webg.it</maintainerurl>
-        <infourl title="WebG Booking">https://github.com/WebG-it/webgbooking</infourl>
-        <downloads>
-            <downloadurl type="full" format="zip">https://raw.githubusercontent.com/WebG-it/webgbooking/main/dist/com_webgbooking-0.2.3.zip</downloadurl>
-        </downloads>
-        <sha256>0b3a41c0b25d7e468c7f667521d4bec9b181719d083293dfd3f36d7714d951d5</sha256>
-        <targetplatform name="joomla" version="(5|6)\.[0-9]+" />
-    </update>
-</updates>
+<!-- Deprecated. WebG Booking is distributed as the package pkg_webgbooking; updates are managed by updates-pkg.xml. This standalone component update server is intentionally empty. -->
+<updates></updates>
