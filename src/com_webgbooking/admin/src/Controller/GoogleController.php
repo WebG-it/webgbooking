@@ -51,4 +51,22 @@ class GoogleController extends BaseController
 
         $this->setRedirect('index.php?option=com_webgbooking&view=google');
     }
+
+    public function savesheet()
+    {
+        $this->checkToken();
+
+        $input   = Factory::getApplication()->getInput();
+        $sheetId = trim($input->getString('sheet_id', ''));
+        $tab     = trim($input->getString('sheet_tab', ''));
+
+        try {
+            $this->getModel('Google')->saveSheet($sheetId, $tab);
+            $this->setMessage(Text::_('COM_WEBGBOOKING_GOOGLE_SHEET_SAVED'));
+        } catch (\Throwable $e) {
+            $this->setMessage($e->getMessage(), 'error');
+        }
+
+        $this->setRedirect('index.php?option=com_webgbooking&view=google');
+    }
 }
