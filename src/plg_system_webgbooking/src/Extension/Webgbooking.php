@@ -200,8 +200,17 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             ];
             $db->updateObject('#__webgbooking_bookings', $upd, 'id');
 
-            // Per-element confirmation email templates (HMAC-verified from the signed form token).
-            [$row->emailSubjectTpl, $row->emailBodyTpl] = $this->verifyForm($input->post->get('form', '', 'RAW'));
+            // Per-element ACTIONS (HMAC-verified, signed by the server at render time).
+            $actions = $this->verifyForm($input->post->get('form', '', 'RAW'));
+            $cust    = $actions['customer'] ?? [];
+            $staff   = $actions['staff'] ?? [];
+            $row->_custOn         = !isset($cust['on']) || (bool) $cust['on'];
+            $row->emailSubjectTpl = (string) ($cust['subject'] ?? '');
+            $row->emailBodyTpl    = (string) ($cust['body'] ?? '');
+            $row->_staffOn        = !isset($staff['on']) || (bool) $staff['on'];
+            $row->_staffTo        = (string) ($staff['to'] ?? '');
+            $row->_staffSubject   = (string) ($staff['subject'] ?? '');
+            $row->_staffBody      = (string) ($staff['body'] ?? '');
 
             $this->notify($row);
 
@@ -210,8 +219,10 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                 $this->newsletterSignup($row);
             }
 
-            // Generic booking webhook (Zapier / Make / live spreadsheet write).
-            $this->postBookingWebhook($row);
+            // Webhook action: per-element override → plugin global fallback (Zapier / Make / Sheets).
+            $wh    = $actions['webhook'] ?? [];
+            $whUrl = (!empty($wh['on']) && !empty($wh['url'])) ? (string) $wh['url'] : '';
+            $this->postBookingWebhook($row, $whUrl);
 
             $this->respond(['ok' => true, 'message' => Text::_('PLG_SYSTEM_WEBGBOOKING_BOOK_OK')]);
         } catch (\Throwable $e) {
@@ -219,34 +230,31 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
         }
     }
 
-    /** Verify the HMAC-signed per-element email config from the form token. Returns [subject, body]. */
+    /** Verify the HMAC-signed per-element actions config from the form token. Returns the array or []. */
     private function verifyForm(string $token): array
     {
         try {
             if ($token === '' || strpos($token, '.') === false) {
-                return ['', ''];
+                return [];
             }
             [$payload, $sig] = explode('.', $token, 2);
             $calc = hash_hmac('sha256', $payload, (string) $this->getApplication()->get('secret'));
             if (!hash_equals($calc, $sig)) {
-                return ['', ''];
+                return [];
             }
             $cfg = json_decode((string) base64_decode($payload), true);
-            if (!\is_array($cfg)) {
-                return ['', ''];
-            }
 
-            return [(string) ($cfg['subject'] ?? ''), (string) ($cfg['body'] ?? '')];
+            return \is_array($cfg) ? $cfg : [];
         } catch (\Throwable $e) {
-            return ['', ''];
+            return [];
         }
     }
 
-    /** Forward the full booking to a configured generic webhook (Zapier / Make / live spreadsheet). */
-    private function postBookingWebhook(object $row): void
+    /** Forward the full booking to a webhook (per-element override → plugin global). */
+    private function postBookingWebhook(object $row, string $overrideUrl = ''): void
     {
         try {
-            $url = trim((string) $this->params->get('booking_webhook', ''));
+            $url = $overrideUrl !== '' ? $overrideUrl : trim((string) $this->params->get('booking_webhook', ''));
             if ($url === '' || !filter_var($url, FILTER_VALIDATE_URL)) {
                 return;
             }
@@ -312,47 +320,49 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             } catch (\Throwable $e) {
             }
 
-            // ---- Customer (and invited guest) email: editable HTML + placeholders + .ics ----
-            if ($reschedule) {
-                $subject = strtr(Text::_('PLG_SYSTEM_WEBGBOOKING_RESCHEDULE_EMAIL_SUBJECT'), ['{name}' => $row->customer_name, '{date}' => $dateFmt, '{time}' => $row->booking_time]);
-                $bodyTpl = $this->bodyTemplate('PLG_SYSTEM_WEBGBOOKING_EMAIL_RESCHEDULED');
-            } else {
-                $elSub      = (string) ($row->emailSubjectTpl ?? '');
-                $elBody     = (string) ($row->emailBodyTpl ?? '');
-                $subjectTpl = $elSub !== '' ? $elSub : (trim((string) $this->params->get('email_subject', '')) ?: Text::_('PLG_SYSTEM_WEBGBOOKING_EMAIL_CUSTOMER_SUBJECT'));
-                $subject    = strtr($subjectTpl, ['{name}' => $row->customer_name, '{date}' => $dateFmt, '{time}' => $row->booking_time]);
-                $bodyTpl    = $elBody !== '' ? $elBody : (trim((string) $this->params->get('email_body', '')) ?: $this->defaultEmailBody());
-            }
-            $html = $this->wrapEmail($this->renderTpl($bodyTpl, $row, $manageUrl, $dateFmt));
+            // ---- Customer email action (and invited guest). Skipped if the action is off. ----
+            if ($reschedule || ($row->_custOn ?? true)) {
+                if ($reschedule) {
+                    $subject = strtr(Text::_('PLG_SYSTEM_WEBGBOOKING_RESCHEDULE_EMAIL_SUBJECT'), ['{name}' => $row->customer_name, '{date}' => $dateFmt, '{time}' => $row->booking_time]);
+                    $bodyTpl = $this->bodyTemplate('PLG_SYSTEM_WEBGBOOKING_EMAIL_RESCHEDULED');
+                } else {
+                    $elSub      = (string) ($row->emailSubjectTpl ?? '');
+                    $elBody     = (string) ($row->emailBodyTpl ?? '');
+                    $subjectTpl = $elSub !== '' ? $elSub : (trim((string) $this->params->get('email_subject', '')) ?: Text::_('PLG_SYSTEM_WEBGBOOKING_EMAIL_CUSTOMER_SUBJECT'));
+                    $subject    = strtr($subjectTpl, ['{name}' => $row->customer_name, '{date}' => $dateFmt, '{time}' => $row->booking_time]);
+                    $bodyTpl    = $elBody !== '' ? $elBody : (trim((string) $this->params->get('email_body', '')) ?: $this->defaultEmailBody());
+                }
+                $this->sendHtmlMail($mf, $row->customer_email, $subject, $this->wrapEmail($this->renderTpl($bodyTpl, $row, $manageUrl, $dateFmt)), $ics);
 
-            // Customer confirmation (includes the private manage/cancel link).
-            $this->sendHtmlMail($mf, $row->customer_email, $subject, $html, $ics);
-
-            // Guest invite: a distinct email WITHOUT the cancel link/token (the guest must not be
-            // able to cancel the organiser's booking).
-            if (!empty($row->guest_email)) {
-                $gSubject = strtr(Text::_('PLG_SYSTEM_WEBGBOOKING_EMAIL_GUEST_SUBJECT'), ['{name}' => $row->customer_name, '{date}' => $dateFmt, '{time}' => $row->booking_time]);
-                $gHtml    = $this->wrapEmail($this->guestEmailBody($row, $dateFmt));
-                $this->sendHtmlMail($mf, $row->guest_email, $gSubject, $gHtml, $ics);
+                // Guest invite: distinct email WITHOUT the cancel link/token.
+                if (!empty($row->guest_email)) {
+                    $gSubject = strtr(Text::_('PLG_SYSTEM_WEBGBOOKING_EMAIL_GUEST_SUBJECT'), ['{name}' => $row->customer_name, '{date}' => $dateFmt, '{time}' => $row->booking_time]);
+                    $this->sendHtmlMail($mf, $row->guest_email, $gSubject, $this->wrapEmail($this->guestEmailBody($row, $dateFmt)), $ics);
+                }
             }
 
-            // ---- Admin notification (plain text) ----
-            if ($admin !== '') {
-                $meetLine  = $row->meeting_url !== '' ? ' ' . Text::sprintf('PLG_SYSTEM_WEBGBOOKING_MEET_LINE', $row->meeting_url) : '';
-                $guestLine = !empty($row->guest_email) ? "\n" . Text::sprintf('PLG_SYSTEM_WEBGBOOKING_EMAIL_GUEST_LINE', $row->guest_email) : '';
-                $m = $mf->createMailer();
-                $m->addRecipient($admin);
-                $m->setSubject(Text::sprintf('PLG_SYSTEM_WEBGBOOKING_EMAIL_ADMIN_SUBJECT', $row->booking_date, $row->booking_time));
-                $m->setBody(Text::sprintf(
-                    'PLG_SYSTEM_WEBGBOOKING_EMAIL_ADMIN_BODY',
-                    $row->booking_date,
-                    $row->booking_time,
-                    $row->customer_name,
-                    $row->customer_email,
-                    $row->customer_phone ?: '-',
-                    $row->notes ?: '-'
-                ) . $meetLine . $guestLine);
-                $m->Send();
+            // ---- Staff email action: per-element HTML template, or the plain default. ----
+            if ($row->_staffOn ?? true) {
+                $tos = array_values(array_filter(array_map('trim', explode(',', (string) ($row->_staffTo ?? '')))));
+                if (!$tos && $admin !== '') {
+                    $tos = [$admin];
+                }
+                if ($tos) {
+                    $sSubTpl = (string) ($row->_staffSubject ?? '');
+                    $sSub    = $sSubTpl !== '' ? strtr($sSubTpl, ['{name}' => $row->customer_name, '{date}' => $dateFmt, '{time}' => $row->booking_time]) : Text::sprintf('PLG_SYSTEM_WEBGBOOKING_EMAIL_ADMIN_SUBJECT', $row->booking_date, $row->booking_time);
+                    $sBody   = (string) ($row->_staffBody ?? '');
+                    if ($sBody !== '') {
+                        $this->sendHtmlMail($mf, $tos, $sSub, $this->wrapEmail($this->renderTpl($sBody, $row, $manageUrl, $dateFmt)), '');
+                    } else {
+                        $meetLine  = !empty($row->meeting_url) ? ' ' . Text::sprintf('PLG_SYSTEM_WEBGBOOKING_MEET_LINE', $row->meeting_url) : '';
+                        $guestLine = !empty($row->guest_email) ? "\n" . Text::sprintf('PLG_SYSTEM_WEBGBOOKING_EMAIL_GUEST_LINE', $row->guest_email) : '';
+                        $m = $mf->createMailer();
+                        $m->addRecipient($tos);
+                        $m->setSubject($sSub);
+                        $m->setBody(Text::sprintf('PLG_SYSTEM_WEBGBOOKING_EMAIL_ADMIN_BODY', $row->booking_date, $row->booking_time, $row->customer_name, $row->customer_email, $row->customer_phone ?: '-', $row->notes ?: '-') . $meetLine . $guestLine);
+                        $m->Send();
+                    }
+                }
             }
         } catch (\Throwable $e) {
             // Email is best-effort: the booking is already stored.
@@ -380,6 +390,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
 
         return strtr($tpl, [
             '{name}'         => $e($row->customer_name),
+            '{email}'        => $e($row->customer_email),
             '{date}'         => $e($dateFmt),
             '{time}'         => $e($row->booking_time),
             '{phone}'        => $e($row->customer_phone ?: ''),
@@ -431,8 +442,8 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             . '</table></td></tr></table></body></html>';
     }
 
-    /** Send one HTML email with the optional .ics attachment. */
-    private function sendHtmlMail($mf, string $to, string $subject, string $html, string $ics): void
+    /** Send one HTML email with the optional .ics attachment. $to may be a string or an array. */
+    private function sendHtmlMail($mf, $to, string $subject, string $html, string $ics): void
     {
         $m = $mf->createMailer();
         $m->isHtml(true);
@@ -938,7 +949,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
 
         // Reschedule widget: the booking calendar in calendar-only mode, authorised by the token.
         $asset = Uri::root(true) . '/plugins/system/webgbooking/yootheme/elements/booking/assets';
-        $ver   = '0.19.0';
+        $ver   = '0.20.0';
         // The manage page is standalone (outside the YOOtheme template), so UIkit isn't present;
         // load it so the reschedule widget (icons, spinner, buttons) renders correctly.
         $uikit = 'https://cdn.jsdelivr.net/npm/uikit@3.21.5/dist';
