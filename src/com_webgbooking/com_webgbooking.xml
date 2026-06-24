@@ -7,7 +7,7 @@
     <creationDate>2026-06</creationDate>
     <copyright>(C) 2026 Marco Galassi / WebG</copyright>
     <license>GNU General Public License version 2 or later</license>
-    <version>0.2.10</version>
+    <version>0.2.11</version>
     <description>COM_WEBGBOOKING_XML_DESCRIPTION</description>
     <namespace path="src">WebG\Component\Webgbooking</namespace>
     <administration>
@@ -20,6 +20,7 @@
             <folder>services</folder>
             <folder>src</folder>
             <folder>tmpl</folder>
+            <folder>forms</folder>
             <folder>language</folder>
             <filename>access.xml</filename>
             <filename>config.xml</filename>
