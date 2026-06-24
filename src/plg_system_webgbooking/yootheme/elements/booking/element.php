@@ -79,7 +79,7 @@ return [
         'act_staff_on' => ['label' => 'Staff email', 'type' => 'checkbox', 'text' => 'Send a notification email to the staff', 'default' => true],
         'staff_to' => [
             'label' => 'Staff recipient(s)',
-            'description' => 'Comma-separated. Empty = the plugin Notify e-mail / site sender.',
+            'description' => 'One or more addresses — separate multiple recipients with a comma (es: a@x.it, b@x.it). Empty = the plugin Notify e-mail / site sender.',
             'type' => 'text',
             'source' => true,
             'enable' => 'act_staff_on',
@@ -97,8 +97,15 @@ return [
         'act_webhook_on' => ['label' => 'Webhook', 'type' => 'checkbox', 'text' => 'POST the booking to a webhook (Zapier / Make / Sheets)'],
         'webhook_url' => [
             'label' => 'Webhook URL',
-            'description' => 'Receives the booking as JSON. Empty = the plugin Bookings webhook.',
+            'description' => 'Receives the booking. Empty = the plugin Bookings webhook.',
             'type' => 'text',
+            'enable' => 'act_webhook_on',
+        ],
+        'webhook_method' => [
+            'label' => 'Method',
+            'description' => 'POST sends a JSON body; GET appends the data to the query string.',
+            'type' => 'select',
+            'options' => ['POST (JSON body)' => 'POST', 'GET (query string)' => 'GET'],
             'enable' => 'act_webhook_on',
         ],
         'analytics_event' => [
@@ -235,7 +242,7 @@ return [
                             'label' => 'Webhook',
                             'type' => 'group',
                             'divider' => true,
-                            'fields' => ['act_webhook_on', 'webhook_url'],
+                            'fields' => ['act_webhook_on', 'webhook_url', 'webhook_method'],
                         ],
                     ],
                 ],
