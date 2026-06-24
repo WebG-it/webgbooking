@@ -66,8 +66,9 @@ $actionsCfg = [
         'body'    => (string) ($props['staff_body'] ?? ''),
     ],
     'webhook' => [
-        'on'  => !empty($props['act_webhook_on']),
-        'url' => (string) ($props['webhook_url'] ?? ''),
+        'on'     => !empty($props['act_webhook_on']),
+        'url'    => (string) ($props['webhook_url'] ?? ''),
+        'method' => (string) ($props['webhook_method'] ?? 'POST'),
     ],
 ];
 $payload   = base64_encode((string) json_encode($actionsCfg));
