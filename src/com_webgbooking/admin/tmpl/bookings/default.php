@@ -11,7 +11,13 @@
 use Joomla\CMS\HTML\HTMLHelper;
 use Joomla\CMS\Language\Text;
 use Joomla\CMS\Router\Route;
+use Joomla\CMS\Session\Session;
 ?>
+<div class="mb-3">
+    <a class="btn btn-success" href="<?php echo Route::_('index.php?option=com_webgbooking&task=exportcsv&' . Session::getFormToken() . '=1'); ?>">
+        <span class="icon-download" aria-hidden="true"></span> <?php echo Text::_('COM_WEBGBOOKING_EXPORT_CSV'); ?>
+    </a>
+</div>
 <form action="<?php echo Route::_('index.php?option=com_webgbooking&view=bookings'); ?>" method="post" name="adminForm" id="adminForm">
     <div class="table-responsive">
         <table class="table">
