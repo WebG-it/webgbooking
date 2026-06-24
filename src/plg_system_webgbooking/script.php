@@ -96,12 +96,26 @@ return new class () implements InstallerScriptInterface {
                 . $db->quoteName('refresh_token') . ' TEXT NULL,'
                 . $db->quoteName('account_email') . ' VARCHAR(190) NULL,'
                 . $db->quoteName('calendar_id') . ' VARCHAR(190) NULL,'
+                . $db->quoteName('read_calendars') . ' TEXT NULL,'
+                . $db->quoteName('sheet_id') . ' VARCHAR(190) NULL,'
+                . $db->quoteName('sheet_tab') . ' VARCHAR(190) NULL,'
                 . $db->quoteName('oauth_state') . ' VARCHAR(64) NULL,'
                 . $db->quoteName('created') . ' DATETIME NULL,'
                 . $db->quoteName('updated') . ' DATETIME NULL,'
                 . 'PRIMARY KEY (' . $db->quoteName('id') . ')'
                 . ') DEFAULT CHARSET=utf8mb4'
             )->execute();
+
+            // Upgrade path for the Google table (older installs predate these columns).
+            foreach (['read_calendars' => 'TEXT', 'sheet_id' => 'VARCHAR(190)', 'sheet_tab' => 'VARCHAR(190)'] as $name => $type) {
+                try {
+                    $has = $db->setQuery('SHOW COLUMNS FROM ' . $db->quoteName('#__webgbooking_google') . ' LIKE ' . $db->quote($name))->loadResult();
+                    if (!$has) {
+                        $db->setQuery('ALTER TABLE ' . $db->quoteName('#__webgbooking_google') . ' ADD COLUMN ' . $db->quoteName($name) . ' ' . $type . ' NULL')->execute();
+                    }
+                } catch (\Throwable $e) {
+                }
+            }
 
             if ($type === 'install') {
                 $db->setQuery(
