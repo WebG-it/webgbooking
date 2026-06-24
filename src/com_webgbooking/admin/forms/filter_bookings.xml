@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<form>
+    <fields name="filter">
+        <field
+            name="search"
+            type="text"
+            inputmode="search"
+            label="COM_WEBGBOOKING_SEARCH_LABEL"
+            description="COM_WEBGBOOKING_SEARCH_DESC"
+            hint="COM_WEBGBOOKING_SEARCH_HINT"
+        />
+        <field
+            name="status"
+            type="list"
+            label="COM_WEBGBOOKING_COL_STATUS"
+            onchange="this.form.submit();"
+        >
+            <option value="">COM_WEBGBOOKING_FILTER_STATUS_ALL</option>
+            <option value="pending">pending</option>
+            <option value="cancelled">cancelled</option>
+        </field>
+    </fields>
+    <fields name="list">
+        <field
+            name="fullordering"
+            type="list"
+            label="JGLOBAL_SORT_BY"
+            default="booking_date DESC"
+            onchange="this.form.submit();"
+        >
+            <option value="booking_date ASC">COM_WEBGBOOKING_SORT_DATE_ASC</option>
+            <option value="booking_date DESC">COM_WEBGBOOKING_SORT_DATE_DESC</option>
+            <option value="customer_name ASC">COM_WEBGBOOKING_SORT_NAME_ASC</option>
+            <option value="customer_name DESC">COM_WEBGBOOKING_SORT_NAME_DESC</option>
+            <option value="status ASC">COM_WEBGBOOKING_SORT_STATUS_ASC</option>
+            <option value="status DESC">COM_WEBGBOOKING_SORT_STATUS_DESC</option>
+            <option value="created DESC">COM_WEBGBOOKING_SORT_CREATED_DESC</option>
+        </field>
+        <field
+            name="limit"
+            type="limitbox"
+            label="JGLOBAL_LIST_LIMIT"
+            default="20"
+            onchange="this.form.submit();"
+        />
+    </fields>
+</form>
