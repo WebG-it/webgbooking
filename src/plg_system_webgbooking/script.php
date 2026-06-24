@@ -113,6 +113,26 @@ return new class () implements InstallerScriptInterface {
                         ->where($db->quoteName('folder') . ' = ' . $db->quote('system'))
                 )->execute();
             }
+
+            // Remove stale standalone update sites (plugin/component) left over from older installs.
+            // Only the PACKAGE update site (updates-pkg.xml) should manage updates — duplicates confuse
+            // Joomla's "Find Updates".
+            foreach (['%webgbooking/main/updates.xml', '%webgbooking/main/updates-com.xml'] as $pat) {
+                try {
+                    $ids = $db->setQuery(
+                        $db->getQuery(true)
+                            ->select($db->quoteName('update_site_id'))
+                            ->from($db->quoteName('#__update_sites'))
+                            ->where($db->quoteName('location') . ' LIKE ' . $db->quote($pat))
+                    )->loadColumn();
+
+                    foreach ($ids as $sid) {
+                        $db->setQuery($db->getQuery(true)->delete($db->quoteName('#__update_sites'))->where($db->quoteName('update_site_id') . ' = ' . (int) $sid))->execute();
+                        $db->setQuery($db->getQuery(true)->delete($db->quoteName('#__update_sites_extensions'))->where($db->quoteName('update_site_id') . ' = ' . (int) $sid))->execute();
+                    }
+                } catch (\Throwable $e) {
+                }
+            }
         } catch (\Throwable $e) {
             // Non-fatal.
         }
