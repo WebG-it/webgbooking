@@ -293,11 +293,6 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
     private function appendToSheet(object $row): void
     {
         try {
-            $sheetId = trim((string) $this->params->get('google_sheet_id', ''));
-            if ($sheetId === '') {
-                return;
-            }
-
             $db = Factory::getContainer()->get(DatabaseInterface::class);
             $g  = $db->setQuery(
                 $db->getQuery(true)->select('*')->from($db->quoteName('#__webgbooking_google'))
@@ -307,10 +302,19 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                 return;
             }
 
+            // Sheet chosen in the component (Google page) → fallback to the plugin param.
+            $sheetId = trim((string) ($g->sheet_id ?? '')) ?: trim((string) $this->params->get('google_sheet_id', ''));
+            if ($sheetId === '') {
+                return;
+            }
+
             $token = $this->googleAccessToken((string) $g->refresh_token);
             if ($token === '') {
                 return;
             }
+
+            $tab   = trim((string) ($g->sheet_tab ?? ''));
+            $range = $tab !== '' ? rawurlencode("'" . str_replace("'", "''", $tab) . "'!A1") : 'A1';
 
             $values = [[
                 $row->created, $row->booking_date, $row->booking_time,
@@ -319,7 +323,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             ]];
 
             (new HttpFactory())->getHttp()->post(
-                'https://sheets.googleapis.com/v4/spreadsheets/' . rawurlencode($sheetId) . '/values/A1:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS',
+                'https://sheets.googleapis.com/v4/spreadsheets/' . rawurlencode($sheetId) . '/values/' . $range . ':append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS',
                 json_encode(['values' => $values]),
                 ['Authorization' => 'Bearer ' . $token, 'Content-Type' => 'application/json'],
                 8
