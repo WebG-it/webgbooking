@@ -10,27 +10,37 @@
 
 use Joomla\CMS\HTML\HTMLHelper;
 use Joomla\CMS\Language\Text;
+use Joomla\CMS\Layout\LayoutHelper;
 use Joomla\CMS\Router\Route;
 use Joomla\CMS\Session\Session;
+
+$listOrder = $this->escape($this->state->get('list.ordering', 'booking_date'));
+$listDirn  = $this->escape($this->state->get('list.direction', 'DESC'));
+$token     = Session::getFormToken();
 ?>
 <div class="mb-3">
-    <a class="btn btn-success" href="<?php echo Route::_('index.php?option=com_webgbooking&task=exportcsv&' . Session::getFormToken() . '=1'); ?>">
-        <span class="icon-download" aria-hidden="true"></span> <?php echo Text::_('COM_WEBGBOOKING_EXPORT_CSV'); ?>
+    <a class="btn btn-success" href="<?php echo Route::_('index.php?option=com_webgbooking&task=exportcsv&' . $token . '=1'); ?>">
+        <span class="icon-file-csv" aria-hidden="true"></span> <?php echo Text::_('COM_WEBGBOOKING_EXPORT_CSV'); ?>
+    </a>
+    <a class="btn btn-success" href="<?php echo Route::_('index.php?option=com_webgbooking&task=exportxlsx&' . $token . '=1'); ?>">
+        <span class="icon-file-excel" aria-hidden="true"></span> <?php echo Text::_('COM_WEBGBOOKING_EXPORT_XLSX'); ?>
     </a>
 </div>
 <form action="<?php echo Route::_('index.php?option=com_webgbooking&view=bookings'); ?>" method="post" name="adminForm" id="adminForm">
+    <?php echo LayoutHelper::render('joomla.searchtools.default', ['view' => $this]); ?>
+
     <div class="table-responsive">
-        <table class="table">
+        <table class="table" id="bookingList">
             <thead>
                 <tr>
-                    <th><?php echo Text::_('COM_WEBGBOOKING_COL_DATE'); ?></th>
-                    <th><?php echo Text::_('COM_WEBGBOOKING_COL_TIME'); ?></th>
-                    <th><?php echo Text::_('COM_WEBGBOOKING_COL_NAME'); ?></th>
-                    <th><?php echo Text::_('COM_WEBGBOOKING_COL_EMAIL'); ?></th>
-                    <th><?php echo Text::_('COM_WEBGBOOKING_COL_PHONE'); ?></th>
-                    <th><?php echo Text::_('COM_WEBGBOOKING_COL_MEETING'); ?></th>
-                    <th><?php echo Text::_('COM_WEBGBOOKING_COL_STATUS'); ?></th>
-                    <th><?php echo Text::_('COM_WEBGBOOKING_COL_CREATED'); ?></th>
+                    <th scope="col"><?php echo HTMLHelper::_('searchtools.sort', 'COM_WEBGBOOKING_COL_DATE', 'booking_date', $listDirn, $listOrder); ?></th>
+                    <th scope="col"><?php echo HTMLHelper::_('searchtools.sort', 'COM_WEBGBOOKING_COL_TIME', 'booking_time', $listDirn, $listOrder); ?></th>
+                    <th scope="col"><?php echo HTMLHelper::_('searchtools.sort', 'COM_WEBGBOOKING_COL_NAME', 'customer_name', $listDirn, $listOrder); ?></th>
+                    <th scope="col"><?php echo HTMLHelper::_('searchtools.sort', 'COM_WEBGBOOKING_COL_EMAIL', 'customer_email', $listDirn, $listOrder); ?></th>
+                    <th scope="col"><?php echo HTMLHelper::_('searchtools.sort', 'COM_WEBGBOOKING_COL_PHONE', 'customer_phone', $listDirn, $listOrder); ?></th>
+                    <th scope="col"><?php echo Text::_('COM_WEBGBOOKING_COL_MEETING'); ?></th>
+                    <th scope="col"><?php echo HTMLHelper::_('searchtools.sort', 'COM_WEBGBOOKING_COL_STATUS', 'status', $listDirn, $listOrder); ?></th>
+                    <th scope="col"><?php echo HTMLHelper::_('searchtools.sort', 'COM_WEBGBOOKING_COL_CREATED', 'created', $listDirn, $listOrder); ?></th>
                 </tr>
             </thead>
             <tbody>
@@ -63,5 +73,6 @@ use Joomla\CMS\Session\Session;
     <?php endif; ?>
 
     <input type="hidden" name="task" value="">
+    <input type="hidden" name="boxchecked" value="0">
     <?php echo HTMLHelper::_('form.token'); ?>
 </form>
