@@ -18,11 +18,17 @@ class HtmlView extends BaseHtmlView
 {
     protected $items;
     protected $pagination;
+    public $filterForm;
+    public $activeFilters;
+    protected $state;
 
     public function display($tpl = null)
     {
-        $this->items      = $this->get('Items');
-        $this->pagination = $this->get('Pagination');
+        $this->items         = $this->get('Items');
+        $this->pagination    = $this->get('Pagination');
+        $this->state         = $this->get('State');
+        $this->filterForm    = $this->get('FilterForm');
+        $this->activeFilters = $this->get('ActiveFilters');
 
         ToolbarHelper::title(Text::_('COM_WEBGBOOKING'), 'calendar');
 
