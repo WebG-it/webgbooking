@@ -219,10 +219,14 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                 $this->newsletterSignup($row);
             }
 
-            // Webhook action: per-element override → plugin global fallback (Zapier / Make / Sheets).
-            $wh    = $actions['webhook'] ?? [];
-            $whUrl = (!empty($wh['on']) && !empty($wh['url'])) ? (string) $wh['url'] : '';
-            $this->postBookingWebhook($row, $whUrl);
+            // Webhook action: per-element override → plugin global fallback (POST or GET).
+            $wh       = $actions['webhook'] ?? [];
+            $whUrl    = (!empty($wh['on']) && !empty($wh['url'])) ? (string) $wh['url'] : '';
+            $whMethod = !empty($wh['on']) ? (string) ($wh['method'] ?? '') : '';
+            $this->postBookingWebhook($row, $whUrl, $whMethod);
+
+            // Native Google Sheets live write (if a dedicated sheet is configured).
+            $this->appendToSheet($row);
 
             $this->respond(['ok' => true, 'message' => Text::_('PLG_SYSTEM_WEBGBOOKING_BOOK_OK')]);
         } catch (\Throwable $e) {
@@ -250,8 +254,8 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
         }
     }
 
-    /** Forward the full booking to a webhook (per-element override → plugin global). */
-    private function postBookingWebhook(object $row, string $overrideUrl = ''): void
+    /** Forward the full booking to a webhook (per-element override → plugin global), POST or GET. */
+    private function postBookingWebhook(object $row, string $overrideUrl = '', string $method = ''): void
     {
         try {
             $url = $overrideUrl !== '' ? $overrideUrl : trim((string) $this->params->get('booking_webhook', ''));
@@ -259,22 +263,66 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                 return;
             }
 
+            $method = strtoupper($method !== '' ? $method : (string) $this->params->get('booking_webhook_method', 'POST'));
+            $data   = [
+                'event'       => 'booking.created',
+                'id'          => (int) $row->id,
+                'date'        => $row->booking_date,
+                'time'        => $row->booking_time,
+                'name'        => $row->customer_name,
+                'email'       => $row->customer_email,
+                'phone'       => $row->customer_phone,
+                'guest'       => $row->guest_email,
+                'notes'       => $row->notes,
+                'meeting_url' => $row->meeting_url,
+                'status'      => $row->status,
+            ];
+
+            $http = (new HttpFactory())->getHttp();
+            if ($method === 'GET') {
+                $sep = strpos($url, '?') === false ? '?' : '&';
+                $http->get($url . $sep . http_build_query($data), [], 8);
+            } else {
+                $http->post($url, json_encode($data), ['Content-Type' => 'application/json'], 8);
+            }
+        } catch (\Throwable $e) {
+        }
+    }
+
+    /** Append the booking as a row to a configured Google Sheet (live spreadsheet write). */
+    private function appendToSheet(object $row): void
+    {
+        try {
+            $sheetId = trim((string) $this->params->get('google_sheet_id', ''));
+            if ($sheetId === '') {
+                return;
+            }
+
+            $db = Factory::getContainer()->get(DatabaseInterface::class);
+            $g  = $db->setQuery(
+                $db->getQuery(true)->select('*')->from($db->quoteName('#__webgbooking_google'))
+            )->loadObject();
+
+            if (!$g || empty($g->refresh_token)) {
+                return;
+            }
+
+            $token = $this->googleAccessToken((string) $g->refresh_token);
+            if ($token === '') {
+                return;
+            }
+
+            $values = [[
+                $row->created, $row->booking_date, $row->booking_time,
+                $row->customer_name, $row->customer_email, (string) $row->customer_phone,
+                (string) $row->guest_email, (string) $row->notes, $row->status, (string) $row->meeting_url,
+            ]];
+
             (new HttpFactory())->getHttp()->post(
-                $url,
-                json_encode([
-                    'event'       => 'booking.created',
-                    'id'          => (int) $row->id,
-                    'date'        => $row->booking_date,
-                    'time'        => $row->booking_time,
-                    'name'        => $row->customer_name,
-                    'email'       => $row->customer_email,
-                    'phone'       => $row->customer_phone,
-                    'guest'       => $row->guest_email,
-                    'notes'       => $row->notes,
-                    'meeting_url' => $row->meeting_url,
-                    'status'      => $row->status,
-                ]),
-                ['Content-Type' => 'application/json']
+                'https://sheets.googleapis.com/v4/spreadsheets/' . rawurlencode($sheetId) . '/values/A1:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS',
+                json_encode(['values' => $values]),
+                ['Authorization' => 'Bearer ' . $token, 'Content-Type' => 'application/json'],
+                8
             );
         } catch (\Throwable $e) {
         }
@@ -298,7 +346,8 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                     'source' => 'webgbooking',
                     'date'   => $row->booking_date,
                 ]),
-                ['Content-Type' => 'application/json']
+                ['Content-Type' => 'application/json'],
+                8
             );
         } catch (\Throwable $e) {
         }
