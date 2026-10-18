@@ -10,6 +10,7 @@ namespace WebG\Component\Webgbooking\Administrator\Controller;
 
 \defined('_JEXEC') or die;
 
+use Joomla\CMS\Access\Exception\NotAllowed;
 use Joomla\CMS\Factory;
 use Joomla\CMS\Language\Text;
 use Joomla\CMS\MVC\Controller\BaseController;
@@ -17,9 +18,18 @@ use Joomla\Database\DatabaseInterface;
 
 class GoogleController extends BaseController
 {
+    /** Google integration is a global, account-level setting: restrict to component admins. */
+    private function assertAdmin(): void
+    {
+        if (!Factory::getApplication()->getIdentity()->authorise('core.admin', 'com_webgbooking')) {
+            throw new NotAllowed(Text::_('JERROR_ALERTNOAUTHOR'), 403);
+        }
+    }
+
     public function disconnect()
     {
         $this->checkToken();
+        $this->assertAdmin();
 
         try {
             $db = Factory::getContainer()->get(DatabaseInterface::class);
@@ -35,6 +45,7 @@ class GoogleController extends BaseController
     public function savecalendars()
     {
         $this->checkToken();
+        $this->assertAdmin();
 
         $input   = Factory::getApplication()->getInput();
         $clean   = fn($v) => preg_replace('/[^A-Za-z0-9@._#+\-]/', '', (string) $v);
@@ -55,9 +66,12 @@ class GoogleController extends BaseController
     public function savesheet()
     {
         $this->checkToken();
+        $this->assertAdmin();
 
-        $input   = Factory::getApplication()->getInput();
-        $sheetId = trim($input->getString('sheet_id', ''));
+        $input = Factory::getApplication()->getInput();
+        // A pasted ID/URL (works with the Sheets scope alone) takes precedence over the Drive picker.
+        $manual = trim($input->getString('sheet_id_manual', ''));
+        $sheetId = $manual !== '' ? $this->extractSheetId($manual) : trim($input->getString('sheet_id', ''));
         $tab     = trim($input->getString('sheet_tab', ''));
 
         try {
@@ -68,5 +82,18 @@ class GoogleController extends BaseController
         }
 
         $this->setRedirect('index.php?option=com_webgbooking&view=google');
+    }
+
+    /** Accept a full spreadsheet URL or a raw ID and return the bare spreadsheet ID. */
+    private function extractSheetId(string $value): string
+    {
+        if (preg_match('~/spreadsheets/d/([A-Za-z0-9_-]+)~', $value, $m)) {
+            return $m[1];
+        }
+        if (preg_match('~^[A-Za-z0-9_-]{20,}$~', $value)) {
+            return $value;
+        }
+
+        return '';
     }
 }

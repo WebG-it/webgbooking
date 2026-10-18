@@ -10,6 +10,7 @@ namespace WebG\Component\Webgbooking\Administrator\Model;
 
 \defined('_JEXEC') or die;
 
+use Joomla\CMS\Factory;
 use Joomla\CMS\MVC\Model\ListModel;
 
 class BookingsModel extends ListModel
@@ -34,6 +35,12 @@ class BookingsModel extends ListModel
         $status = $this->getUserStateFromRequest($this->context . '.filter.status', 'filter_status', '', 'string');
         $this->setState('filter.status', $status);
 
+        $from = $this->getUserStateFromRequest($this->context . '.filter.date_from', 'filter_date_from', '', 'string');
+        $this->setState('filter.date_from', $from);
+
+        $to = $this->getUserStateFromRequest($this->context . '.filter.date_to', 'filter_date_to', '', 'string');
+        $this->setState('filter.date_to', $to);
+
         parent::populateState($ordering, $direction);
     }
 
@@ -41,8 +48,42 @@ class BookingsModel extends ListModel
     {
         $id .= ':' . $this->getState('filter.search');
         $id .= ':' . $this->getState('filter.status');
+        $id .= ':' . $this->getState('filter.date_from');
+        $id .= ':' . $this->getState('filter.date_to');
 
         return parent::getStoreId($id);
+    }
+
+    /** Only accept a clean YYYY-MM-DD date for the range filters. */
+    private function cleanDate($value): string
+    {
+        $value = trim((string) $value);
+
+        return preg_match('/^\d{4}-\d{2}-\d{2}$/', $value) ? $value : '';
+    }
+
+    /** At-a-glance counters for the list header. */
+    public function getStats(): object
+    {
+        $db    = $this->getDatabase();
+        $today = Factory::getDate()->format('Y-m-d');
+
+        $count = function ($where = null) use ($db) {
+            $q = $db->getQuery(true)->select('COUNT(*)')->from($db->quoteName('#__webgbooking_bookings'));
+            if ($where) {
+                $q->where($where);
+            }
+
+            return (int) $db->setQuery($q)->loadResult();
+        };
+
+        return (object) [
+            'total'     => $count(),
+            'pending'   => $count($db->quoteName('status') . ' = ' . $db->quote('pending')),
+            'confirmed' => $count($db->quoteName('status') . ' = ' . $db->quote('confirmed')),
+            'today'     => $count($db->quoteName('booking_date') . ' = ' . $db->quote($today) . ' AND ' . $db->quoteName('status') . ' != ' . $db->quote('cancelled')),
+            'upcoming'  => $count($db->quoteName('booking_date') . ' >= ' . $db->quote($today) . ' AND ' . $db->quoteName('status') . ' NOT IN (' . $db->quote('cancelled') . ',' . $db->quote('completed') . ',' . $db->quote('no-show') . ')'),
+        ];
     }
 
     protected function getListQuery()
@@ -65,6 +106,16 @@ class BookingsModel extends ListModel
         $status = (string) $this->getState('filter.status');
         if ($status !== '') {
             $query->where($db->quoteName('status') . ' = ' . $db->quote($status));
+        }
+
+        $from = $this->cleanDate($this->getState('filter.date_from'));
+        if ($from !== '') {
+            $query->where($db->quoteName('booking_date') . ' >= ' . $db->quote($from));
+        }
+
+        $to = $this->cleanDate($this->getState('filter.date_to'));
+        if ($to !== '') {
+            $query->where($db->quoteName('booking_date') . ' <= ' . $db->quote($to));
         }
 
         $allowed  = ['id', 'created', 'booking_date', 'booking_time', 'customer_name', 'customer_email', 'customer_phone', 'status'];

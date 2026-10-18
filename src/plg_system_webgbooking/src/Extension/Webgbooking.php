@@ -30,6 +30,9 @@ use Joomla\Event\SubscriberInterface;
 
 final class Webgbooking extends CMSPlugin implements SubscriberInterface
 {
+    /** Cache-buster for the bundled front-end assets (wgb.css/js, UIkit). Bump when those change. */
+    public const ASSET_VER = '0.30.0';
+
     protected $autoloadLanguage = true;
 
     public static function getSubscribedEvents(): array
@@ -116,10 +119,10 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
 
         $date    = $input->post->getString('date', '');
         $time    = $input->post->getString('time', '');
-        $name    = trim($input->post->getString('name', ''));
-        $email   = trim($input->post->getString('email', ''));
-        $phone   = trim($input->post->getString('phone', ''));
-        $notes   = trim((string) $input->post->get('notes', '', 'STRING'));
+        $name    = mb_substr(trim($input->post->getString('name', '')), 0, 190);
+        $email   = mb_substr(trim($input->post->getString('email', '')), 0, 190);
+        $phone   = mb_substr(trim($input->post->getString('phone', '')), 0, 60);
+        $notes   = mb_substr(trim((string) $input->post->get('notes', '', 'STRING')), 0, 2000);
         $privacy = (int) $input->post->getInt('privacy', 0);
         $guest   = trim($input->post->getString('guest', ''));
         $guest   = ($guest !== '' && filter_var($guest, FILTER_VALIDATE_EMAIL)) ? $guest : '';
@@ -171,6 +174,14 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                 $this->respond(['ok' => false, 'message' => Text::_('PLG_SYSTEM_WEBGBOOKING_SLOT_TAKEN')]);
             }
 
+            // Per-element ACTIONS + custom-field DEFINITIONS (HMAC-verified: signed by the server at
+            // render time, so the client cannot inject fields or turn "required" off).
+            $actions    = $this->verifyForm($input->post->get('form', '', 'RAW'));
+            $customData = $this->collectCustomFields($actions['fields'] ?? [], $input);
+            if ($customData === false) {
+                $this->respond(['ok' => false, 'message' => Text::_('PLG_SYSTEM_WEBGBOOKING_BOOK_ERR')]);
+            }
+
             $row = (object) [
                 'created'        => Factory::getDate()->toSql(),
                 'booking_date'   => $date,
@@ -185,6 +196,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                 'guest_email'     => $guest,
                 'manage_token'    => bin2hex(random_bytes(16)),
                 'google_event_id' => '',
+                'custom_data'     => $customData,
             ];
             $db->insertObject('#__webgbooking_bookings', $row, 'id');
 
@@ -200,8 +212,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             ];
             $db->updateObject('#__webgbooking_bookings', $upd, 'id');
 
-            // Per-element ACTIONS (HMAC-verified, signed by the server at render time).
-            $actions = $this->verifyForm($input->post->get('form', '', 'RAW'));
+            // Per-element ACTIONS (already HMAC-verified above when reading the custom fields).
             $cust    = $actions['customer'] ?? [];
             $staff   = $actions['staff'] ?? [];
             $row->_custOn         = !isset($cust['on']) || (bool) $cust['on'];
@@ -254,6 +265,62 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
         }
     }
 
+    /**
+     * Validate and collect custom-field answers against the HMAC-signed definitions.
+     * Returns a JSON string of [['l'=>label,'v'=>value], …] (or '' when there are none),
+     * or boolean false if a required answer is missing/invalid (so the booking is rejected).
+     *
+     * @return string|false
+     */
+    private function collectCustomFields(array $defs, $input)
+    {
+        if (!$defs) {
+            return '';
+        }
+
+        $raw = (array) $input->post->get('custom', [], 'array');
+        $out = [];
+
+        foreach ($defs as $def) {
+            if (!\is_array($def) || empty($def['name'])) {
+                continue;
+            }
+            $name  = (string) $def['name'];
+            $label = (string) ($def['label'] ?? $name);
+            $type  = (string) ($def['type'] ?? 'text');
+            $req   = !empty($def['required']);
+            $val   = isset($raw[$name]) ? trim(strip_tags((string) $raw[$name])) : '';
+            if (mb_strlen($val) > 2000) {
+                $val = mb_substr($val, 0, 2000);
+            }
+
+            if ($type === 'checkbox') {
+                $checked = \in_array(strtolower($val), ['1', 'on', 'true', 'yes'], true);
+                if ($req && !$checked) {
+                    return false;
+                }
+                if ($checked) {
+                    $out[] = ['l' => $label, 'v' => Text::_('JYES')];
+                }
+                continue;
+            }
+
+            // For a select, only accept a value that is in the signed option list.
+            if ($type === 'select' && !empty($def['options']) && \is_array($def['options']) && $val !== '' && !\in_array($val, $def['options'], true)) {
+                $val = '';
+            }
+
+            if ($req && $val === '') {
+                return false;
+            }
+            if ($val !== '') {
+                $out[] = ['l' => $label, 'v' => $val];
+            }
+        }
+
+        return $out ? (string) json_encode($out) : '';
+    }
+
     /** Forward the full booking to a webhook (per-element override → plugin global), POST or GET. */
     private function postBookingWebhook(object $row, string $overrideUrl = '', string $method = ''): void
     {
@@ -276,6 +343,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                 'notes'       => $row->notes,
                 'meeting_url' => $row->meeting_url,
                 'status'      => $row->status,
+                'custom'      => $this->customMap($row),
             ];
 
             $http = (new HttpFactory())->getHttp();
@@ -316,11 +384,24 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             $tab   = trim((string) ($g->sheet_tab ?? ''));
             $range = $tab !== '' ? rawurlencode("'" . str_replace("'", "''", $tab) . "'!A1") : 'A1';
 
-            $values = [[
+            $customCol = [];
+            foreach ($this->customAnswers($row) as $it) {
+                $customCol[] = $it['l'] . ': ' . $it['v'];
+            }
+
+            // Neutralise spreadsheet formula injection: any visitor value starting with = + - @ (or a
+            // control char) is treated by Sheets as a live formula. Prefix such cells with an apostrophe.
+            $safe = static function ($v): string {
+                $v = (string) $v;
+                return ($v !== '' && \in_array($v[0], ['=', '+', '-', '@', "\t", "\r", "\n"], true)) ? "'" . $v : $v;
+            };
+
+            $values = [array_map($safe, [
                 $row->created, $row->booking_date, $row->booking_time,
                 $row->customer_name, $row->customer_email, (string) $row->customer_phone,
                 (string) $row->guest_email, (string) $row->notes, $row->status, (string) $row->meeting_url,
-            ]];
+                implode(' | ', $customCol),
+            ])];
 
             (new HttpFactory())->getHttp()->post(
                 'https://sheets.googleapis.com/v4/spreadsheets/' . rawurlencode($sheetId) . '/values/' . $range . ':append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS',
@@ -409,10 +490,14 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                     } else {
                         $meetLine  = !empty($row->meeting_url) ? ' ' . Text::sprintf('PLG_SYSTEM_WEBGBOOKING_MEET_LINE', $row->meeting_url) : '';
                         $guestLine = !empty($row->guest_email) ? "\n" . Text::sprintf('PLG_SYSTEM_WEBGBOOKING_EMAIL_GUEST_LINE', $row->guest_email) : '';
+                        $custLines = '';
+                        foreach ($this->customAnswers($row) as $it) {
+                            $custLines .= "\n" . $it['l'] . ': ' . $it['v'];
+                        }
                         $m = $mf->createMailer();
                         $m->addRecipient($tos);
                         $m->setSubject($sSub);
-                        $m->setBody(Text::sprintf('PLG_SYSTEM_WEBGBOOKING_EMAIL_ADMIN_BODY', $row->booking_date, $row->booking_time, $row->customer_name, $row->customer_email, $row->customer_phone ?: '-', $row->notes ?: '-') . $meetLine . $guestLine);
+                        $m->setBody(Text::sprintf('PLG_SYSTEM_WEBGBOOKING_EMAIL_ADMIN_BODY', $row->booking_date, $row->booking_time, $row->customer_name, $row->customer_email, $row->customer_phone ?: '-', $row->notes ?: '-') . $meetLine . $guestLine . $custLines);
                         $m->Send();
                     }
                 }
@@ -441,6 +526,16 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
         $cancelBlock = '<p style="margin:18px 0 0;font-size:13px;color:#6a6a6a;"><a href="' . $e($manageUrl) . '" style="color:#1f2937;">'
             . $e(Text::_('PLG_SYSTEM_WEBGBOOKING_EMAIL_MANAGE_LINK')) . '</a></p>';
 
+        // Custom questions block (answers to the per-element custom form fields).
+        $customBlock = '';
+        $rows = '';
+        foreach ($this->customAnswers($row) as $it) {
+            $rows .= '<tr><td style="padding:4px 14px 4px 0;color:#6a6a6a;">' . $e($it['l']) . '</td><td style="padding:4px 0;font-weight:600;">' . $e($it['v']) . '</td></tr>';
+        }
+        if ($rows !== '') {
+            $customBlock = '<table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;margin-top:14px;">' . $rows . '</table>';
+        }
+
         return strtr($tpl, [
             '{name}'         => $e($row->customer_name),
             '{email}'        => $e($row->customer_email),
@@ -452,7 +547,36 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             '{cancel_url}'   => $e($manageUrl),
             '{meet_block}'   => $meetBlock,
             '{cancel_block}' => $cancelBlock,
+            '{custom}'       => $customBlock,
         ]);
+    }
+
+    /** Decode the stored custom-field answers as a list of ['l' => label, 'v' => value]. */
+    private function customAnswers(object $row): array
+    {
+        $data = json_decode((string) ($row->custom_data ?? ''), true);
+        if (!\is_array($data)) {
+            return [];
+        }
+        $out = [];
+        foreach ($data as $it) {
+            if (\is_array($it) && isset($it['l'])) {
+                $out[] = ['l' => (string) $it['l'], 'v' => (string) ($it['v'] ?? '')];
+            }
+        }
+
+        return $out;
+    }
+
+    /** Custom answers as a flat label => value map (for webhook / sheet payloads). */
+    private function customMap(object $row): array
+    {
+        $map = [];
+        foreach ($this->customAnswers($row) as $it) {
+            $map[$it['l']] = $it['v'];
+        }
+
+        return $map;
     }
 
     /** Default, nicely-designed email body (translatable; uses {placeholders}). */
@@ -1002,14 +1126,13 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
 
         // Reschedule widget: the booking calendar in calendar-only mode, authorised by the token.
         $asset = Uri::root(true) . '/plugins/system/webgbooking/yootheme/elements/booking/assets';
-        $ver   = '0.20.0';
-        // The manage page is standalone (outside the YOOtheme template), so UIkit isn't present;
-        // load it so the reschedule widget (icons, spinner, buttons) renders correctly.
-        $uikit = 'https://cdn.jsdelivr.net/npm/uikit@3.21.5/dist';
-        $head  = '<link rel="stylesheet" href="' . $uikit . '/css/uikit.min.css">'
+        $ver   = self::ASSET_VER;
+        // The manage page is standalone (outside the YOOtheme template), so UIkit isn't present.
+        // UIkit is bundled locally (no third-party CDN — privacy + JED compliant + works offline).
+        $head  = '<link rel="stylesheet" href="' . $e($asset . '/uikit/css/uikit.min.css?' . $ver) . '">'
             . '<link rel="stylesheet" href="' . $e($asset . '/wgb.css?' . $ver) . '">'
-            . '<script src="' . $uikit . '/js/uikit.min.js"></script>'
-            . '<script src="' . $uikit . '/js/uikit-icons.min.js"></script>'
+            . '<script src="' . $e($asset . '/uikit/js/uikit.min.js?' . $ver) . '"></script>'
+            . '<script src="' . $e($asset . '/uikit/js/uikit-icons.min.js?' . $ver) . '"></script>'
             . '<script src="' . $e($asset . '/wgb.js?' . $ver) . '" defer></script>';
 
         $cfg = [

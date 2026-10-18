@@ -64,6 +64,7 @@ return new class () implements InstallerScriptInterface {
                 . $db->quoteName('google_event_id') . ' VARCHAR(255) NULL,'
                 . $db->quoteName('updated') . ' DATETIME NULL,'
                 . $db->quoteName('seq') . ' INT NOT NULL DEFAULT 0,'
+                . $db->quoteName('custom_data') . ' TEXT NULL,'
                 . 'PRIMARY KEY (' . $db->quoteName('id') . '),'
                 . 'KEY ' . $db->quoteName('idx_date') . ' (' . $db->quoteName('booking_date') . ',' . $db->quoteName('booking_time') . '),'
                 . 'KEY ' . $db->quoteName('idx_token') . ' (' . $db->quoteName('manage_token') . ')'
@@ -78,6 +79,7 @@ return new class () implements InstallerScriptInterface {
                 'google_event_id' => 'VARCHAR(255) NULL',
                 'updated'         => 'DATETIME NULL',
                 'seq'             => 'INT NOT NULL DEFAULT 0',
+                'custom_data'     => 'TEXT NULL',
             ];
             foreach ($newCols as $name => $def) {
                 try {
@@ -107,11 +109,11 @@ return new class () implements InstallerScriptInterface {
             )->execute();
 
             // Upgrade path for the Google table (older installs predate these columns).
-            foreach (['read_calendars' => 'TEXT', 'sheet_id' => 'VARCHAR(190)', 'sheet_tab' => 'VARCHAR(190)'] as $name => $type) {
+            foreach (['read_calendars' => 'TEXT', 'sheet_id' => 'VARCHAR(190)', 'sheet_tab' => 'VARCHAR(190)'] as $name => $colType) {
                 try {
                     $has = $db->setQuery('SHOW COLUMNS FROM ' . $db->quoteName('#__webgbooking_google') . ' LIKE ' . $db->quote($name))->loadResult();
                     if (!$has) {
-                        $db->setQuery('ALTER TABLE ' . $db->quoteName('#__webgbooking_google') . ' ADD COLUMN ' . $db->quoteName($name) . ' ' . $type . ' NULL')->execute();
+                        $db->setQuery('ALTER TABLE ' . $db->quoteName('#__webgbooking_google') . ' ADD COLUMN ' . $db->quoteName($name) . ' ' . $colType . ' NULL')->execute();
                     }
                 } catch (\Throwable $e) {
                 }
@@ -128,25 +130,6 @@ return new class () implements InstallerScriptInterface {
                 )->execute();
             }
 
-            // Remove stale standalone update sites (plugin/component) left over from older installs.
-            // Only the PACKAGE update site (updates-pkg.xml) should manage updates — duplicates confuse
-            // Joomla's "Find Updates".
-            foreach (['%webgbooking/main/updates.xml', '%webgbooking/main/updates-com.xml'] as $pat) {
-                try {
-                    $ids = $db->setQuery(
-                        $db->getQuery(true)
-                            ->select($db->quoteName('update_site_id'))
-                            ->from($db->quoteName('#__update_sites'))
-                            ->where($db->quoteName('location') . ' LIKE ' . $db->quote($pat))
-                    )->loadColumn();
-
-                    foreach ($ids as $sid) {
-                        $db->setQuery($db->getQuery(true)->delete($db->quoteName('#__update_sites'))->where($db->quoteName('update_site_id') . ' = ' . (int) $sid))->execute();
-                        $db->setQuery($db->getQuery(true)->delete($db->quoteName('#__update_sites_extensions'))->where($db->quoteName('update_site_id') . ' = ' . (int) $sid))->execute();
-                    }
-                } catch (\Throwable $e) {
-                }
-            }
         } catch (\Throwable $e) {
             // Non-fatal.
         }

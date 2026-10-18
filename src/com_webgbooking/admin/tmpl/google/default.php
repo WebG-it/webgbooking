@@ -67,30 +67,49 @@ $s = $this->status;
 
                 <h3 class="h5 mt-4"><?php echo Text::_('COM_WEBGBOOKING_GOOGLE_SHEET_HEADING'); ?></h3>
                 <p class="text-muted"><?php echo Text::_('COM_WEBGBOOKING_GOOGLE_SHEET_INTRO'); ?></p>
-                <?php if (!empty($s->sheetsError)) : ?>
-                    <div class="alert alert-warning"><?php echo Text::_('COM_WEBGBOOKING_GOOGLE_SHEET_NEEDSCOPE'); ?></div>
-                <?php endif; ?>
-                <form action="<?php echo Route::_('index.php?option=com_webgbooking&task=google.savesheet'); ?>" method="post" class="row g-2 align-items-end">
-                    <div class="col-md-6">
-                        <label class="form-label" for="wgb_sheet_id"><?php echo Text::_('COM_WEBGBOOKING_GOOGLE_SHEET_FILE'); ?></label>
-                        <select id="wgb_sheet_id" name="sheet_id" class="form-select" onchange="this.form.submit();">
-                            <option value=""><?php echo Text::_('COM_WEBGBOOKING_GOOGLE_SHEET_NONE'); ?></option>
-                            <?php foreach ($s->sheets as $sh) : ?>
-                                <option value="<?php echo htmlspecialchars((string) $sh->id, ENT_QUOTES, 'UTF-8'); ?>"<?php echo $sh->id === $s->sheetId ? ' selected' : ''; ?>><?php echo htmlspecialchars((string) $sh->name, ENT_QUOTES, 'UTF-8'); ?></option>
-                            <?php endforeach; ?>
-                        </select>
+
+                <form action="<?php echo Route::_('index.php?option=com_webgbooking&task=google.savesheet'); ?>" method="post">
+                    <?php if (!empty($s->sheets)) : ?>
+                        <div class="mb-3">
+                            <label class="form-label" for="wgb_sheet_id"><?php echo Text::_('COM_WEBGBOOKING_GOOGLE_SHEET_FILE'); ?></label>
+                            <select id="wgb_sheet_id" name="sheet_id" class="form-select" onchange="this.form.submit();">
+                                <option value=""><?php echo Text::_('COM_WEBGBOOKING_GOOGLE_SHEET_NONE'); ?></option>
+                                <?php foreach ($s->sheets as $sh) : ?>
+                                    <option value="<?php echo htmlspecialchars((string) $sh->id, ENT_QUOTES, 'UTF-8'); ?>"<?php echo $sh->id === $s->sheetId ? ' selected' : ''; ?>><?php echo htmlspecialchars((string) $sh->name, ENT_QUOTES, 'UTF-8'); ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                    <?php else : ?>
+                        <input type="hidden" name="sheet_id" value="">
+                        <?php if (!empty($s->sheetsError)) : ?>
+                            <div class="alert alert-info">
+                                <?php echo Text::_('COM_WEBGBOOKING_GOOGLE_SHEET_LISTFAIL'); ?>
+                                <br><small class="text-muted"><?php echo htmlspecialchars((string) $s->sheetsError, ENT_QUOTES, 'UTF-8'); ?></small>
+                            </div>
+                        <?php endif; ?>
+                    <?php endif; ?>
+
+                    <div class="mb-3">
+                        <label class="form-label" for="wgb_sheet_manual"><?php echo Text::_('COM_WEBGBOOKING_GOOGLE_SHEET_MANUAL'); ?></label>
+                        <input type="text" id="wgb_sheet_manual" name="sheet_id_manual" class="form-control"
+                               value="<?php echo htmlspecialchars((string) $s->sheetId, ENT_QUOTES, 'UTF-8'); ?>"
+                               placeholder="https://docs.google.com/spreadsheets/d/…  /  1AbC…xyz">
+                        <small class="form-text text-muted"><?php echo Text::_('COM_WEBGBOOKING_GOOGLE_SHEET_MANUAL_HINT'); ?></small>
                     </div>
-                    <div class="col-md-4">
-                        <label class="form-label" for="wgb_sheet_tab"><?php echo Text::_('COM_WEBGBOOKING_GOOGLE_SHEET_TAB'); ?></label>
-                        <select id="wgb_sheet_tab" name="sheet_tab" class="form-select"<?php echo empty($s->tabs) ? ' disabled' : ''; ?>>
-                            <option value=""><?php echo Text::_('COM_WEBGBOOKING_GOOGLE_SHEET_FIRSTTAB'); ?></option>
-                            <?php foreach ($s->tabs as $t) : ?>
-                                <option value="<?php echo htmlspecialchars((string) $t, ENT_QUOTES, 'UTF-8'); ?>"<?php echo $t === $s->sheetTab ? ' selected' : ''; ?>><?php echo htmlspecialchars((string) $t, ENT_QUOTES, 'UTF-8'); ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
-                    <div class="col-md-2">
-                        <button type="submit" class="btn btn-primary w-100"><?php echo Text::_('COM_WEBGBOOKING_GOOGLE_SHEET_SAVE'); ?></button>
+
+                    <div class="row g-2 align-items-end">
+                        <div class="col-md-8">
+                            <label class="form-label" for="wgb_sheet_tab"><?php echo Text::_('COM_WEBGBOOKING_GOOGLE_SHEET_TAB'); ?></label>
+                            <select id="wgb_sheet_tab" name="sheet_tab" class="form-select"<?php echo empty($s->tabs) ? ' disabled' : ''; ?>>
+                                <option value=""><?php echo Text::_('COM_WEBGBOOKING_GOOGLE_SHEET_FIRSTTAB'); ?></option>
+                                <?php foreach ($s->tabs as $t) : ?>
+                                    <option value="<?php echo htmlspecialchars((string) $t, ENT_QUOTES, 'UTF-8'); ?>"<?php echo $t === $s->sheetTab ? ' selected' : ''; ?>><?php echo htmlspecialchars((string) $t, ENT_QUOTES, 'UTF-8'); ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <button type="submit" class="btn btn-primary w-100"><?php echo Text::_('COM_WEBGBOOKING_GOOGLE_SHEET_SAVE'); ?></button>
+                        </div>
                     </div>
                     <?php echo HTMLHelper::_('form.token'); ?>
                 </form>

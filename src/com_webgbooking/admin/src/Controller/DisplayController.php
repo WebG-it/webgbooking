@@ -22,12 +22,21 @@ class DisplayController extends BaseController
 {
     protected $default_view = 'bookings';
 
+    /** The bookings export streams customer PII — require component management rights. */
+    private function assertManage(): void
+    {
+        if (!Factory::getApplication()->getIdentity()->authorise('core.manage', 'com_webgbooking')) {
+            throw new NotAllowed(Text::_('JERROR_ALERTNOAUTHOR'), 403);
+        }
+    }
+
     /** Stream all bookings as a CSV download (Excel/Sheets compatible). */
     public function exportcsv()
     {
         if (!Session::checkToken('get')) {
             throw new NotAllowed(Text::_('JINVALID_TOKEN'), 403);
         }
+        $this->assertManage();
 
         $app = Factory::getApplication();
         $db  = Factory::getContainer()->get(DatabaseInterface::class);
@@ -47,10 +56,10 @@ class DisplayController extends BaseController
         $out = fopen('php://output', 'w');
         // UTF-8 BOM so Excel opens accents correctly.
         fwrite($out, "\xEF\xBB\xBF");
-        fputcsv($out, ['ID', 'Created', 'Date', 'Time', 'Name', 'Email', 'Phone', 'Guest', 'Notes', 'Status', 'Meeting']);
+        fputcsv($out, ['ID', 'Created', 'Date', 'Time', 'Name', 'Email', 'Phone', 'Guest', 'Notes', 'Status', 'Meeting', 'Custom']);
 
         foreach ($rows ?: [] as $r) {
-            fputcsv($out, [
+            fputcsv($out, array_map([$this, 'safeCell'], [
                 $r->id,
                 $r->created,
                 $r->booking_date,
@@ -62,7 +71,8 @@ class DisplayController extends BaseController
                 $r->notes ?? '',
                 $r->status,
                 $r->meeting_url ?? '',
-            ]);
+                $this->customText($r->custom_data ?? ''),
+            ]));
         }
 
         fclose($out);
@@ -75,6 +85,7 @@ class DisplayController extends BaseController
         if (!Session::checkToken('get')) {
             throw new NotAllowed(Text::_('JINVALID_TOKEN'), 403);
         }
+        $this->assertManage();
 
         $app = Factory::getApplication();
 
@@ -95,12 +106,13 @@ class DisplayController extends BaseController
                 ->order($db->quoteName('booking_time') . ' DESC')
         )->loadObjectList();
 
-        $data = [['ID', 'Created', 'Date', 'Time', 'Name', 'Email', 'Phone', 'Guest', 'Notes', 'Status', 'Meeting']];
+        $data = [['ID', 'Created', 'Date', 'Time', 'Name', 'Email', 'Phone', 'Guest', 'Notes', 'Status', 'Meeting', 'Custom']];
         foreach ($rows ?: [] as $r) {
             $data[] = [
                 (string) $r->id, (string) $r->created, (string) $r->booking_date, (string) $r->booking_time,
                 (string) $r->customer_name, (string) $r->customer_email, (string) ($r->customer_phone ?? ''),
                 (string) ($r->guest_email ?? ''), (string) ($r->notes ?? ''), (string) $r->status, (string) ($r->meeting_url ?? ''),
+                $this->customText($r->custom_data ?? ''),
             ];
         }
 
@@ -118,6 +130,31 @@ class DisplayController extends BaseController
         $app->sendHeaders();
         echo $xlsx;
         $app->close();
+    }
+
+    /** Neutralise CSV formula injection: prefix values that Excel would treat as a formula. */
+    private function safeCell($v): string
+    {
+        $v = (string) $v;
+
+        return ($v !== '' && \in_array($v[0], ['=', '+', '-', '@', "\t", "\r"], true)) ? "'" . $v : $v;
+    }
+
+    /** Flatten the stored custom-field answers (JSON) to "Label: value | …" for exports. */
+    private function customText($json): string
+    {
+        $data = json_decode((string) $json, true);
+        if (!\is_array($data)) {
+            return '';
+        }
+        $parts = [];
+        foreach ($data as $it) {
+            if (\is_array($it) && isset($it['l'])) {
+                $parts[] = $it['l'] . ': ' . ($it['v'] ?? '');
+            }
+        }
+
+        return implode(' | ', $parts);
     }
 
     /** Build a minimal Office Open XML (.xlsx) workbook with inline strings from a 2D array. */

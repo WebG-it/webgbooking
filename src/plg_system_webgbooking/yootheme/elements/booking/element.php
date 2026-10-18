@@ -69,7 +69,7 @@ return [
         ],
         'email_body' => [
             'label' => 'Body (HTML)',
-            'description' => 'Placeholders: {name} {date} {time} {phone} {email} {notes} {meet_url} {cancel_url} {meet_block} {cancel_block}. Empty = styled default.',
+            'description' => 'Placeholders: {name} {date} {time} {phone} {email} {notes} {custom} {meet_url} {cancel_url} {meet_block} {cancel_block}. Empty = styled default.',
             'type' => 'editor',
             'mode' => 'text/html',
             'source' => true,
@@ -87,12 +87,12 @@ return [
         'staff_subject' => ['label' => 'Staff subject', 'type' => 'text', 'source' => true, 'enable' => 'act_staff_on'],
         'staff_body' => [
             'label' => 'Staff body (HTML)',
-            'description' => 'Placeholders: {name} {email} {phone} {date} {time} {notes}.',
+            'description' => 'Placeholders: {name} {email} {phone} {date} {time} {notes} {custom}.',
             'type' => 'editor',
             'mode' => 'text/html',
             'source' => true,
             'enable' => 'act_staff_on',
-            'default' => "<p>Nuova prenotazione: <strong>{date}</strong> alle <strong>{time}</strong>.</p><p>Nome: {name}<br>Email: {email}<br>Telefono: {phone}</p><p>Note: {notes}</p>",
+            'default' => "<p>Nuova prenotazione: <strong>{date}</strong> alle <strong>{time}</strong>.</p><p>Nome: {name}<br>Email: {email}<br>Telefono: {phone}</p><p>Note: {notes}</p>{custom}",
         ],
         'act_webhook_on' => ['label' => 'Webhook', 'type' => 'checkbox', 'text' => 'POST the booking to a webhook (Zapier / Make / Sheets)'],
         'webhook_url' => [
@@ -112,6 +112,20 @@ return [
             'label' => 'Analytics event',
             'description' => 'Event pushed to dataLayer / gtag on a completed booking (GA4 / GTM). Empty = "wgb_booking_completed".',
             'type' => 'text',
+        ],
+
+        // --- Custom form questions (defined here, signed server-side via HMAC, not client-tamperable) ---
+        'custom_fields' => [
+            'label' => 'Custom questions',
+            'description' => 'One question per line: <code>Label | type | required | options</code>.'
+                . ' Types: text, textarea, email, tel, number, select, checkbox.'
+                . ' Put <code>required</code> in the 3rd slot to make it mandatory; for <code>select</code> list the choices comma-separated in the 4th slot.'
+                . ' Example:<br><code>Company | text</code><br><code>Participants | number | required</code>'
+                . '<br><code>How did you hear about us? | select | | Google, Word of mouth, Social</code>',
+            'type' => 'editor',
+            'editor' => 'code',
+            'mode' => 'text/html',
+            'attrs' => ['debounce' => 500],
         ],
         'show_newsletter' => [
             'label' => 'Newsletter opt-in',
@@ -222,6 +236,10 @@ return [
                 [
                     'title' => 'Content',
                     'fields' => ['title', 'service', 'button_text', 'allow_guest', 'show_newsletter', 'analytics_event', 'layout'],
+                ],
+                [
+                    'title' => 'Form',
+                    'fields' => ['custom_fields'],
                 ],
                 [
                     'title' => 'Actions',

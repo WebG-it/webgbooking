@@ -51,9 +51,49 @@ $timeOk = fn($v, $def) => preg_match('/^\d{1,2}:\d{2}$/', (string) $v) ? (string
 $wd = $pp->get('work_days', [1, 2, 3, 4, 5]);
 $workDays = array_values(array_map('intval', is_array($wd) ? $wd : explode(',', (string) $wd)));
 
+// Custom form questions: parsed from the element config (one per line: "Label | type | required | options").
+// The DEFINITIONS travel inside the signed token below, so the server validates/labels answers against
+// exactly what it emitted — the client cannot inject fields or turn "required" off.
+$customDefs = [];
+$cfRaw = (string) ($props['custom_fields'] ?? '');
+if ($cfRaw !== '') {
+    $allowedTypes = ['text', 'textarea', 'email', 'tel', 'number', 'select', 'checkbox'];
+    $i = 0;
+    foreach (preg_split('/\r\n|\r|\n/', $cfRaw) as $line) {
+        $line = trim(strip_tags(html_entity_decode($line, ENT_QUOTES, 'UTF-8')));
+        if ($line === '') {
+            continue;
+        }
+        $parts = array_map('trim', explode('|', $line));
+        $label = $parts[0] ?? '';
+        if ($label === '') {
+            continue;
+        }
+        $type = strtolower($parts[1] ?? 'text');
+        if (!\in_array($type, $allowedTypes, true)) {
+            $type = 'text';
+        }
+        $required = isset($parts[2]) && \in_array(strtolower($parts[2]), ['required', '*', 'yes', '1', 'si', 'sì'], true);
+        $options = [];
+        if ($type === 'select' && !empty($parts[3])) {
+            foreach (explode(',', $parts[3]) as $opt) {
+                $opt = trim($opt);
+                if ($opt !== '') {
+                    $options[] = $opt;
+                }
+            }
+        }
+        $customDefs[] = ['name' => 'cf' . $i, 'label' => $label, 'type' => $type, 'required' => $required, 'options' => $options];
+        if (++$i >= 20) {
+            break; // safety cap
+        }
+    }
+}
+
 // Per-element ACTIONS config (customer email / staff email / webhook), signed with the site secret
 // so the client cannot tamper it (no spam-relay / no SSRF — the server only trusts what it signed).
 $actionsCfg = [
+    'fields' => $customDefs,
     'customer' => [
         'on'      => !isset($props['act_customer_on']) || !empty($props['act_customer_on']),
         'subject' => (string) ($props['email_subject'] ?? ''),
@@ -82,6 +122,7 @@ $cfg = [
     'slotSize'  => $slotSize ? 'uk-button-' . $slotSize : '',
     'btnStyle'  => $btnStyle,
     'allowGuest' => !empty($props['allow_guest']),
+    'customFields' => $customDefs,
     'showNewsletter' => !empty($props['show_newsletter']),
     'analyticsEvent' => trim((string) ($props['analytics_event'] ?? '')),
     'accent'    => $accent,
@@ -138,7 +179,7 @@ $uid = 'wgb-' . substr(md5(uniqid('', true)), 0, 8);
 // initial parse in BOTH the front end and the YOOtheme customizer preview — unlike WebAssetManager
 // scripts, which the customizer does not reliably flush to the live preview (the calendar stayed
 // blank). A MutationObserver in wgb.js then re-initialises every instance the builder re-renders.
-$wgbVer    = '0.20.0';
+$wgbVer    = '0.30.0';
 $wgbAsset  = Uri::root(true) . '/plugins/system/webgbooking/yootheme/elements/booking/assets';
 $assetTags = '<link rel="stylesheet" href="' . htmlspecialchars($wgbAsset . '/wgb.css?' . $wgbVer, ENT_QUOTES, 'UTF-8') . '">'
     . '<script src="' . htmlspecialchars($wgbAsset . '/wgb.js?' . $wgbVer, ENT_QUOTES, 'UTF-8') . '" defer></script>';

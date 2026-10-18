@@ -32,6 +32,7 @@
           fd.append('name',st.form.name);fd.append('email',st.form.email);
           fd.append('phone',st.form.phone);fd.append('notes',st.form.notes);fd.append('guest',st.form.guest||'');
           fd.append('privacy',st.form.privacy?'1':'0');fd.append('website',st.form.website||'');fd.append('newsletter',st.form.news?'1':'0');fd.append('form',cfg.form||'');
+          var cu=st.form.custom||{};for(var k in cu){if(Object.prototype.hasOwnProperty.call(cu,k))fd.append('custom['+k+']',cu[k]);}
           return fetch(url+'&action=book',{method:'POST',body:fd,headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin'});
         })
         .then(function(r){return r.json();})
@@ -56,6 +57,20 @@
       h+='<b>'+esc(fmtFull(st.date,loc))+'</b>'+(st.time?(' · <b>'+esc(st.time)+'</b>'):'')+'</button>';
       return h;
     }
+    function cfHtml(){
+      var defs=cfg.customFields||[];if(!defs.length)return '';
+      var cv=st.form.custom||{};
+      return defs.map(function(f){
+        var v=cv[f.name]==null?'':cv[f.name];var ph=esc(f.label)+(f.required?' *':'');var star=f.required?' <span class="wgb-req">*</span>':'';
+        var req=f.required?' aria-required="true"':'';
+        if(f.type==='textarea')return '<div class="uk-margin-small"><textarea class="uk-textarea wgb-cf" data-cf="'+esc(f.name)+'" rows="3" aria-label="'+esc(f.label)+'"'+req+' placeholder="'+ph+'">'+esc(v)+'</textarea></div>';
+        if(f.type==='select'){var opts='<option value="">'+esc(f.label)+(f.required?' *':'')+'</option>'+(f.options||[]).map(function(o){return '<option'+(o===v?' selected':'')+' value="'+esc(o)+'">'+esc(o)+'</option>';}).join('');return '<div class="uk-margin-small"><select class="uk-select wgb-cf" data-cf="'+esc(f.name)+'" aria-label="'+esc(f.label)+'"'+req+'>'+opts+'</select></div>';}
+        if(f.type==='checkbox')return '<label class="uk-margin-small uk-display-block"><input class="uk-checkbox wgb-cf" data-cf="'+esc(f.name)+'" type="checkbox"'+(v==='1'||v===true?' checked':'')+req+'> '+esc(f.label)+star+'</label>';
+        var itype=(f.type==='email'||f.type==='tel'||f.type==='number')?f.type:'text';
+        return '<div class="uk-margin-small"><input class="uk-input wgb-cf" data-cf="'+esc(f.name)+'" type="'+itype+'" aria-label="'+esc(f.label)+'"'+req+' placeholder="'+ph+'" value="'+esc(v)+'"></div>';
+      }).join('');
+    }
+    function cfMissing(){var defs=cfg.customFields||[],cv=st.form.custom||{};for(var i=0;i<defs.length;i++){if(!defs[i].required)continue;var val=cv[defs[i].name];if(defs[i].type==='checkbox'){if(val!=='1')return true;}else if(!val)return true;}return false;}
     function draw(){
       var h=[];
       if(st.step==='cal'){
@@ -88,6 +103,7 @@
         h.push('<div class="uk-margin-small"><input class="uk-input wgb-f-phone" type="tel" autocomplete="tel" aria-label="'+esc(L.fPhone)+'" placeholder="'+esc(L.fPhone)+'" value="'+esc(st.form.phone)+'"></div>');
         if(cfg.allowGuest)h.push('<div class="uk-margin-small"><input class="uk-input wgb-f-guest" type="email" autocomplete="off" aria-label="'+esc(L.fGuest)+'" placeholder="'+esc(L.fGuest)+'" value="'+esc(st.form.guest||'')+'"></div>');
         h.push('<div class="uk-margin-small"><textarea class="uk-textarea wgb-f-notes" rows="3" aria-label="'+esc(L.fNotes)+'" placeholder="'+esc(L.fNotes)+'">'+esc(st.form.notes)+'</textarea></div>');
+        h.push(cfHtml());
         if(cfg.showNewsletter)h.push('<label class="uk-margin-small uk-display-block"><input class="uk-checkbox wgb-f-news" type="checkbox"'+(st.form.news?' checked':'')+'> '+esc(L.fNewsletter)+'</label>');
         h.push('<label class="uk-margin-small uk-display-block"><input class="uk-checkbox wgb-f-privacy" type="checkbox" aria-required="true"'+(st.form.privacy?' checked':'')+'> '+esc(L.privacy)+' <span class="wgb-req">*</span></label>');
         h.push('<input type="text" class="wgb-f-website" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute!important;left:-9999px;top:-9999px;height:1px;width:1px;opacity:0">');
@@ -113,7 +129,7 @@
       if(!el)el=mount.querySelector('.wgb-summary')||mount.querySelector('button:not([disabled])');
       if(el&&el.focus){try{el.focus();}catch(e){}}
     }
-    function readForm(){var q=function(c){var n=mount.querySelector('.'+c);return n?n.value:'';};st.form={name:q('wgb-f-name').trim(),email:q('wgb-f-email').trim(),phone:q('wgb-f-phone').trim(),guest:q('wgb-f-guest').trim(),notes:q('wgb-f-notes').trim(),website:q('wgb-f-website'),news:!!(mount.querySelector('.wgb-f-news')||{}).checked,privacy:!!(mount.querySelector('.wgb-f-privacy')||{}).checked};}
+    function readForm(){var q=function(c){var n=mount.querySelector('.'+c);return n?n.value:'';};var custom={};Array.prototype.forEach.call(mount.querySelectorAll('.wgb-cf'),function(n){var k=n.getAttribute('data-cf');if(!k)return;custom[k]=(n.type==='checkbox')?(n.checked?'1':'0'):(n.value||'').trim();});st.form={name:q('wgb-f-name').trim(),email:q('wgb-f-email').trim(),phone:q('wgb-f-phone').trim(),guest:q('wgb-f-guest').trim(),notes:q('wgb-f-notes').trim(),website:q('wgb-f-website'),news:!!(mount.querySelector('.wgb-f-news')||{}).checked,privacy:!!(mount.querySelector('.wgb-f-privacy')||{}).checked,custom:custom};}
     mount.addEventListener('click',function(e){
       var t=e.target.closest('[data-act],[data-date],[data-time]');if(!t)return;
       if(t.hasAttribute('data-date')){var k=t.getAttribute('data-date');st.date=new Date(k+'T00:00:00');st.time=null;st.daySlots=(st.monthDays&&st.monthDays[k])?st.monthDays[k]:[];st.step='time';st.focus='time';}
@@ -122,7 +138,7 @@
         if(a==='prev'){st.view=new Date(st.view.getFullYear(),st.view.getMonth()-1,1);st.focus='prev';}
         else if(a==='next'){st.view=new Date(st.view.getFullYear(),st.view.getMonth()+1,1);st.focus='next';}
         else if(a==='back'){if(st.step==='form'||st.step==='confirm'){if(st.step==='form')readForm();st.time=null;st.step='time';}else{st.date=null;st.step='cal';}st.focus='back';}
-        else if(a==='book'){readForm();if(!st.form.name||!emailOk(st.form.email)||!st.form.privacy){st.err=true;st.focus='form';}else{submit();return;}}
+        else if(a==='book'){readForm();if(!st.form.name||!emailOk(st.form.email)||!st.form.privacy||cfMissing()){st.err=true;st.focus='form';}else{submit();return;}}
         else if(a==='rebook'){submitReschedule();return;}
         else if(a==='retry'){st.err=false;st.step='form';st.focus='form';}
       }

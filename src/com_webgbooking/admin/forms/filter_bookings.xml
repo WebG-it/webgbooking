@@ -16,9 +16,28 @@
             onchange="this.form.submit();"
         >
             <option value="">COM_WEBGBOOKING_FILTER_STATUS_ALL</option>
-            <option value="pending">pending</option>
-            <option value="cancelled">cancelled</option>
+            <option value="pending">COM_WEBGBOOKING_STATUS_PENDING</option>
+            <option value="confirmed">COM_WEBGBOOKING_STATUS_CONFIRMED</option>
+            <option value="completed">COM_WEBGBOOKING_STATUS_COMPLETED</option>
+            <option value="no-show">COM_WEBGBOOKING_STATUS_NOSHOW</option>
+            <option value="cancelled">COM_WEBGBOOKING_STATUS_CANCELLED</option>
         </field>
+        <field
+            name="date_from"
+            type="calendar"
+            label="COM_WEBGBOOKING_FILTER_DATE_FROM"
+            format="%Y-%m-%d"
+            showtime="false"
+            onchange="this.form.submit();"
+        />
+        <field
+            name="date_to"
+            type="calendar"
+            label="COM_WEBGBOOKING_FILTER_DATE_TO"
+            format="%Y-%m-%d"
+            showtime="false"
+            onchange="this.form.submit();"
+        />
     </fields>
     <fields name="list">
         <field
