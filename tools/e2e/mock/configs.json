@@ -147,7 +147,9 @@
   "show_newsletter": true,
   "act_brevo_on": true,
   "brevo_lists": "7, 12",
-  "brevo_when": "newsletter"
+  "brevo_when": "newsletter",
+  "brevo_doi_template": "5",
+  "brevo_doi_redirect": "https://www.example.invalid/grazie"
  },
  "brevo_doi": {
   "title": "Brevo DOI",
@@ -156,7 +158,6 @@
   "act_brevo_on": true,
   "brevo_lists": "12",
   "brevo_when": "newsletter",
-  "brevo_doi": true,
   "brevo_doi_template": "5",
   "brevo_doi_redirect": "https://www.example.invalid/grazie"
  },
@@ -166,8 +167,7 @@
   "show_newsletter": true,
   "act_brevo_on": true,
   "brevo_lists": "12",
-  "brevo_when": "newsletter",
-  "brevo_doi": true
+  "brevo_when": "newsletter"
  },
  "hookprof": {
   "title": "Hook con profilo",
@@ -202,5 +202,81 @@
   "act_webhook_on": true,
   "webhook_url": "https://www.googleapis.com/hook",
   "webhook_profile": "crm"
+ },
+ "brevo_nl_notpl": {
+  "title": "Brevo senza modello",
+  "service": "Brevo senza modello",
+  "show_newsletter": true,
+  "act_brevo_on": true,
+  "brevo_lists": "7, 12",
+  "brevo_when": "newsletter"
+ },
+ "brevo_nobox": {
+  "title": "Brevo senza casella",
+  "service": "Brevo senza casella",
+  "act_brevo_on": true,
+  "brevo_lists": "7",
+  "brevo_when": "newsletter",
+  "brevo_doi_template": "5"
+ },
+ "brevo_nolist": {
+  "title": "Brevo senza liste",
+  "service": "Brevo senza liste",
+  "show_newsletter": true,
+  "act_brevo_on": true,
+  "brevo_when": "newsletter"
+ },
+ "nlhook": {
+  "title": "Newsletter webhook",
+  "service": "Newsletter webhook",
+  "show_newsletter": true
+ },
+ "nlhook_nobox": {
+  "title": "Newsletter senza casella",
+  "service": "Newsletter senza casella"
+ },
+ "hookexfil": {
+  "title": "Hook profilo su altro indirizzo",
+  "service": "Hook profilo su altro indirizzo",
+  "act_webhook_on": true,
+  "webhook_url": "https://www.googleapis.com/hook",
+  "webhook_profile": "zap"
+ },
+ "hookhttp": {
+  "title": "Hook profilo http",
+  "service": "Hook profilo http",
+  "act_webhook_on": true,
+  "webhook_profile": "zaphttp"
+ },
+ "hooklit": {
+  "title": "Hook su IP interno",
+  "service": "Hook su IP interno",
+  "act_webhook_on": true,
+  "webhook_url": "http://169.254.169.254/latest/meta-data"
+ },
+ "hookloc": {
+  "title": "Hook su localhost",
+  "service": "Hook su localhost",
+  "act_webhook_on": true,
+  "webhook_url": "http://localhost/x"
+ },
+ "hookcred": {
+  "title": "Hook con credenziali nell'URL",
+  "service": "Hook con credenziali nell'URL",
+  "act_webhook_on": true,
+  "webhook_url": "https://user:pw@www.googleapis.com/hook"
+ },
+ "manual_custom": {
+  "title": "Manuale con testo",
+  "service": "Manuale con testo",
+  "confirm_manual": true,
+  "email_subject": "Confermato davvero {name}",
+  "email_body": "<p>Testo mio per {name} il {date}</p>"
+ },
+ "manual_off": {
+  "title": "Manuale senza email",
+  "service": "Manuale senza email",
+  "confirm_manual": true,
+  "act_customer_on": false
  }
 }

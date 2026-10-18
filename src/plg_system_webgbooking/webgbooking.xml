@@ -7,7 +7,8 @@
     <creationDate>2026-06</creationDate>
     <copyright>(C) 2026 Marco Galassi / WebG</copyright>
     <license>GNU General Public License version 2 or later</license>
-    <version>0.34.0</version>
+    <licence>GNU General Public Licence version 2 or later (GPL-2.0-or-later)</licence>
+    <version>0.34.1</version>
     <description>PLG_SYSTEM_WEBGBOOKING_XML_DESCRIPTION</description>
     <scriptfile>script.php</scriptfile>
     <namespace path="src">WebG\Plugin\System\Webgbooking</namespace>
@@ -204,6 +205,9 @@
                 <field name="max_holds_ip" type="number" default="2" min="1"
                     label="PLG_SYSTEM_WEBGBOOKING_HOLDS_IP_LABEL"
                     description="PLG_SYSTEM_WEBGBOOKING_HOLDS_IP_DESC" />
+                <field name="cf_ranges_extra" type="textarea" default="" rows="3" filter="raw"
+                    label="PLG_SYSTEM_WEBGBOOKING_CF_EXTRA_LABEL"
+                    description="PLG_SYSTEM_WEBGBOOKING_CF_EXTRA_DESC" />
                 <field name="max_open_holds" type="number" default="60" min="1"
                     label="PLG_SYSTEM_WEBGBOOKING_HOLDS_MAX_LABEL"
                     description="PLG_SYSTEM_WEBGBOOKING_HOLDS_MAX_DESC" />

@@ -163,6 +163,8 @@ $actionsCfg = [
     'analytics' => preg_match('/^[A-Za-z0-9_\-]{1,40}$/', trim((string) ($props['analytics_event'] ?? ''))) ? trim((string) $props['analytics_event']) : 'wgb_booking_completed',
     'reminder' => $remCfg,
     'manual'   => !empty($props['confirm_manual']),
+    // Signed: the newsletter tick only counts when this element really shows the box (the POST field is the visitor's).
+    'showNewsletter' => !empty($props['show_newsletter']),
     'customer' => [
         'on'      => !isset($props['act_customer_on']) || !empty($props['act_customer_on']),
         'subject' => (string) ($props['email_subject'] ?? ''),
@@ -187,15 +189,14 @@ $actionsCfg = [
         'when'  => (string) ($props['brevo_when'] ?? 'newsletter') === 'always' ? 'always' : 'newsletter',
         'attrs' => mb_substr((string) ($props['brevo_attrs'] ?? ''), 0, 1500),
         'doi'   => [
-            'on'       => !empty($props['brevo_doi']),
             'template' => (int) ($props['brevo_doi_template'] ?? 0),
             'redirect' => preg_match('#^https://[^\s\\\\]+$#i', trim((string) ($props['brevo_doi_redirect'] ?? ''))) ? trim((string) $props['brevo_doi_redirect']) : '',
         ],
     ],
 ];
 $secret    = (string) Factory::getApplication()->get('secret');
-$payload   = base64_encode((string) json_encode($actionsCfg));
-$formToken = $payload . '.' . hash_hmac('sha256', $payload, $secret);
+// Sealed (AES-GCM + HMAC): the page source does not show the webhook address, staff recipients or Brevo settings.
+$formToken = Webgbooking::sealFormToken($actionsCfg, $secret);
 $evToken   = Webgbooking::signEv($evCfg, $secret, (int) max(1, (int) $pp->get('config_epoch', 1))); // small signed token for the GET availability calls
 
 $cfg = [

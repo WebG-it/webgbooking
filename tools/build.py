@@ -70,6 +70,11 @@ def main():
         wrong["template.php wgbVer"] = "hard-coded"
     if wrong:
         sys.exit("version mismatch: package is %s but %s" % (version, wrong))
+    # language gate: en-GB and it-IT in step, every key used exists, no visible text written in the code
+    import subprocess
+    r = subprocess.run([sys.executable, os.path.join(ROOT, "tools", "lang_check.py"), "--quiet"], capture_output=True, text=True)
+    if r.returncode != 0:
+        sys.exit("language check failed: " + r.stdout + r.stderr)
     dist = os.path.join(ROOT, "dist")
     os.makedirs(dist, exist_ok=True)
     out = os.path.join(dist, "pkg_webgbooking-%s.zip" % version)

@@ -11,6 +11,7 @@ namespace WebG\Component\Webgbooking\Administrator\Model;
 \defined('_JEXEC') or die;
 
 use Joomla\CMS\Factory;
+use Joomla\CMS\Language\Text;
 use Joomla\CMS\Http\HttpFactory;
 use Joomla\CMS\MVC\Model\BaseDatabaseModel;
 use Joomla\CMS\Plugin\PluginHelper;
@@ -112,7 +113,7 @@ class GoogleModel extends BaseDatabaseModel
                     try {
                         $status->tabs = $this->listTabs($token, $status->sheetId);
                     } catch (\Throwable $eTabs) {
-                        $this->log('sheet tabs: ' . $eTabs->getMessage());
+                        $this->log(Text::sprintf('COM_WEBGBOOKING_LOG_SHEET_TABS', $eTabs->getMessage()));
                     }
                 }
             } catch (\Throwable $e) {
@@ -128,7 +129,7 @@ class GoogleModel extends BaseDatabaseModel
                 } else {
                     $status->apiProblem = true;
                 }
-                $this->log('google page: ' . $e->getMessage());
+                $this->log(Text::sprintf('COM_WEBGBOOKING_LOG_GOOGLE_PAGE', $e->getMessage()));
             }
         } catch (\Throwable $e) {
             $status->error = $e->getMessage();
@@ -230,7 +231,7 @@ class GoogleModel extends BaseDatabaseModel
             $code = preg_replace('/[^a-z_]/', '', strtolower((string) ($data['error'] ?? 'unknown')));
             $desc = substr((string) preg_replace('/[^A-Za-z0-9 .,:;()\/-]/', '', (string) ($data['error_description'] ?? '')), 0, 200);
 
-            throw new \RuntimeException('token refused by Google: ' . $code . ($desc !== '' ? ' (' . $desc . ')' : ''), $code === 'invalid_grant' ? self::E_EXPIRED : 0);
+            throw new \RuntimeException(Text::sprintf('COM_WEBGBOOKING_LOG_TOKEN_REFUSED', $code, $desc !== '' ? ' (' . $desc . ')' : ''), $code === 'invalid_grant' ? self::E_EXPIRED : 0);
         }
 
         return $token;
@@ -250,7 +251,7 @@ class GoogleModel extends BaseDatabaseModel
             $err = $data['error'];
             $msg = is_array($err) ? (string) ($err['message'] ?? '') : (string) $err;
 
-            throw new \RuntimeException('calendar list refused: HTTP ' . (int) $resp->code . ' ' . substr((string) preg_replace('/[^A-Za-z0-9 .,:;()\/-]/', '', $msg), 0, 300));
+            throw new \RuntimeException(Text::sprintf('COM_WEBGBOOKING_LOG_CAL_REFUSED', (int) $resp->code, substr((string) preg_replace('/[^A-Za-z0-9 .,:;()\/-]/', '', $msg), 0, 300)));
         }
 
         return $data['items'] ?? [];
@@ -260,15 +261,12 @@ class GoogleModel extends BaseDatabaseModel
     {
         $key = hash('sha256', (string) Factory::getApplication()->get('secret'), true);
 
-        if (strncmp($stored, 'g:', 2) === 0) {
-            $raw = base64_decode(substr($stored, 2));
+        $gcm = strncmp($stored, 'g:', 2) === 0;
+        $raw = (string) base64_decode($gcm ? substr($stored, 2) : $stored);
 
-            return (string) openssl_decrypt(substr($raw, 28), 'aes-256-gcm', $key, OPENSSL_RAW_DATA, substr($raw, 0, 12), substr($raw, 12, 16));
-        }
-
-        $raw = base64_decode($stored);
-
-        return (string) openssl_decrypt(substr($raw, 16), 'aes-256-cbc', $key, OPENSSL_RAW_DATA, substr($raw, 0, 16));
+        return $gcm
+            ? (string) openssl_decrypt(substr($raw, 28), 'aes-256-gcm', $key, OPENSSL_RAW_DATA, substr($raw, 0, 12), substr($raw, 12, 16))
+            : (string) openssl_decrypt(substr($raw, 16), 'aes-256-cbc', $key, OPENSSL_RAW_DATA, substr($raw, 0, 16));
     }
 
     private function ensureTable($db): void

@@ -253,7 +253,7 @@ jx('php /tmp/mock/render_el.php /tmp/mock/configs.json >/dev/null; chmod -R a+rX
 cfg_new = page_cfg('paid30')
 r2 = book('paid30', day(D + 5), '10:00', email='ep2@example.invalid', cfg=cfg_new)
 check('F6d the regenerated page books with the new epoch', r2.get('ok') is True, r2)
-payload = json.loads(base64.b64decode(cfg_new['form'].split('.')[0]))
+payload = form_actions(cfg_new['form'])
 payload['iat'] = int(time.time()) - 40 * 86400
 tok = jx("php /tmp/mock/signform.php '%s'" % json.dumps(payload, separators=(',', ':'))).strip()
 r3 = book('paid30', day(D + 5), '11:00', email='ep3@example.invalid', cfg={**cfg_new, 'form': tok})
@@ -427,7 +427,7 @@ r = book('def', day(D + 17), '09:00', email='wh@example.invalid', name='Webhook 
 wh = [l for l in gm_log() if l['path'] == '/hook']
 check('F13a booking webhook payload: "event" is booking.created (no duplicate key overriding it), event name in "event_name"', wh and wh[0]['body'].get('event') == 'booking.created' and 'event_name' in wh[0]['body'], wh and wh[0]['body'])
 ce = page_cfg('evil')
-conf = json.loads(base64.b64decode(ce['form'].split('.')[0]))
+conf = form_actions(ce['form'])
 check('F13b redirect "/\\evil.example" is dropped; element webhook URL with ftp:// is dropped', ce.get('redirectUrl') == '' and conf['webhook']['url'] == '', (ce.get('redirectUrl'), conf['webhook']))
 src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'src', 'plg_system_webgbooking', 'src', 'Extension', 'Webgbooking.php'), encoding='utf-8').read()
 check('F13c the OAuth callback no longer puts exception text in the redirect URL', "wgberror=' . rawurlencode('exchange: '" not in src and 'wgberror=exchange' in src)

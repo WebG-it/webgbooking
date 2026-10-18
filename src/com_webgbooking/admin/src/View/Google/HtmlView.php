@@ -24,7 +24,7 @@ class HtmlView extends BaseHtmlView
         $model = $this->getModel();
         $this->status = $model ? $model->getStatus() : (object) [
             'connected' => false, 'email' => '', 'hasClientId' => false,
-            'redirect' => '', 'connectUrl' => '', 'error' => 'GoogleModel not found',
+            'redirect' => '', 'connectUrl' => '', 'error' => Text::_('COM_WEBGBOOKING_GOOGLE_MODEL_MISSING'),
         ];
 
         $app = Factory::getApplication();

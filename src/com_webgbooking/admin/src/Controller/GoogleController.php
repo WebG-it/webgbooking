@@ -19,7 +19,7 @@ use Joomla\Database\DatabaseInterface;
 class GoogleController extends BaseController
 {
     /** Google integration is a global, account-level setting: restrict to component admins. */
-    private function assertAdmin(): void
+    private function requireAdmin(): void
     {
         if (!Factory::getApplication()->getIdentity()->authorise('core.admin', 'com_webgbooking')) {
             throw new NotAllowed(Text::_('JERROR_ALERTNOAUTHOR'), 403);
@@ -29,7 +29,7 @@ class GoogleController extends BaseController
     public function disconnect()
     {
         $this->checkToken();
-        $this->assertAdmin();
+        $this->requireAdmin();
 
         try {
             $db = Factory::getContainer()->get(DatabaseInterface::class);
@@ -45,7 +45,7 @@ class GoogleController extends BaseController
     public function savecalendars()
     {
         $this->checkToken();
-        $this->assertAdmin();
+        $this->requireAdmin();
 
         $input   = Factory::getApplication()->getInput();
         $clean   = fn($v) => preg_replace('/[^A-Za-z0-9@._#+\-]/', '', (string) $v);
@@ -66,7 +66,7 @@ class GoogleController extends BaseController
     public function savesheet()
     {
         $this->checkToken();
-        $this->assertAdmin();
+        $this->requireAdmin();
 
         $input  = Factory::getApplication()->getInput();
         // Only a pasted URL / ID (Sheets scope alone: no Drive picker). Empty = the copy to Sheets is off.

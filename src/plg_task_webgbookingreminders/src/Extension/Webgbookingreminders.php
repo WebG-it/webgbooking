@@ -16,6 +16,7 @@ namespace WebG\Plugin\Task\Webgbookingreminders\Extension;
 \defined('_JEXEC') or die;
 
 use Joomla\CMS\Factory;
+use Joomla\CMS\Language\Text;
 use Joomla\CMS\Plugin\CMSPlugin;
 use Joomla\CMS\Plugin\PluginHelper;
 use Joomla\Component\Scheduler\Administrator\Event\ExecuteTaskEvent;
@@ -53,7 +54,7 @@ final class Webgbookingreminders extends CMSPlugin implements SubscriberInterfac
     {
         try {
             if (!PluginHelper::isEnabled('system', 'webgbooking')) {
-                $this->logTask('WebG Booking: the system plugin is disabled, no reminders sent', 'warning');
+                $this->logTask(Text::_('PLG_TASK_WEBGBOOKINGREMINDERS_LOG_DISABLED'), 'warning');
 
                 return TaskStatus::OK;
             }
@@ -62,7 +63,7 @@ final class Webgbookingreminders extends CMSPlugin implements SubscriberInterfac
             $system = method_exists($app, 'bootPlugin') ? $app->bootPlugin('webgbooking', 'system') : null;
 
             if (!$system || !method_exists($system, 'runReminders')) {
-                $this->logTask('WebG Booking: reminder engine not found (is the package up to date?)', 'error');
+                $this->logTask(Text::_('PLG_TASK_WEBGBOOKINGREMINDERS_LOG_NOENGINE'), 'error');
 
                 return TaskStatus::NO_RUN;
             }
@@ -72,11 +73,11 @@ final class Webgbookingreminders extends CMSPlugin implements SubscriberInterfac
             $expired = method_exists($system, 'expireHolds') ? (int) $system->expireHolds() : 0;
             // Confirmed bookings whose effects (Google event, emails, Sheet, webhook) did not all go through (0.33.0).
             $retried = method_exists($system, 'retryEffects') ? (int) $system->retryEffects() : 0;
-            $this->logTask(sprintf('WebG Booking reminders: %d checked, %d sent, %d failed; %d unpaid holds expired; %d bookings retried', $r['checked'] ?? 0, $r['sent'] ?? 0, $r['failed'] ?? 0, $expired, $retried));
+            $this->logTask(Text::sprintf('PLG_TASK_WEBGBOOKINGREMINDERS_LOG_DONE', $r['checked'] ?? 0, $r['sent'] ?? 0, $r['failed'] ?? 0, $expired, $retried));
 
             return TaskStatus::OK;
         } catch (\Throwable $e) {
-            $this->logTask('WebG Booking reminders failed: ' . $e->getMessage(), 'error');
+            $this->logTask(Text::sprintf('PLG_TASK_WEBGBOOKINGREMINDERS_LOG_FAILED', $e->getMessage()), 'error');
 
             return TaskStatus::KNOCKOUT;
         }

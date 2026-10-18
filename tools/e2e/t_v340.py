@@ -21,7 +21,7 @@ def setup(**kw):
     jx("rm -f /tmp/gmock/log.jsonl /tmp/gmock/brevo.json /tmp/gmock/brevo_fail /tmp/gmock/brevo_attrs /tmp/gmock/hook_fail /tmp/mail/*.eml /tmp/gmock/events.json; rm -f %s" % LOG)
     sql('DELETE FROM joom_webgbooking_bookings'); sql('DELETE FROM joom_webgbooking_kv')
     jx("printf %%s '%s' > /tmp/gmock/brevo_key; chmod 666 /tmp/gmock/brevo_key" % BKEY)
-    base = {'brevo_key': BKEY, 'whp1_name': 'crm', 'whp1_headers': 'Authorization: Bearer %s%sX-Api-Key: %s%sHost: evil.example%sBad Header: x%sContent-Type: text/plain' % (S1, NL, S2, NL, NL, NL)}
+    base = {'brevo_key': BKEY, 'whp1_name': 'crm', 'whp1_headers': 'Authorization: Bearer %s%sX-Api-Key: %s%sHOSTS: www.googleapis.com%sHost: evil.example%sBad Header: x%sContent-Type: text/plain' % (S1, NL, S2, NL, NL, NL, NL)}
     base.update(kw)
     jx("php /tmp/mock/init.php %s >/dev/null" % ' '.join("'%s=%s'" % (k, v) for k, v in base.items()))
 
@@ -82,7 +82,7 @@ setup(brevo_key='', whp1_name='', whp1_headers='')
 sql("UPDATE joom_extensions SET params=JSON_REMOVE(params,'$.brevo_key','$.whp1_name','$.whp1_headers') WHERE element='webgbooking' AND folder='system'")
 jx("printf %%s '%s' > /tmp/gmock/brevo_key; chmod 666 /tmp/gmock/brevo_key; rm -f /tmp/gmock/log.jsonl" % BKEY)
 out = save_options({'jform[params][brevo_key]': BKEY, 'jform[params][whp1_name]': 'crm',
-                    'jform[params][whp1_headers]': 'Authorization: Bearer %s\nX-Api-Key: %s\nHost: evil.example\nBad Header: x\nContent-Type: text/plain' % (S1, S2)})
+                    'jform[params][whp1_headers]': 'Authorization: Bearer %s\nX-Api-Key: %s\nHOSTS: www.googleapis.com\nHost: evil.example\nBad Header: x\nContent-Type: text/plain' % (S1, S2)})
 o = opts()
 check('K1 the Brevo key is stored ENCRYPTED, not in clear', str(o.get('brevo_key', '')).startswith('g:') and BKEY not in json.dumps(o), str(o.get('brevo_key', ''))[:12])
 check('K2 the header profile is stored encrypted: neither header value is in the database in clear', str(o.get('whp1_headers', '')).startswith('g:') and S1 not in json.dumps(o) and S2 not in json.dumps(o), str(o.get('whp1_headers', ''))[:12])
@@ -104,7 +104,7 @@ for name in ('brevo1', 'hookprof', 'hookprof_url', 'paidhook'):
     h = Sess().get('%s/wgbtest/%s.html' % (BASE, name))
     check('K9 the public markup of "%s" holds no key and no header value' % name, BKEY not in h and S1 not in h and S2 not in h and S3 not in h and 'Bearer' not in h, name)
 cfg = page_cfg('hookprof')
-tokjson = json.loads(__import__('base64').b64decode(cfg['form'].split('.')[0]))
+tokjson = form_actions(cfg['form'])
 check('K10 the signed token carries only the profile NAME', tokjson['webhook'].get('profile') == 'crm' and S1 not in json.dumps(tokjson), tokjson['webhook'])
 
 # ============================================================================ 2. webhook header profiles
@@ -133,7 +133,7 @@ check('W6 a profile with a "URL:" line is the endpoint when the element has none
 setup()
 book('hookmissing', day(D), '09:00', email='h5@example.invalid', name='Hook Cinque')
 h = hooks()
-check('W7 an unknown profile name still delivers (no extra headers) and says so in the log, in Italian', len(h) == 1 and 'authorization' not in h[0]['headers'] and 'profilo di intestazioni' in logtxt(), logtxt()[-300:])
+check('W7 an unknown profile name sends NOTHING (no fall back), says so in the log and the staff is told', len(h) == 0 and 'header profile' in logtxt() and 'NOT sent' in logtxt() and any('NOT sent' in m['subject'] for m in mails_to('staff@wgbtest.invalid')), logtxt()[-300:])
 check('W8 no header value ever reaches the log', S1 not in logtxt() and S2 not in logtxt() and BKEY not in logtxt(), '')
 
 # ============================================================================ 3. events for the whole life of a booking
@@ -162,7 +162,7 @@ check('V3 CANCELLED by the staff from the admin: booking.cancelled, cancelled_by
 
 # paid + expired
 tp.fresh()
-jx("php /tmp/mock/init.php stripe_sk=%s stripe_whsec=%s stripe_mode=test brevo_key=%s 'whp1_name=crm' 'whp1_headers=Authorization: Bearer %s' >/dev/null; rm -f /tmp/gmock/log.jsonl" % (SK, WHSEC, BKEY, S1))
+jx("php /tmp/mock/init.php stripe_sk=%s stripe_whsec=%s stripe_mode=test brevo_key=%s 'whp1_name=crm' 'whp1_headers=Authorization: Bearer %s%sHOSTS: www.googleapis.com' >/dev/null; rm -f /tmp/gmock/log.jsonl" % (SK, WHSEC, BKEY, S1, NL))
 r, p1 = tp.start_paid('paidhook', D + 1, '09:00', 'ev3@example.invalid', name='Pagante Uno')
 check('V4a an unpaid hold is NOT announced to the webhook', not hooks(), [y['body'].get('event') for y in hooks()])
 sid = tp.dbrow(p1)['stripe_session_id']; tp.pay_in_mock(sid); tp.webhook(tp.event('checkout.session.completed', sid))
@@ -198,7 +198,7 @@ h = [y for y in hooks() if y['body'].get('event') == 'booking.rescheduled']
 check('V6c once the receiver is back the scheduled task delivers it, once, and empties the outbox', len(h) == 1 and h[0]['body'].get('time') == '14:00' and sql("SELECT COUNT(*) FROM joom_webgbooking_kv WHERE k LIKE 'hq:%'") == '0', (len(h), sql("SELECT COUNT(*) FROM joom_webgbooking_kv WHERE k LIKE 'hq:%'")))
 jx("printf 401 > /tmp/gmock/hook_fail; chmod 666 /tmp/gmock/hook_fail; rm -f /tmp/gmock/log.jsonl")
 Sess().post(BASE + '/index.php?option=com_ajax&group=system&plugin=webgbooking&format=html&action=cancel', {'token': tok6})
-check('V7 a receiver that REFUSES (401) is not retried forever: nothing in the outbox, the log says it in Italian', sql("SELECT COUNT(*) FROM joom_webgbooking_kv WHERE k LIKE 'hq:%'") == '0' and 'ha risposto HTTP 401' in logtxt(), logtxt()[-250:])
+check('V7 a receiver that REFUSES (401) is not retried forever: nothing in the outbox, the log says it', sql("SELECT COUNT(*) FROM joom_webgbooking_kv WHERE k LIKE 'hq:%'") == '0' and 'answered HTTP 401' in logtxt(), logtxt()[-250:])
 jx('rm -f /tmp/gmock/hook_fail')
 
 # ============================================================================ 4. admin: confirm and tell the customer
@@ -258,23 +258,27 @@ r = book('brevo1', day(D), '09:00', email='anna@example.invalid', name='Mario De
 b = last_id()
 bc = [l for l in brevo_calls() if l['path'] == '/v3/contacts']
 c = brevo_state().get('contacts', {}).get('anna@example.invalid', {})
-check('B1 a booking on an element set to "every booking" creates the contact (POST /v3/contacts, api-key header, updateEnabled)', r.get('ok') is True and len(bc) == 1 and bc[0]['headers'].get('api-key') == BKEY and bc[0]['body'].get('updateEnabled') is True, (len(bc), r))
+check('B1 a booking on an element set to "every booking" creates the contact (POST /v3/contacts, api-key header)', r.get('ok') is True and len(bc) == 1 and bc[0]['headers'].get('api-key') == BKEY and True, (len(bc), r))
 check('B2 NOME = first word, COGNOME = the rest, SMS in E.164 (spaces removed)', c.get('attributes', {}).get('NOME') == 'Mario' and c.get('attributes', {}).get('COGNOME') == 'De Luca' and c.get('attributes', {}).get('SMS') == '+393337770001', c)
 check('B3 extra attributes come from the form answers (CITTA=Citta, progetto = progetto, case and spaces forgiven)', c.get('attributes', {}).get('CITTA') == 'Torino' and c.get('attributes', {}).get('PROGETTO') == 'WebG', c.get('attributes'))
-check('B4 the list is the one chosen on the element', c.get('listIds') == [7], c.get('listIds'))
+check('B4 without the newsletter tick the contact is saved WITHOUT any list (no subscription without consent)', c.get('listIds') == [], c.get('listIds'))
+check('B4b ...and the call carries no listIds and no updateEnabled (never overwrites an existing contact)', 'listIds' not in bc[0]['body'] and 'updateEnabled' not in bc[0]['body'], bc[0]['body'].keys())
 check('B5 the step is recorded and the booking is done', '"brevo":"ok"' in rowdb(b)['fx_steps'].replace(' ', '') and rowdb(b)['fx_state'] == 'done', rowdb(b))
 check('B6 the customer sees nothing about Brevo', 'revo' not in json.dumps(r), r)
 
-# existing contact: updated, never removed from other lists
+# newsletter tick -> subscription only through double opt-in; an existing contact is never overwritten
 setup()
 book('brevo_nl', day(D), '09:00', email='piero@example.invalid', name='Piero', newsletter='1')
-c1 = brevo_state().get('contacts', {}).get('piero@example.invalid', {})
-check('B7 newsletter tick on a "newsletter only" element: contact on lists 7 and 12, one name only = NOME without COGNOME', sorted(c1.get('listIds', [])) == [7, 12] and c1.get('attributes', {}).get('NOME') == 'Piero' and 'COGNOME' not in c1.get('attributes', {}), c1)
+st = brevo_state()
+check('B7 newsletter tick on a "newsletter only" element with lists 7 and 12: the subscription goes THROUGH double opt-in (lists 7 and 12, NOME only), no direct contact', len(st.get('doi', [])) == 1 and sorted(st['doi'][0]['lists']) == [7, 12] and st['doi'][0]['attributes'].get('NOME') == 'Piero' and 'COGNOME' not in st['doi'][0]['attributes'] and not st.get('contacts'), st)
+setup()
+book('brevo1', day(D), '09:00', email='piero@example.invalid', name='Piero Vero')
 sql("DELETE FROM joom_webgbooking_bookings")
 jx('rm -f /tmp/gmock/log.jsonl')
-book('brevo1', day(D), '10:00', email='piero@example.invalid', name='Piero Rossi', extra={'custom[cf0]': 'Roma'})
+r = book('brevo1', day(D), '10:00', email='piero@example.invalid', name='Piero Falso', extra={'custom[cf0]': 'Roma'})
+b8 = last_id()
 c2 = brevo_state().get('contacts', {}).get('piero@example.invalid', {})
-check('B8 the same person again: updated (204), attributes refreshed, ALREADY existing lists kept (never removed)', sorted(c2.get('listIds', [])) == [7, 12] and c2.get('attributes', {}).get('COGNOME') == 'Rossi' and c2.get('attributes', {}).get('CITTA') == 'Roma' and c2.get('updates') == 2, c2)
+check('B8 the same email again (anyone can type any email): the existing contact is left EXACTLY as it was, no overwrite, no error', c2.get('attributes', {}).get('COGNOME') == 'Vero' and 'CITTA' not in c2.get('attributes', {}) and c2.get('updates') == 1 and '"brevo":"ok"' in rowdb(b8)['fx_steps'].replace(' ', '') and not [m for m in mails_to('staff@wgbtest.invalid') if 'Brevo' in m['subject']], (c2, rowdb(b8)['fx_steps']))
 setup()
 book('brevo_nl', day(D), '09:00', email='senza@example.invalid', name='Senza Spunta', newsletter='0')
 check('B9 no newsletter tick on a "newsletter only" element: Brevo is not called at all', not brevo_calls() and not brevo_state().get('contacts'), len(brevo_calls()))
@@ -300,7 +304,7 @@ setup()
 r = book('brevo_doi_bad', day(D), '09:00', email='doi3@example.invalid', name='Doppio Tre', newsletter='1')
 b = last_id()
 al = mails_to('staff@wgbtest.invalid')
-check('B13 double opt-in turned on WITHOUT a template: no contact is added without consent, the staff is told, the booking works', r.get('ok') is True and not brevo_state().get('contacts') and not brevo_state().get('doi') and any('Brevo' in m['subject'] for m in al) and 'modello' in logtxt(), [m['subject'] for m in al])
+check('B13 double opt-in turned on WITHOUT a template: no contact is added without consent, the staff is told, the booking works', r.get('ok') is True and not brevo_state().get('contacts') and not brevo_state().get('doi') and any('Brevo' in m['subject'] for m in al) and 'template ID' in logtxt(), [m['subject'] for m in al])
 
 # Brevo down: the booking never suffers, the contact follows
 setup()
@@ -321,7 +325,7 @@ b = last_id()
 check('B17 Brevo answers 429 (rate limit): retried, not an error', rowdb(b)['fx_state'] == 'retry' and '"brevo":"error"' not in rowdb(b)['fx_steps'].replace(' ', ''), rowdb(b)['fx_state'])
 jx('rm -f /tmp/gmock/brevo_fail')
 
-# permanent errors: logged in Italian, staff mailed once, never on screen, no retry loop
+# permanent errors: logged in the site language, staff mailed once, never on screen, no retry loop
 setup()
 jx("printf 'NOME,COGNOME,SMS' > /tmp/gmock/brevo_attrs; chmod 666 /tmp/gmock/brevo_attrs")
 clear_mail()
@@ -331,7 +335,7 @@ lg = logtxt()
 al = [m for m in mails_to('staff@wgbtest.invalid') if 'Brevo' in m['subject']]
 check('B18 an attribute Brevo does not know (400): the booking works, nothing is shown to the customer', r.get('ok') is True and 'revo' not in json.dumps(r) and 'CITTA' not in json.dumps(r), r)
 check('B19 ...the step ends as "error" (a retry could not fix it), the booking is done, no retry loop', '"brevo":"error"' in rowdb(b)['fx_steps'].replace(' ', '') and rowdb(b)['fx_state'] == 'done', rowdb(b))
-check('B20 ...the log explains it in Italian with Brevo\'s reason, without the customer email or any key', 'Brevo: contatto della prenotazione' in lg and 'CITTA' in lg and 'bad@example.invalid' not in lg and BKEY not in lg, lg[-300:])
+check('B20 ...the log explains it with Brevo\'s reason, without the customer email or any key', 'Brevo: contact of booking' in lg and 'CITTA' in lg and 'bad@example.invalid' not in lg and BKEY not in lg, lg[-300:])
 check('B21 ...and the staff gets one email about it, in the element recipient or the plugin address, without the key', len(al) == 1 and BKEY not in (al[0].get('html', '') + al[0].get('text', '')) and 'Attributo Mancante' in (al[0].get('html', '') + al[0].get('text', '')), [m['subject'] for m in al])
 n_calls = len(brevo_calls())
 run_task()
@@ -342,12 +346,12 @@ jx("printf %%s 'xkeysib-%s' > /tmp/gmock/brevo_key" % R(30))
 clear_mail()
 r = book('brevo1', day(D), '09:00', email='key@example.invalid', name='Chiave Sbagliata')
 b = last_id()
-check('B23 a key Brevo refuses (401): booking works, error step, log says the key is refused, staff mailed', r.get('ok') is True and '"brevo":"error"' in rowdb(b)['fx_steps'].replace(' ', '') and 'rifiuta la chiave' in logtxt() and any('Brevo' in m['subject'] for m in mails_to('staff@wgbtest.invalid')), logtxt()[-200:])
+check('B23 a key Brevo refuses (401): booking works, error step, log says the key is refused, staff mailed', r.get('ok') is True and '"brevo":"error"' in rowdb(b)['fx_steps'].replace(' ', '') and 'refuses the API key' in logtxt() and any('Brevo' in m['subject'] for m in mails_to('staff@wgbtest.invalid')), logtxt()[-200:])
 # no key
 setup(brevo_key='')
 sql("UPDATE joom_extensions SET params=JSON_REMOVE(params,'$.brevo_key') WHERE element='webgbooking' AND folder='system'")
 r = book('brevo1', day(D), '09:00', email='nokey@example.invalid', name='Senza Chiave')
 b = last_id()
-check('B24 Brevo switched on for the element but no key in the plugin options: booking works, clear Italian log line, staff mailed', r.get('ok') is True and 'chiave API non' in logtxt() and '"brevo":"error"' in rowdb(b)['fx_steps'].replace(' ', ''), logtxt()[-200:])
+check('B24 Brevo switched on for the element but no key in the plugin options: booking works, clear log line, staff mailed', r.get('ok') is True and 'API key is not set' in logtxt() and '"brevo":"error"' in rowdb(b)['fx_steps'].replace(' ', ''), logtxt()[-200:])
 
 print('\nRESULT pass=%d fail=%d' % (RES['pass'], RES['fail']))

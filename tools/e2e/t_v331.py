@@ -17,7 +17,7 @@ def run_task():
 
 def ctx_for(cfgname):
     cfg = page_cfg(cfgname)
-    actions = json.loads(base64.b64decode(cfg['form'].split('.')[0]))
+    actions = form_actions(cfg['form'])
     return json.dumps({'actions': actions, 'newsletter': 0, 'redirect': '', 'analytics': ''})
 
 

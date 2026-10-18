@@ -38,9 +38,9 @@ check('P3b a second visitor cannot take the held slot', r2.get('ok') is False, r
 
 # ------------------------------------------------------------------ forged / missing signed config
 cfgx = dict(cfg30)
-payload, sig = cfg30['form'].split('.', 1)
+sig = cfg30['form'].rsplit('.', 1)[1]
 import base64
-conf = json.loads(base64.b64decode(payload))
+conf = form_actions(cfg30['form'])
 conf['price'] = {}
 forged = base64.b64encode(json.dumps(conf).encode()).decode() + '.' + sig
 r = book('paid30', day(D), '12:00', email='forge@example.invalid', cfg={**cfg30, 'form': forged})

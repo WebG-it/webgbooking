@@ -39,13 +39,15 @@ class BookingController extends BaseController
     public function confirmnotify()
     {
         $this->checkToken();
-        $this->assertAllowed('core.edit.state');
+        $this->requireRight('core.edit.state');
 
         $ids = $this->cid();
         $id  = $ids[0] ?? 0;
         try {
             $r = $id > 0 ? $this->getModel('Booking')->confirmAndNotify($id) : ['status' => 'missing', 'mail' => false];
-            if (($r['status'] ?? '') === 'ok') {
+            if (($r['status'] ?? '') === 'ok' && ($r['mail'] ?? null) === 'off') {
+                $this->setMessage(Text::_('COM_WEBGBOOKING_CONFIRMNOTIFY_OFF'), 'message');
+            } elseif (($r['status'] ?? '') === 'ok') {
                 $this->setMessage(Text::_(!empty($r['mail']) ? 'COM_WEBGBOOKING_CONFIRMNOTIFY_OK' : 'COM_WEBGBOOKING_CONFIRMNOTIFY_MAILFAIL'), !empty($r['mail']) ? 'message' : 'warning');
             } elseif (($r['status'] ?? '') === 'already' || ($r['status'] ?? '') === 'missing') {
                 $this->setMessage(Text::_('COM_WEBGBOOKING_CONFIRMNOTIFY_ALREADY'), 'warning');
@@ -82,7 +84,7 @@ class BookingController extends BaseController
     private function changeStatus(string $task): void
     {
         $this->checkToken();
-        $this->assertAllowed('core.edit.state');
+        $this->requireRight('core.edit.state');
 
         $ids    = $this->cid();
         $status = self::STATUS_TASKS[$task] ?? '';
@@ -137,7 +139,7 @@ class BookingController extends BaseController
     public function delete()
     {
         $this->checkToken();
-        $this->assertAllowed('core.delete');
+        $this->requireRight('core.delete');
 
         $ids = $this->cid();
 
@@ -177,7 +179,7 @@ class BookingController extends BaseController
     }
 
     /** Enforce the admin permission for the action. */
-    private function assertAllowed(string $action): void
+    private function requireRight(string $action): void
     {
         if (!Factory::getApplication()->getIdentity()->authorise($action, 'com_webgbooking')) {
             throw new NotAllowed(Text::_('JERROR_ALERTNOAUTHOR'), 403);

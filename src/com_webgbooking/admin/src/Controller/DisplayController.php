@@ -23,7 +23,7 @@ class DisplayController extends BaseController
     protected $default_view = 'bookings';
 
     /** The bookings export streams customer PII — require component management rights. */
-    private function assertManage(): void
+    private function requireManage(): void
     {
         if (!Factory::getApplication()->getIdentity()->authorise('core.manage', 'com_webgbooking')) {
             throw new NotAllowed(Text::_('JERROR_ALERTNOAUTHOR'), 403);
@@ -36,7 +36,7 @@ class DisplayController extends BaseController
         if (!Session::checkToken('get')) {
             throw new NotAllowed(Text::_('JINVALID_TOKEN'), 403);
         }
-        $this->assertManage();
+        $this->requireManage();
 
         $app = Factory::getApplication();
         $db  = Factory::getContainer()->get(DatabaseInterface::class);
@@ -55,8 +55,8 @@ class DisplayController extends BaseController
 
         $out = fopen('php://output', 'w');
         // UTF-8 BOM so Excel opens accents correctly.
-        fwrite($out, "\xEF\xBB\xBF");
-        fputcsv($out, ['ID', 'Created', 'Date', 'Time', 'Name', 'Email', 'Phone', 'Guest', 'Notes', 'Status', 'Meeting', 'Custom', 'Location', 'Duration', 'Event', 'Payment', 'Amount', 'Currency', 'Stripe session', 'Stripe payment intent']);
+        fwrite($out, chr(0xEF) . chr(0xBB) . chr(0xBF));
+        fputcsv($out, $this->csvHeader());
 
         foreach ($rows ?: [] as $r) {
             fputcsv($out, array_map([$this, 'safeCell'], [
@@ -93,7 +93,7 @@ class DisplayController extends BaseController
         if (!Session::checkToken('get')) {
             throw new NotAllowed(Text::_('JINVALID_TOKEN'), 403);
         }
-        $this->assertManage();
+        $this->requireManage();
 
         $app = Factory::getApplication();
 
@@ -114,7 +114,7 @@ class DisplayController extends BaseController
                 ->order($db->quoteName('booking_time') . ' DESC')
         )->loadObjectList();
 
-        $data = [['ID', 'Created', 'Date', 'Time', 'Name', 'Email', 'Phone', 'Guest', 'Notes', 'Status', 'Meeting', 'Custom', 'Location', 'Duration', 'Event', 'Payment', 'Amount', 'Currency', 'Stripe session', 'Stripe payment intent']];
+        $data = [$this->csvHeader()];
         foreach ($rows ?: [] as $r) {
             $data[] = [
                 (string) $r->id, (string) $r->created, (string) $r->booking_date, (string) $r->booking_time,
@@ -144,6 +144,12 @@ class DisplayController extends BaseController
     }
 
     /** Neutralise CSV formula injection: prefix values that Excel would treat as a formula. */
+    /** Column titles of the exports, in the language of the administrator. */
+    private function csvHeader(): array
+    {
+        return array_map(static fn(string $k): string => Text::_('COM_WEBGBOOKING_CSV_' . $k), ['ID', 'CREATED', 'DATE', 'TIME', 'NAME', 'EMAIL', 'PHONE', 'GUEST', 'NOTES', 'STATUS', 'MEETING', 'CUSTOM', 'LOCATION', 'DURATION', 'EVENT', 'PAYMENT', 'AMOUNT', 'CURRENCY', 'STRIPE_SESSION', 'STRIPE_INTENT']);
+    }
+
     private function safeCell($v): string
     {
         $v = (string) $v;

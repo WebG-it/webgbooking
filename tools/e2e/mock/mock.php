@@ -49,6 +49,7 @@ if ($host === 'www.googleapis.com' && $path === '/calendar/v3/users/me/calendarL
 }
 if ($host === 'www.googleapis.com' && $path === '/hook') {                // a customer's webhook receiver (test)
     $hf = file_exists("$dir/hook_fail") ? (int) trim(file_get_contents("$dir/hook_fail")) : 0;
+    if ($hf === 302) { header('Location: https://www.googleapis.com/hook-redirected'); http_response_code(302); exit; }
     if ($hf > 0) { http_response_code($hf); echo json_encode(['error' => 'mock hook failing']); exit; }
     echo json_encode(['ok' => true]); exit;
 }

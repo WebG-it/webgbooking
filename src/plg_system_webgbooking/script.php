@@ -90,6 +90,7 @@ return new class () implements InstallerScriptInterface {
                 . $db->quoteName('ip_hash') . ' VARCHAR(32) NULL,'
                 . $db->quoteName('staff_to') . ' VARCHAR(500) NULL,'
                 . $db->quoteName('hook_cfg') . ' TEXT NULL,'
+                . $db->quoteName('cust_cfg') . ' MEDIUMTEXT NULL,'
                 . 'PRIMARY KEY (' . $db->quoteName('id') . '),'
                 . 'KEY ' . $db->quoteName('idx_date') . ' (' . $db->quoteName('booking_date') . ',' . $db->quoteName('booking_time') . '),'
                 . 'KEY ' . $db->quoteName('idx_token') . ' (' . $db->quoteName('manage_token') . ')'
@@ -133,6 +134,8 @@ return new class () implements InstallerScriptInterface {
                 'staff_to'              => 'VARCHAR(500) NULL',
                 // 0.34.0: where the element's webhook points (name of the header profile, no secret), for the later events
                 'hook_cfg'              => 'TEXT NULL',
+                // 0.34.1: the element's customer-email settings, for the admin "confirm and tell the customer"
+                'cust_cfg'              => 'MEDIUMTEXT NULL',
             ];
             foreach ($newCols as $name => $def) {
                 try {
@@ -226,8 +229,10 @@ return new class () implements InstallerScriptInterface {
         if ($problems) {
             try {
                 \Joomla\CMS\Log\Log::addLogger(['text_file' => 'webgbooking.php'], \Joomla\CMS\Log\Log::ALL, ['webgbooking']);
-                \Joomla\CMS\Log\Log::add('WebG Booking database update problems: ' . implode(' | ', $problems), \Joomla\CMS\Log\Log::ERROR, 'webgbooking');
-                Factory::getApplication()->enqueueMessage('WebG Booking: the database update did not complete (' . \count($problems) . ' problem(s): ' . implode('; ', array_slice($problems, 0, 3)) . '). Bookings may fail until this is fixed: check the Joomla database user rights (ALTER, CREATE) and reinstall the package.', 'error');
+                // The plugin language files are copied before this runs: load them so the text is translated.
+                Factory::getApplication()->getLanguage()->load('plg_system_webgbooking', JPATH_PLUGINS . '/system/webgbooking');
+                \Joomla\CMS\Log\Log::add(\Joomla\CMS\Language\Text::sprintf('PLG_SYSTEM_WEBGBOOKING_INSTALL_DB_LOG', implode(' | ', $problems)), \Joomla\CMS\Log\Log::ERROR, 'webgbooking');
+                Factory::getApplication()->enqueueMessage(\Joomla\CMS\Language\Text::sprintf('PLG_SYSTEM_WEBGBOOKING_INSTALL_DB_MESSAGE', \count($problems), implode('; ', array_slice($problems, 0, 3))), 'error');
             } catch (\Throwable $e) {
             }
         }

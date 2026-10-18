@@ -127,7 +127,7 @@ return new class () implements InstallerScriptInterface {
             $now  = Factory::getDate()->toSql();
             $task = (object) [
                 'asset_id'        => 0,
-                'title'           => 'WebG Booking: send appointment reminders',
+                'title'           => $this->taskTitle(),
                 'type'            => 'plg_task_webgbooking_reminders',
                 'execution_rules' => json_encode(['rule-type' => 'interval-minutes', 'interval-minutes' => '5']),
                 'cron_rules'      => json_encode(['type' => 'interval', 'exp' => 'PT5M']),
@@ -159,6 +159,19 @@ return new class () implements InstallerScriptInterface {
             )->execute();
         } catch (\Throwable $e) {
             // Non-fatal: the task can still be created by hand in System - Scheduled Tasks.
+        }
+    }
+
+    /** Title of the scheduled task, in the language of whoever installs (from the task plugin language files). */
+    private function taskTitle(): string
+    {
+        try {
+            Factory::getApplication()->getLanguage()->load('plg_task_webgbookingreminders', JPATH_PLUGINS . '/task/webgbookingreminders');
+            $t = \Joomla\CMS\Language\Text::_('PLG_TASK_WEBGBOOKINGREMINDERS_TASK_TITLE');
+
+            return $t !== 'PLG_TASK_WEBGBOOKINGREMINDERS_TASK_TITLE' ? $t : 'WebG Booking';
+        } catch (\Throwable $e) {
+            return 'WebG Booking';
         }
     }
 };

@@ -80,6 +80,12 @@ def book(cfgname, date, time_, name='Mario Rossi', email='mario@example.invalid'
         return {'ok': False, 'raw': out[:300]}
 
 
+def form_actions(token):
+    """The content of a form token (sealed since 0.34.1, readable before), read inside the container after its signature is checked."""
+    out = jx("php /tmp/mock/decform.php '%s'" % token).strip().splitlines()
+    return json.loads(out[-1]) if out else {}
+
+
 def day(offset):
     return (datetime.date.today() + datetime.timedelta(days=offset)).isoformat()
 
