@@ -51,6 +51,9 @@ $payInfo = static function ($i): string {
 <?php foreach ((array) $this->alerts as $al) : ?>
     <div class="alert alert-<?php echo htmlspecialchars((string) $al[0], ENT_QUOTES, 'UTF-8'); ?>" role="alert"><?php echo htmlspecialchars((string) $al[1], ENT_QUOTES, 'UTF-8'); ?></div>
 <?php endforeach; ?>
+<?php if ((string) $this->ipDiag !== '') : ?>
+    <div class="alert alert-secondary py-2 small" role="note" id="wgb-ipdiag"><?php echo htmlspecialchars((string) $this->ipDiag, ENT_QUOTES, 'UTF-8'); ?></div>
+<?php endif; ?>
 <div class="row mb-3 g-2">
     <?php
     $cards = [

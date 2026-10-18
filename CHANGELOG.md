@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.34.2 (pacchetto, componente e plugin): residui bassi della revisione
+
+Cinque rifiniture dalla sentinella e una diagnostica richiesta da Marco (`tools/e2e/t_v342.py`, ognuna fallisce sulla 0.34.1 e passa sulla 0.34.2).
+
+1. **Solo curl, niente ripiego**: il client che fissa l'indirizzo (`CURLOPT_RESOLVE`) chiede il trasporto `curl` e basta. Se curl non c'e' (`curl_init` non usabile) l'invio e' rifiutato: per il webhook l'effetto si chiude come errore con log e mail allo staff, per il webhook newsletter si salta con una riga di log; mai il ripiego sul trasporto a stream, dove l'indirizzo non e' fissato.
+2. **`httpUrlOk` piu' severo**: rifiuta backslash, `@` e `#` nell'URL (PHP e curl li leggono in modo diverso: e' il modo con cui un indirizzo viene fatto puntare altrove).
+3. **Cloudflare**: un `REMOTE_ADDR` scritto `::ffff:a.b.c.d` viene letto come IPv4 prima del confronto con gli intervalli (e prima di fare l'hash dell'indirizzo).
+4. **Riga `HOSTS:` del profilo**: l'aiuto avverte di non elencare host condivisi fra clienti (`hooks.zapier.com`, `hook.*.make.com`): per quei servizi si usa la riga `URL:`.
+5. **Ramo Brevo "ogni prenotazione"**: l'etichetta e l'aiuto dicono che crea un contatto per chiunque prenoti, anche senza consenso marketing (solo scheda contatto, nessuna lista).
+6. **Diagnostica dell'indirizzo del visitatore** (solo `core.admin`): in cima alla lista prenotazioni una riga dice come viene rilevato l'IP della richiesta corrente dell'amministratore: tramite Cloudflare (intestazione accettata), diretto, Cloudflare non riconosciuto (`REMOTE_ADDR` fuori dai range: l'intestazione e' ignorata e tutti i visitatori risultano con l'IP del bordo), oppure indirizzo di Cloudflare senza intestazione. Mostra il formato di `REMOTE_ADDR` (IPv4, IPv6, IPv4 mappato) e solo gli ultimi 3 caratteri dell'indirizzo rilevato: mai l'indirizzo intero ne' l'hash. Stringhe IT/EN.
+
 ## 0.34.1 (pacchetto, componente e plugin): correzioni della revisione di sicurezza sulla 0.34.0
 
 Le dieci correzioni della sentinella, piu' i due requisiti di Marco sulla lingua e sul JED Checker (punti 11 e 12). Ogni punto ha un test che fallisce sulla 0.34.0 e passa sulla 0.34.1 (`tools/e2e/t_v341.py`).

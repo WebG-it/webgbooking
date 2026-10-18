@@ -33,7 +33,7 @@ use Joomla\Event\SubscriberInterface;
 final class Webgbooking extends CMSPlugin implements SubscriberInterface
 {
     /** Cache-buster for the bundled front-end assets (wgb.css/js, UIkit). Bump when those change. */
-    public const ASSET_VER = '0.34.1';
+    public const ASSET_VER = '0.34.2';
 
     protected $autoloadLanguage = true;
 
@@ -624,8 +624,57 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
         '2400:cb00::/32', '2606:4700::/32', '2803:f800::/32', '2405:b500::/32', '2405:8100::/32', '2a06:98c0::/29', '2c0f:f248::/32',
     ];
 
+    /**
+     * How the visitor address of a request is detected, for the admin diagnostics line: which rule applied, the format of
+     * REMOTE_ADDR and only the LAST THREE characters of the detected address (never the address, never its hash).
+     * mode: cloudflare (header accepted: the connection comes from a Cloudflare range) | direct (no Cloudflare header)
+     *       | unrecognized (header present but REMOTE_ADDR outside the ranges: header ignored) | noheader (REMOTE_ADDR is in a
+     *       Cloudflare range but the header is missing: every visitor shows the edge address).
+     */
+    public function ipDiagnosis(string $remote, string $cfHeader): array
+    {
+        $remote = trim($remote);
+        $cf     = trim($cfHeader);
+        if (stripos($remote, '::ffff:') === 0 && filter_var(substr($remote, 7), FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
+            $fmt = 'v4mapped';
+        } elseif (filter_var($remote, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
+            $fmt = 'v4';
+        } elseif (filter_var($remote, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6)) {
+            $fmt = 'v6';
+        } else {
+            $fmt = 'unknown';
+        }
+        $edge     = $fmt !== 'unknown' && $this->fromCloudflare(self::normalizeIp($remote));
+        $cfValid  = $cf !== '' && filter_var($cf, FILTER_VALIDATE_IP);
+        $detected = $fmt === 'unknown' ? '' : self::normalizeIp($remote);
+        if ($cfValid && $edge) {
+            $mode     = 'cloudflare';
+            $detected = $cf;
+        } elseif ($cfValid) {
+            $mode = 'unrecognized';
+        } elseif ($edge) {
+            $mode = 'noheader';
+        } else {
+            $mode = 'direct';
+        }
+
+        return ['mode' => $mode, 'fmt' => $fmt, 'tail' => $detected === '' ? '' : substr($detected, -3)];
+    }
+
+    /** An IPv4 address written inside IPv6 (::ffff:a.b.c.d) is the same address as a.b.c.d: compare and hash it as IPv4. */
+    public static function normalizeIp(string $ip): string
+    {
+        $ip = trim($ip);
+        if (stripos($ip, '::ffff:') === 0 && filter_var(substr($ip, 7), FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
+            return substr($ip, 7);
+        }
+
+        return $ip;
+    }
+
     private function fromCloudflare(string $ip): bool
     {
+        $ip    = self::normalizeIp($ip);
         $extra = preg_split('/[\s,;]+/', (string) $this->params->get('cf_ranges_extra', '')) ?: [];
         foreach (array_merge(self::CF_RANGES, array_filter($extra)) as $cidr) {
             if (self::ipInCidr($ip, (string) $cidr)) {
@@ -667,7 +716,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
     {
         // CF-Connecting-IP is a plain request header anyone can send: it counts only when the connection itself
         // comes from a Cloudflare address (built-in list + the "extra ranges" option for a changed list).
-        $ip     = trim((string) $input->server->getString('REMOTE_ADDR', ''));
+        $ip     = self::normalizeIp((string) $input->server->getString('REMOTE_ADDR', ''));
         $cfHead = trim((string) $input->server->getString('HTTP_CF_CONNECTING_IP', ''));
         if ($cfHead !== '' && filter_var($cfHead, FILTER_VALIDATE_IP) && filter_var($ip, FILTER_VALIDATE_IP) && $this->fromCloudflare($ip)) {
             $ip = $cfHead;
@@ -2165,9 +2214,10 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
     }
 
     /** http(s) URLs only (FILTER_VALIDATE_URL alone also lets ftp:, file:, gopher: through). */
-    private static function httpUrlOk(string $url): bool
+    public static function httpUrlOk(string $url): bool
     {
-        return (bool) preg_match('#^https?://[^\s]+$#i', $url) && filter_var($url, FILTER_VALIDATE_URL) !== false;
+        // No backslash, "@" or "#": PHP and curl read them differently, which is how an address gets made to point elsewhere.
+        return strpbrk($url, chr(92) . '@#') === false && (bool) preg_match('#^https?://[^\s]+$#i', $url) && filter_var($url, FILTER_VALIDATE_URL) !== false;
     }
 
     /** Where the element's webhook points, kept on the booking for the later events. No secrets: the profile is a name. */
@@ -2350,6 +2400,10 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
     /** An HTTP client that connects to the address safeTarget() approved, and never follows a redirect. */
     private function pinnedHttp(array $pin)
     {
+        // The address pin (CURLOPT_RESOLVE) only exists in the curl transport: never fall back to the stream one.
+        if (!function_exists('curl_init')) {
+            return null;
+        }
         $ip = strpos($pin['ip'], ':') !== false ? '[' . $pin['ip'] . ']' : $pin['ip'];
 
         return (new HttpFactory())->getHttp([
@@ -2359,7 +2413,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                 CURLOPT_PROTOCOLS      => CURLPROTO_HTTP | CURLPROTO_HTTPS,
                 CURLOPT_REDIR_PROTOCOLS => CURLPROTO_HTTPS,
             ],
-        ]);
+        ], ['curl']);
     }
 
     /** A webhook that must not be sent: say why in the log (Italian, no values), tell the staff once, and answer 'refused' (not worth a retry). */
@@ -2433,9 +2487,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                 return true;                                     // nothing configured: nothing to deliver
             }
             if (!self::httpUrlOk($url)) {
-                $this->wlog(Text::_('PLG_SYSTEM_WEBGBOOKING_LOG_HOOK_BADURL'));
-
-                return true;
+                return $this->hookRefuse($row, $event, Text::_('PLG_SYSTEM_WEBGBOOKING_WHY_BADURL'));
             }
             if ($headers && stripos($url, 'https://') !== 0) {
                 return $this->hookRefuse($row, $event, Text::_('PLG_SYSTEM_WEBGBOOKING_WHY_HTTPS'));
@@ -2448,6 +2500,9 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             $method = strtoupper(trim((string) ($cfg['method'] ?? '')) !== '' ? (string) $cfg['method'] : (string) $this->params->get('booking_webhook_method', 'POST'));
             $data   = $this->hookPayload($row, $event, $extra);
             $http   = $this->pinnedHttp($pin);
+            if ($http === null) {
+                return $this->hookRefuse($row, $event, Text::_('PLG_SYSTEM_WEBGBOOKING_WHY_NOCURL'));
+            }
             if ($method === 'GET') {
                 $sep  = strpos($url, '?') === false ? '?' : '&';
                 $resp = $http->get($url . $sep . http_build_query($data), $headers, 8);
@@ -2801,7 +2856,13 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
 
                 return true;
             }
-            $resp = $this->pinnedHttp($pin)->post(
+            $http = $this->pinnedHttp($pin);
+            if ($http === null) {
+                $this->wlog(Text::_('PLG_SYSTEM_WEBGBOOKING_LOG_NL_NOCURL'));
+
+                return true;
+            }
+            $resp = $http->post(
                 $url,
                 json_encode([
                     'email'  => $row->customer_email,

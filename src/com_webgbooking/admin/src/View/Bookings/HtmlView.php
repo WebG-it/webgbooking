@@ -42,10 +42,34 @@ class HtmlView extends BaseHtmlView
         $this->canDelete    = $user->authorise('core.delete', 'com_webgbooking');
 
         $this->alerts = $this->collectAlerts();
+        $this->ipDiag = $this->ipDiagnostic($user);
 
         $this->addToolbar();
 
         parent::display($tpl);
+    }
+
+    /**
+     * One diagnostic line for the current request of a component administrator: how the visitor address is detected
+     * (Cloudflare header accepted or not), the format of REMOTE_ADDR and the last three characters of the detected address.
+     */
+    private function ipDiagnostic($user): string
+    {
+        try {
+            if (!$user->authorise('core.admin', 'com_webgbooking') || !\Joomla\CMS\Plugin\PluginHelper::isEnabled('system', 'webgbooking')) {
+                return '';
+            }
+            $engine = Factory::getApplication()->bootPlugin('webgbooking', 'system');
+            if (!method_exists($engine, 'ipDiagnosis')) {
+                return '';
+            }
+            $in = Factory::getApplication()->getInput()->server;
+            $d  = $engine->ipDiagnosis((string) $in->getString('REMOTE_ADDR', ''), (string) $in->getString('HTTP_CF_CONNECTING_IP', ''));
+
+            return Text::sprintf('COM_WEBGBOOKING_IPDIAG_LINE', Text::_('COM_WEBGBOOKING_IPDIAG_MODE_' . strtoupper($d['mode'])), Text::_('COM_WEBGBOOKING_IPDIAG_FMT_' . strtoupper($d['fmt'])), $d['tail'] === '' ? '-' : '...' . $d['tail']);
+        } catch (\Throwable $e) {
+            return '';
+        }
     }
 
     /** Things the admin must not miss: test-mode Stripe, undecryptable keys, bookings whose effects did not complete. */
