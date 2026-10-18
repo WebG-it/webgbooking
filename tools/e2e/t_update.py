@@ -1,7 +1,8 @@
 """Auto-update as Joomla really does it: the update found through the PUBLISHED updates-pkg.xml must be tied to the
 installed package (extension_id, client_id), listed in Extensions > Update and applicable from there.
 The older kit only looked rows up by element name, which hid a missing <client> for three releases.
-Install an OLDER release of the package first, then run this (it uses the live update server)."""
+Install an OLDER release of the package first (files owned by the web user, as after an install from the admin: a CLI install
+as root leaves files the web server cannot overwrite and the update fails with "Copy file failed"), then run this (it uses the live update server)."""
 import sys, os, re, json, base64, urllib.parse
 from wgbtest import *
 from t_admin_lib import admin_login, post_pairs
