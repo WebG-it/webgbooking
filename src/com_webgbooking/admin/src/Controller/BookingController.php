@@ -99,6 +99,9 @@ class BookingController extends BaseController
         if (($r['google_ok'] ?? 0) > 0) {
             $app->enqueueMessage(Text::plural('COM_WEBGBOOKING_CANCEL_GOOGLE_DELETED', (int) $r['google_ok']), 'message');
         }
+        if (($r['refund'] ?? 0) > 0) {
+            $app->enqueueMessage(Text::plural('COM_WEBGBOOKING_CANCEL_REFUND_DUE', (int) $r['refund']), 'warning');
+        }
         if (($r['mail_fail'] ?? 0) > 0) {
             $app->enqueueMessage(Text::plural('COM_WEBGBOOKING_CANCEL_MAIL_FAILED', (int) $r['mail_fail']), 'warning');
         }
@@ -115,9 +118,17 @@ class BookingController extends BaseController
         $ids = $this->cid();
 
         try {
-            $n = $ids ? $this->getModel('Booking')->deleteItems($ids) : 0;
+            $model = $this->getModel('Booking');
+            $n     = $ids ? $model->deleteItems($ids) : 0;
             if ($n > 0) {
                 $this->setMessage(Text::plural('COM_WEBGBOOKING_N_BOOKINGS_DELETED', $n));
+                $app = Factory::getApplication();
+                if (($model->deleteReport['google_ok'] ?? 0) > 0) {
+                    $app->enqueueMessage(Text::plural('COM_WEBGBOOKING_CANCEL_GOOGLE_DELETED', (int) $model->deleteReport['google_ok']), 'message');
+                }
+                if (($model->deleteReport['google_fail'] ?? 0) > 0) {
+                    $app->enqueueMessage(Text::plural('COM_WEBGBOOKING_CANCEL_GOOGLE_FAILED', (int) $model->deleteReport['google_fail']), 'warning');
+                }
             } else {
                 $this->setMessage(Text::_('COM_WEBGBOOKING_NO_ROWS_SELECTED'), 'warning');
             }

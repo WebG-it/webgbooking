@@ -7,7 +7,7 @@
     <creationDate>2026-06</creationDate>
     <copyright>(C) 2026 Marco Galassi / WebG</copyright>
     <license>GNU General Public License version 2 or later</license>
-    <version>0.26.0</version>
+    <version>0.27.0</version>
     <description>PLG_SYSTEM_WEBGBOOKING_XML_DESCRIPTION</description>
     <scriptfile>script.php</scriptfile>
     <namespace path="src">WebG\Plugin\System\Webgbooking</namespace>
@@ -126,6 +126,37 @@
                 <field name="reminder_body" type="editor" filter="raw" default="" height="220"
                     label="PLG_SYSTEM_WEBGBOOKING_REMINDER_BODY_LABEL"
                     description="PLG_SYSTEM_WEBGBOOKING_EMAIL_PLACEHOLDERS" />
+            </fieldset>
+
+            <fieldset name="payments" label="PLG_SYSTEM_WEBGBOOKING_PAY_FIELDSET"
+                addfieldprefix="WebG\Plugin\System\Webgbooking\Field">
+                <field type="note" name="pay_note" class="alert alert-info"
+                    label="PLG_SYSTEM_WEBGBOOKING_PAY_FIELDSET"
+                    description="PLG_SYSTEM_WEBGBOOKING_PAY_DESC" />
+                <field name="stripe_mode" type="radio" layout="joomla.form.field.radio.switcher" default="test"
+                    label="PLG_SYSTEM_WEBGBOOKING_PAY_MODE_LABEL"
+                    description="PLG_SYSTEM_WEBGBOOKING_PAY_MODE_DESC">
+                    <option value="test">PLG_SYSTEM_WEBGBOOKING_PAY_MODE_TEST</option>
+                    <option value="live">PLG_SYSTEM_WEBGBOOKING_PAY_MODE_LIVE</option>
+                </field>
+                <field name="stripe_pk" type="text" default="" size="60" autocomplete="off"
+                    label="PLG_SYSTEM_WEBGBOOKING_PAY_PK_LABEL"
+                    description="PLG_SYSTEM_WEBGBOOKING_PAY_PK_DESC" />
+                <field name="stripe_sk" type="secret" default=""
+                    label="PLG_SYSTEM_WEBGBOOKING_PAY_SK_LABEL"
+                    description="PLG_SYSTEM_WEBGBOOKING_PAY_SK_DESC" />
+                <field name="stripe_whsec" type="secret" default=""
+                    label="PLG_SYSTEM_WEBGBOOKING_PAY_WHSEC_LABEL"
+                    description="PLG_SYSTEM_WEBGBOOKING_PAY_WHSEC_DESC" />
+                <field name="stripe_webhook_url" type="webhookurl"
+                    label="PLG_SYSTEM_WEBGBOOKING_PAY_WEBHOOK_LABEL"
+                    description="PLG_SYSTEM_WEBGBOOKING_PAY_WEBHOOK_DESC" />
+                <field name="stripe_hold_minutes" type="number" default="30" min="30" max="1440"
+                    label="PLG_SYSTEM_WEBGBOOKING_PAY_HOLD_LABEL"
+                    description="PLG_SYSTEM_WEBGBOOKING_PAY_HOLD_DESC" />
+                <field name="paid_cancel_hours" type="number" default="24" min="0"
+                    label="PLG_SYSTEM_WEBGBOOKING_PAY_CANCEL_LABEL"
+                    description="PLG_SYSTEM_WEBGBOOKING_PAY_CANCEL_DESC" />
             </fieldset>
         </fields>
     </config>

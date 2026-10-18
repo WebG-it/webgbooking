@@ -50,5 +50,27 @@
     "allow_guest": false
    }
   ]
+ },
+ "paid60": {
+  "title": "Un'ora con un esperto",
+  "service": "Un'ora con un esperto",
+  "event_duration": "60",
+  "event_buffer_before": "15",
+  "event_buffer_after": "15",
+  "event_location": "choice",
+  "price_amount": "49",
+  "price_currency": "EUR",
+  "price_label": "Un'ora con un esperto",
+  "allow_guest": true
+ },
+ "paid30": {
+  "title": "Audit SEO",
+  "service": "Audit SEO",
+  "event_duration": "30",
+  "event_location": "meet",
+  "price_amount": "29,00",
+  "redirect_url": "/wgbtest/thanks.html",
+  "analytics_event": "paid_booking_done",
+  "allow_guest": true
  }
 }

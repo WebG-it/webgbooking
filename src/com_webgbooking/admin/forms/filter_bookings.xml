@@ -21,6 +21,9 @@
             <option value="completed">COM_WEBGBOOKING_STATUS_COMPLETED</option>
             <option value="no-show">COM_WEBGBOOKING_STATUS_NOSHOW</option>
             <option value="cancelled">COM_WEBGBOOKING_STATUS_CANCELLED</option>
+            <option value="awaiting_payment">COM_WEBGBOOKING_STATUS_AWAITING_PAYMENT</option>
+            <option value="needs_review">COM_WEBGBOOKING_STATUS_NEEDS_REVIEW</option>
+            <option value="expired">COM_WEBGBOOKING_STATUS_EXPIRED</option>
         </field>
         <field
             name="date_from"

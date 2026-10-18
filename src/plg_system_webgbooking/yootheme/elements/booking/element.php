@@ -82,9 +82,24 @@ return [
             'type' => 'select',
             'options' => ['Google Meet' => 'meet', 'Phone call (I call the visitor)' => 'phone', 'Visitor choice' => 'choice'],
         ],
+        'price_amount' => [
+            'label' => 'Price',
+            'description' => 'Paid event: the amount to charge with Stripe Checkout at booking, e.g. <code>49</code> or <code>29,00</code>. Empty or 0 = free event (nothing changes). Needs the Stripe keys in the plugin options (Payments tab).',
+            'type' => 'text',
+        ],
+        'price_currency' => [
+            'label' => 'Currency',
+            'description' => 'Three-letter code. Empty = EUR.',
+            'type' => 'text',
+        ],
+        'price_label' => [
+            'label' => 'Charge description',
+            'description' => 'Line shown on the Stripe payment page and receipt, e.g. "One hour with an expert". Empty = the Service name.',
+            'type' => 'text',
+        ],
         'redirect_url' => [
             'label' => 'Thank-you page URL',
-            'description' => 'Optional. After a completed booking the visitor is taken to this page (the analytics event is sent first). Empty = the confirmation stays in the widget. Absolute https:// URL or a path like /thanks.',
+            'description' => 'Optional. After a completed booking (for a paid event: after the payment is confirmed) the visitor is taken to this page. Empty = the confirmation stays in the widget. Absolute https:// URL or a path like /thanks.',
             'type' => 'text',
         ],
 
@@ -289,7 +304,7 @@ return [
                 ],
                 [
                     'title' => 'Event',
-                    'fields' => ['event_duration', 'event_buffer_before', 'event_buffer_after', 'event_location', 'redirect_url'],
+                    'fields' => ['event_duration', 'event_buffer_before', 'event_buffer_after', 'event_location', 'price_amount', 'price_currency', 'price_label', 'redirect_url'],
                 ],
                 [
                     'title' => 'Form',

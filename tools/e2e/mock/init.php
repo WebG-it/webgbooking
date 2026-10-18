@@ -26,6 +26,14 @@ foreach ($argv as $i => $a) {
         $opts[$k] = $v;
     }
 }
+$encKey = hash('sha256', (string) $app->get('secret'), true);
+foreach (['stripe_sk', 'stripe_whsec'] as $k) {
+    if (!empty($opts[$k]) && strncmp($opts[$k], 'g:', 2) !== 0) {
+        $iv0 = random_bytes(12); $tag0 = '';
+        $ct0 = openssl_encrypt($opts[$k], 'aes-256-gcm', $encKey, OPENSSL_RAW_DATA, $iv0, $tag0);
+        $opts[$k] = 'g:' . base64_encode($iv0 . $tag0 . $ct0);
+    }
+}
 $db->setQuery($db->getQuery(true)->update('#__extensions')->set($db->quoteName('params') . ' = ' . $db->quote(json_encode($opts)))
     ->where("type='plugin' AND element='webgbooking' AND folder='system'"))->execute();
 

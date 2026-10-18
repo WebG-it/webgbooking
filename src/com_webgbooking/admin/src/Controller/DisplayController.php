@@ -56,7 +56,7 @@ class DisplayController extends BaseController
         $out = fopen('php://output', 'w');
         // UTF-8 BOM so Excel opens accents correctly.
         fwrite($out, "\xEF\xBB\xBF");
-        fputcsv($out, ['ID', 'Created', 'Date', 'Time', 'Name', 'Email', 'Phone', 'Guest', 'Notes', 'Status', 'Meeting', 'Custom', 'Location', 'Duration', 'Event']);
+        fputcsv($out, ['ID', 'Created', 'Date', 'Time', 'Name', 'Email', 'Phone', 'Guest', 'Notes', 'Status', 'Meeting', 'Custom', 'Location', 'Duration', 'Event', 'Payment', 'Amount', 'Currency', 'Stripe session', 'Stripe payment intent']);
 
         foreach ($rows ?: [] as $r) {
             fputcsv($out, array_map([$this, 'safeCell'], [
@@ -75,6 +75,11 @@ class DisplayController extends BaseController
                 ($r->location ?? '') === 'phone' ? 'phone' : 'meet',
                 (string) ($r->duration_min ?? ''),
                 $r->event_name ?? '',
+                $r->payment_status ?? '',
+                isset($r->amount_cents) && $r->amount_cents !== null ? number_format(((int) $r->amount_cents) / 100, 2, '.', '') : '',
+                $r->currency ?? '',
+                $r->stripe_session_id ?? '',
+                $r->stripe_payment_intent ?? '',
             ]));
         }
 
@@ -109,7 +114,7 @@ class DisplayController extends BaseController
                 ->order($db->quoteName('booking_time') . ' DESC')
         )->loadObjectList();
 
-        $data = [['ID', 'Created', 'Date', 'Time', 'Name', 'Email', 'Phone', 'Guest', 'Notes', 'Status', 'Meeting', 'Custom', 'Location', 'Duration', 'Event']];
+        $data = [['ID', 'Created', 'Date', 'Time', 'Name', 'Email', 'Phone', 'Guest', 'Notes', 'Status', 'Meeting', 'Custom', 'Location', 'Duration', 'Event', 'Payment', 'Amount', 'Currency', 'Stripe session', 'Stripe payment intent']];
         foreach ($rows ?: [] as $r) {
             $data[] = [
                 (string) $r->id, (string) $r->created, (string) $r->booking_date, (string) $r->booking_time,
@@ -117,6 +122,8 @@ class DisplayController extends BaseController
                 (string) ($r->guest_email ?? ''), (string) ($r->notes ?? ''), (string) $r->status, (string) ($r->meeting_url ?? ''),
                 $this->customText($r->custom_data ?? ''),
                 ($r->location ?? '') === 'phone' ? 'phone' : 'meet', (string) ($r->duration_min ?? ''), (string) ($r->event_name ?? ''),
+                (string) ($r->payment_status ?? ''), isset($r->amount_cents) && $r->amount_cents !== null ? number_format(((int) $r->amount_cents) / 100, 2, '.', '') : '', (string) ($r->currency ?? ''),
+                (string) ($r->stripe_session_id ?? ''), (string) ($r->stripe_payment_intent ?? ''),
             ];
         }
 

@@ -81,8 +81,8 @@ class BookingsModel extends ListModel
             'total'     => $count(),
             'pending'   => $count($db->quoteName('status') . ' = ' . $db->quote('pending')),
             'confirmed' => $count($db->quoteName('status') . ' = ' . $db->quote('confirmed')),
-            'today'     => $count($db->quoteName('booking_date') . ' = ' . $db->quote($today) . ' AND ' . $db->quoteName('status') . ' != ' . $db->quote('cancelled')),
-            'upcoming'  => $count($db->quoteName('booking_date') . ' >= ' . $db->quote($today) . ' AND ' . $db->quoteName('status') . ' NOT IN (' . $db->quote('cancelled') . ',' . $db->quote('completed') . ',' . $db->quote('no-show') . ')'),
+            'today'     => $count($db->quoteName('booking_date') . ' = ' . $db->quote($today) . ' AND ' . $db->quoteName('status') . ' NOT IN (' . $db->quote('cancelled') . ',' . $db->quote('expired') . ',' . $db->quote('awaiting_payment') . ')'),
+            'upcoming'  => $count($db->quoteName('booking_date') . ' >= ' . $db->quote($today) . ' AND ' . $db->quoteName('status') . ' NOT IN (' . $db->quote('cancelled') . ',' . $db->quote('completed') . ',' . $db->quote('no-show') . ',' . $db->quote('expired') . ',' . $db->quote('awaiting_payment') . ')'),
         ];
     }
 

@@ -20,7 +20,7 @@ use Joomla\CMS\Plugin\PluginHelper;
 class BookingModel extends BaseDatabaseModel
 {
     /** Allowed booking statuses (shared vocabulary with the plugin). */
-    public const STATUSES = ['pending', 'confirmed', 'cancelled', 'completed', 'no-show'];
+    public const STATUSES = ['pending', 'confirmed', 'cancelled', 'completed', 'no-show', 'awaiting_payment', 'expired', 'needs_review'];
 
     /** Load one booking by id. */
     public function getItem(int $id): ?object
@@ -40,8 +40,11 @@ class BookingModel extends BaseDatabaseModel
         )->loadObject() ?: null;
     }
 
+    /** Outcome of the last deleteItems() call (Google events removed with the rows). */
+    public array $deleteReport = ['google_ok' => 0, 'google_fail' => 0, 'engine' => true];
+
     /** Outcome of the last cancelBookings() call, for the admin message. */
-    public array $cancelReport = ['done' => 0, 'already' => 0, 'google_ok' => 0, 'google_fail' => 0, 'mail_ok' => 0, 'mail_fail' => 0, 'engine' => true];
+    public array $cancelReport = ['done' => 0, 'already' => 0, 'google_ok' => 0, 'google_fail' => 0, 'mail_ok' => 0, 'mail_fail' => 0, 'refund' => 0, 'engine' => true];
 
     /**
      * Cancel bookings the way the customer's own "cancel" does: the status changes, the Google Calendar event is
@@ -52,7 +55,7 @@ class BookingModel extends BaseDatabaseModel
     public function cancelBookings(array $ids): int
     {
         $ids = array_values(array_filter(array_map('intval', $ids), static fn($i) => $i > 0));
-        $this->cancelReport = ['done' => 0, 'already' => 0, 'google_ok' => 0, 'google_fail' => 0, 'mail_ok' => 0, 'mail_fail' => 0, 'engine' => true];
+        $this->cancelReport = ['done' => 0, 'already' => 0, 'google_ok' => 0, 'google_fail' => 0, 'mail_ok' => 0, 'mail_fail' => 0, 'refund' => 0, 'engine' => true];
 
         if (!$ids) {
             return 0;
@@ -88,6 +91,13 @@ class BookingModel extends BaseDatabaseModel
             }
 
             $this->cancelReport['done']++;
+            if (!empty($r['refund'])) {
+                $this->cancelReport['refund']++;
+            }
+            // A booking that was never confirmed (unpaid hold) has no email and no Google event: nothing to report.
+            if (($r['google'] ?? null) === null && empty($r['mail']) && empty($r['refund']) && ($r['status'] ?? '') === 'ok') {
+                continue;
+            }
             if (($r['google'] ?? null) === true) {
                 $this->cancelReport['google_ok']++;
             } elseif (($r['google'] ?? null) === false) {
@@ -140,9 +150,35 @@ class BookingModel extends BaseDatabaseModel
     public function deleteItems(array $ids): int
     {
         $ids = array_values(array_filter(array_map('intval', $ids), static fn($i) => $i > 0));
+        $this->deleteReport = ['google_ok' => 0, 'google_fail' => 0, 'engine' => true];
 
         if (!$ids) {
             return 0;
+        }
+
+        // Take the Google event away (and close an open Stripe session) BEFORE the rows disappear.
+        $engine = null;
+        try {
+            if (PluginHelper::isEnabled('system', 'webgbooking')) {
+                $candidate = Factory::getApplication()->bootPlugin('webgbooking', 'system');
+                if (method_exists($candidate, 'adminBeforeDelete')) {
+                    $engine = $candidate;
+                }
+            }
+        } catch (\Throwable $e) {
+            $engine = null;
+        }
+        if ($engine === null) {
+            $this->deleteReport['engine'] = false;
+        } else {
+            foreach ($ids as $id) {
+                $r = $engine->adminBeforeDelete($id);
+                if (($r['google'] ?? null) === true) {
+                    $this->deleteReport['google_ok']++;
+                } elseif (($r['google'] ?? null) === false) {
+                    $this->deleteReport['google_fail']++;
+                }
+            }
         }
 
         $db = $this->getDatabase();

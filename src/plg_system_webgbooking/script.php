@@ -72,6 +72,14 @@ return new class () implements InstallerScriptInterface {
                 . $db->quoteName('event_name') . ' VARCHAR(190) NULL,'
                 . $db->quoteName('reminder_cfg') . ' TEXT NULL,'
                 . $db->quoteName('reminders_sent') . ' TEXT NULL,'
+                . $db->quoteName('payment_status') . ' VARCHAR(20) NULL,'
+                . $db->quoteName('amount_cents') . ' INT NULL,'
+                . $db->quoteName('currency') . ' VARCHAR(3) NULL,'
+                . $db->quoteName('stripe_session_id') . ' VARCHAR(255) NULL,'
+                . $db->quoteName('stripe_payment_intent') . ' VARCHAR(255) NULL,'
+                . $db->quoteName('hold_until') . ' DATETIME NULL,'
+                . $db->quoteName('paid_at') . ' DATETIME NULL,'
+                . $db->quoteName('pending_ctx') . ' MEDIUMTEXT NULL,'
                 . 'PRIMARY KEY (' . $db->quoteName('id') . '),'
                 . 'KEY ' . $db->quoteName('idx_date') . ' (' . $db->quoteName('booking_date') . ',' . $db->quoteName('booking_time') . '),'
                 . 'KEY ' . $db->quoteName('idx_token') . ' (' . $db->quoteName('manage_token') . ')'
@@ -95,6 +103,15 @@ return new class () implements InstallerScriptInterface {
                 'event_name'      => 'VARCHAR(190) NULL',
                 'reminder_cfg'    => 'TEXT NULL',
                 'reminders_sent'  => 'TEXT NULL',
+                // 0.32.0: paid events (Stripe Checkout)
+                'payment_status'        => 'VARCHAR(20) NULL',
+                'amount_cents'          => 'INT NULL',
+                'currency'              => 'VARCHAR(3) NULL',
+                'stripe_session_id'     => 'VARCHAR(255) NULL',
+                'stripe_payment_intent' => 'VARCHAR(255) NULL',
+                'hold_until'            => 'DATETIME NULL',
+                'paid_at'               => 'DATETIME NULL',
+                'pending_ctx'           => 'MEDIUMTEXT NULL',
             ];
             foreach ($newCols as $name => $def) {
                 try {
@@ -105,6 +122,28 @@ return new class () implements InstallerScriptInterface {
                 } catch (\Throwable $e) {
                 }
             }
+
+            // Index to find a booking from a Stripe session id (webhook / return page) and the unpaid holds.
+            foreach (['idx_stripe_session' => ['stripe_session_id(100)'], 'idx_status_hold' => ['status', 'hold_until']] as $ix => $cols) {
+                try {
+                    $has = $db->setQuery('SHOW INDEX FROM ' . $db->quoteName('#__webgbooking_bookings') . ' WHERE Key_name = ' . $db->quote($ix))->loadResult();
+                    if (!$has) {
+                        $db->setQuery('ALTER TABLE ' . $db->quoteName('#__webgbooking_bookings') . ' ADD INDEX ' . $db->quoteName($ix) . ' (' . implode(',', array_map(fn($c) => strpos($c, '(') === false ? $db->quoteName($c) : $c, $cols)) . ')')->execute();
+                    }
+                } catch (\Throwable $e) {
+                }
+            }
+
+            // Processed Stripe webhook events (idempotency: the same event delivered twice has one effect).
+            $db->setQuery(
+                'CREATE TABLE IF NOT EXISTS ' . $db->quoteName('#__webgbooking_stripe_events') . ' ('
+                . $db->quoteName('event_id') . ' VARCHAR(100) NOT NULL,'
+                . $db->quoteName('type') . ' VARCHAR(80) NULL,'
+                . $db->quoteName('created') . ' DATETIME NOT NULL,'
+                . $db->quoteName('result') . ' VARCHAR(40) NULL,'
+                . 'PRIMARY KEY (' . $db->quoteName('event_id') . ')'
+                . ') DEFAULT CHARSET=utf8mb4'
+            )->execute();
 
             // Google connection store (single row): encrypted refresh token + account.
             $db->setQuery(

@@ -114,6 +114,17 @@ if ($redir !== '' && !preg_match('#^(https?://[^\s]+|/(?!/)[^\s]*)$#i', $redir))
     $redir = '';
 }
 
+// PRICE of this element (empty / 0 = free event, nothing changes). Signed with the rest of the config, so the
+// visitor can neither lower nor remove the price.
+$priceAmt = Webgbooking::parseAmount((string) ($props['price_amount'] ?? ''));
+$priceCur = strtoupper(trim((string) ($props['price_currency'] ?? '')));
+if (!preg_match('/^[A-Z]{3}$/', $priceCur)) {
+    $priceCur = 'EUR';
+}
+$priceCfg = $priceAmt > 0
+    ? ['amt' => $priceAmt, 'cur' => $priceCur, 'label' => mb_substr(trim(strip_tags((string) ($props['price_label'] ?? ''))), 0, 120)]
+    : [];
+
 // Reminders: element override (on/off, times, text); empty times/text fall back to the plugin options.
 $remCfg = [
     'on'      => !isset($props['act_reminder_on']) || !empty($props['act_reminder_on']),
@@ -127,6 +138,8 @@ $remCfg = [
 $actionsCfg = [
     'fields' => $customDefs,
     'event' => $evCfg,
+    'price' => $priceCfg,
+    'redirect' => $redir,
     'reminder' => $remCfg,
     'customer' => [
         'on'      => !isset($props['act_customer_on']) || !empty($props['act_customer_on']),
@@ -156,6 +169,7 @@ $cfg = [
     'ev'        => $evToken,
     'location'  => $evCfg['loc'],
     'redirectUrl' => $redir,
+    'price'     => $priceCfg ? ['text' => Webgbooking::formatAmount($priceCfg['amt'], $priceCfg['cur'], $locale), 'hold' => max(30, min(1440, (int) $pp->get('stripe_hold_minutes', 30)))] : null,
     'cols'      => $slotCols,
     'slotStyle' => $slotStyle,
     'slotSize'  => $slotSize ? 'uk-button-' . $slotSize : '',
@@ -193,6 +207,9 @@ $cfg = [
         'fPhoneNeeded' => Text::_('PLG_SYSTEM_WEBGBOOKING_FIELD_PHONE_NEEDED'),
         'phoneReq'    => Text::_('PLG_SYSTEM_WEBGBOOKING_PHONE_REQUIRED'),
         'minShort'    => Text::_('PLG_SYSTEM_WEBGBOOKING_MINUTES'),
+        'payNow'      => Text::_('PLG_SYSTEM_WEBGBOOKING_PAY_NOW'),
+        'payNote'     => Text::_('PLG_SYSTEM_WEBGBOOKING_PAY_NOTE'),
+        'payRedirecting' => Text::_('PLG_SYSTEM_WEBGBOOKING_PAY_REDIRECTING'),
         'privacy'     => Text::_('PLG_SYSTEM_WEBGBOOKING_PRIVACY'),
         'bookNow'     => Text::_('PLG_SYSTEM_WEBGBOOKING_BOOK_NOW'),
         'required'    => Text::_('PLG_SYSTEM_WEBGBOOKING_REQUIRED'),
@@ -225,7 +242,7 @@ $uid = 'wgb-' . substr(md5(uniqid('', true)), 0, 8);
 // initial parse in BOTH the front end and the YOOtheme customizer preview — unlike WebAssetManager
 // scripts, which the customizer does not reliably flush to the live preview (the calendar stayed
 // blank). A MutationObserver in wgb.js then re-initialises every instance the builder re-renders.
-$wgbVer    = '0.31.0';
+$wgbVer    = '0.32.0';
 $wgbAsset  = Uri::root(true) . '/plugins/system/webgbooking/yootheme/elements/booking/assets';
 $assetTags = '<link rel="stylesheet" href="' . htmlspecialchars($wgbAsset . '/wgb.css?' . $wgbVer, ENT_QUOTES, 'UTF-8') . '">'
     . '<script src="' . htmlspecialchars($wgbAsset . '/wgb.js?' . $wgbVer, ENT_QUOTES, 'UTF-8') . '" defer></script>';

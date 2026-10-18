@@ -68,7 +68,9 @@ final class Webgbookingreminders extends CMSPlugin implements SubscriberInterfac
             }
 
             $r = $system->runReminders();
-            $this->logTask(sprintf('WebG Booking reminders: %d checked, %d sent, %d failed', $r['checked'] ?? 0, $r['sent'] ?? 0, $r['failed'] ?? 0));
+            // Paid events: unpaid holds past their time free the slot (0.32.0).
+            $expired = method_exists($system, 'expireHolds') ? (int) $system->expireHolds() : 0;
+            $this->logTask(sprintf('WebG Booking reminders: %d checked, %d sent, %d failed; %d unpaid holds expired', $r['checked'] ?? 0, $r['sent'] ?? 0, $r['failed'] ?? 0, $expired));
 
             return TaskStatus::OK;
         } catch (\Throwable $e) {

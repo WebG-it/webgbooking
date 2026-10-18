@@ -40,6 +40,7 @@
         })
         .then(function(r){return r.json();})
         .then(function(res){
+          if(res&&res.ok&&res.redirect){try{window.dataLayer=window.dataLayer||[];window.dataLayer.push({event:'wgb_checkout_started'});}catch(e){}mount.innerHTML='<div class="uk-text-center uk-padding-small" role="status"><span uk-spinner></span> '+esc(L.payRedirecting||'')+'</div>';window.location.href=res.redirect;return;}
           if(res&&res.ok){track();mount.innerHTML='<div class="uk-alert uk-alert-success" role="alert" uk-alert>'+esc(res.message||L.done)+'</div>';goThanks();}
           else{mount.innerHTML=errBox((res&&res.message)||L.bookErr);}
         })
@@ -93,7 +94,7 @@
         }
       } else if(st.step==='time'){
         h.push(summary());
-        h.push('<div class="uk-text-meta uk-text-bold uk-margin-small-bottom">'+esc(L.stepTime)+(cfg.duration?' · '+cfg.duration+' '+esc(L.minShort||'min'):'')+(cfg.location&&cfg.location!=='choice'?' · '+esc(locLabel()):'')+'</div>');
+        h.push('<div class="uk-text-meta uk-text-bold uk-margin-small-bottom">'+esc(L.stepTime)+(cfg.duration?' · '+cfg.duration+' '+esc(L.minShort||'min'):'')+(cfg.location&&cfg.location!=='choice'?' · '+esc(locLabel()):'')+(cfg.price?' · '+esc(cfg.price.text):'')+'</div>');
         if(st.loadingBusy){h.push('<div class="uk-text-center uk-padding-small"><span uk-spinner></span></div>');}
         else{var sl=st.daySlots||[];
         if(!sl.length)h.push('<div class="uk-alert uk-alert-warning" role="status" uk-alert>'+esc(L.noSlots)+'</div>');
@@ -118,7 +119,8 @@
         h.push('<label class="uk-margin-small uk-display-block"><input class="uk-checkbox wgb-f-privacy" type="checkbox" aria-required="true"'+(st.form.privacy?' checked':'')+'> '+esc(L.privacy)+' <span class="wgb-req">*</span></label>');
         h.push('<input type="text" class="wgb-f-website" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute!important;left:-9999px;top:-9999px;height:1px;width:1px;opacity:0">');
         var enote=(effLoc()==='phone'&&L.emailNotePhone)?L.emailNotePhone:L.emailNote;if(enote)h.push('<div class="uk-text-meta uk-margin-small-top">'+esc(enote)+'</div>');
-        h.push('<button type="button" class="uk-button uk-button-'+(cfg.btnStyle||'primary')+' uk-width-1-1 uk-margin-small-top" data-act="book">'+esc(L.bookNow)+'</button>');
+        if(cfg.price&&L.payNote)h.push('<div class="uk-text-meta uk-margin-small-top">'+esc(L.payNote.replace('%d',cfg.price.hold))+'</div>');
+        h.push('<button type="button" class="uk-button uk-button-'+(cfg.btnStyle||'primary')+' uk-width-1-1 uk-margin-small-top" data-act="book">'+esc(cfg.price&&L.payNow?L.payNow.replace('%s',cfg.price.text):L.bookNow)+'</button>');
       } else if(st.step==='confirm'){
         h.push(summary());
         h.push('<div class="uk-text-meta uk-margin-small-bottom">'+esc(L.rsIntro||'')+'</div>');

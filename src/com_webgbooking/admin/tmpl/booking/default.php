@@ -19,7 +19,12 @@ $badge = [
     'cancelled' => 'bg-danger',
     'completed' => 'bg-info',
     'no-show'   => 'bg-dark',
+    'awaiting_payment' => 'bg-info',
+    'expired'   => 'bg-secondary',
+    'needs_review' => 'bg-danger',
 ][$i->status] ?? 'bg-secondary';
+$stKey = 'COM_WEBGBOOKING_STATUS_' . strtoupper(str_replace('-', '', (string) $i->status));
+$stText = Text::_($stKey) !== $stKey ? Text::_($stKey) : (string) $i->status;
 
 $e = static fn($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
 
@@ -44,7 +49,7 @@ $manageLink = Uri::root() . 'index.php?option=com_ajax&group=system&plugin=webgb
         <div class="card-body">
             <h2 class="card-title h4">
                 <?php echo $e($i->customer_name); ?>
-                <span class="badge <?php echo $badge; ?> align-middle"><?php echo $e($i->status); ?></span>
+                <span class="badge <?php echo $badge; ?> align-middle"><?php echo $e($stText); ?></span>
             </h2>
 
             <table class="table table-striped align-middle mt-3">
@@ -73,6 +78,21 @@ $manageLink = Uri::root() . 'index.php?option=com_ajax&group=system&plugin=webgb
                 $row(Text::_('COM_WEBGBOOKING_COL_LOCATION'), $isPhone ? Text::_('COM_WEBGBOOKING_LOC_PHONE') : Text::_('COM_WEBGBOOKING_LOC_MEET'));
                 if (!empty($i->duration_min)) {
                     $row(Text::_('COM_WEBGBOOKING_DETAIL_DURATION'), (int) $i->duration_min . ' min');
+                }
+                if (!empty($i->payment_status) && (int) ($i->amount_cents ?? 0) > 0) {
+                    $row(Text::_('COM_WEBGBOOKING_COL_PAYMENT'), number_format(((int) $i->amount_cents) / 100, 2, ',', '.') . ' ' . strtoupper((string) $i->currency) . ' · ' . Text::_('COM_WEBGBOOKING_PAY_' . strtoupper((string) $i->payment_status)) . (($i->payment_status === 'paid' && $i->status === 'cancelled') ? ' · ' . Text::_('COM_WEBGBOOKING_PAY_REFUND_DUE') : ''));
+                    if (!empty($i->paid_at)) {
+                        $row(Text::_('COM_WEBGBOOKING_DETAIL_PAID_AT'), (string) $i->paid_at . ' UTC');
+                    }
+                    if (!empty($i->hold_until) && $i->status === 'awaiting_payment') {
+                        $row(Text::_('COM_WEBGBOOKING_DETAIL_HOLD_UNTIL'), (string) $i->hold_until . ' UTC');
+                    }
+                    if (!empty($i->stripe_payment_intent)) {
+                        $row(Text::_('COM_WEBGBOOKING_DETAIL_STRIPE_PI'), $e($i->stripe_payment_intent), true);
+                    }
+                    if (!empty($i->stripe_session_id)) {
+                        $row(Text::_('COM_WEBGBOOKING_DETAIL_STRIPE_SESSION'), $e($i->stripe_session_id), true);
+                    }
                 }
                 $rs = json_decode((string) ($i->reminders_sent ?? ''), true);
                 $rc = json_decode((string) ($i->reminder_cfg ?? ''), true);

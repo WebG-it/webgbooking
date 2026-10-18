@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.32.0 (pacchetto) · componente 0.5.0 · plugin di sistema 0.27.0 · plugin task 0.2.0
+
+Fase 2: pagamento con Stripe Checkout, piu' due chiusure della fase 1.
+
+### Novita'
+- **Eventi a pagamento** (scheda *Event* dell'elemento: Prezzo, Valuta, Descrizione riga). La config e' firmata HMAC con il resto: il visitatore non puo' abbassare o togliere il prezzo, e una richiesta senza config firmata valida viene rifiutata (prima prenotava un evento "gratis" di default). Prezzo vuoto o 0 = evento gratuito, tutto come prima.
+- **Flusso**: al conferma la prenotazione nasce `awaiting_payment` (slot tenuto 30 minuti, configurabile da 30 a 1440) e il server crea una Checkout Session (API REST via HTTP Joomla, nessun SDK); il browser va a Stripe. Email, evento Google/Meet, Sheet, webhook e promemoria partono SOLO a pagamento confermato. La ricevuta e' quella di Stripe (`receipt_email` = email del cliente). Il widget mostra il prezzo e "Paga X e prenota".
+- **Conferma pagamento**: endpoint webhook Stripe (`action=stripewebhook`) con verifica di `Stripe-Signature` (HMAC-SHA256, tolleranza 5 minuti, `hash_equals`), idempotente (tabella `#__webgbooking_stripe_events` + passaggio di stato atomico: lo stesso evento due volte, o lo stesso pagamento con due id evento, ha un solo effetto), eventi `checkout.session.completed`, `checkout.session.expired` e `async_payment_succeeded/failed`. Gli eventi del modo sbagliato (test/live) sono ignorati.
+- **Rete di sicurezza**: la pagina di ritorno rilegge la sessione da Stripe con la chiave segreta e conferma solo se pagata (i parametri dell'URL non contano). Importo e valuta della sessione devono coincidere col prezzo.
+- **Pagamento tardivo**: se l'hold e' scaduto ma lo slot e' ancora libero la prenotazione si conferma; se qualcuno l'ha presa (o l'importo non torna) la prenotazione passa a `needs_review` ("Da gestire") e lo staff riceve un'email per rimborsare a mano. Niente doppio incontro silenzioso.
+- **Scadenza**: un hold scaduto non blocca piu' lo slot (subito, nel calcolo disponibilita') e l'attivita' pianificata lo marca `expired` e chiude la sessione Stripe; se Stripe dice che nel frattempo era stato pagato, conferma invece di scadere. Il tasto "indietro" di Stripe libera subito lo slot.
+- **Opzioni del plugin, scheda Payments**: modalita' test/live, chiave pubblicabile, chiave segreta e segreto del webhook **cifrati a riposo (AES-256-GCM come il token Google) e mai rimandati al form** (mostra solo "impostata"; vuoto = non cambia, trattino = cancella), URL del webhook da registrare su Stripe, durata hold, preavviso di annullo gratuito. Al salvataggio la chiave segreta viene verificata con Stripe e controllata contro la modalita'.
+- **Politica di annullo**: una prenotazione PAGATA si annulla/sposta da sola dal cliente fino a 24 ore prima (configurabile); dopo, la pagina spiega di contattarti. Se annulla il cliente, mail di conferma con "ti rimborseremo X" e avviso allo staff; se annulla l'admin, avviso a video di rimborsare a mano. I rimborsi si fanno a mano da Stripe.
+- **Admin**: stati `awaiting_payment`, `expired`, `needs_review` (filtro, badge, nomi tradotti), colonna Pagamento in lista (importo, stato, riferimento Stripe, "annullata: da rimborsare a mano"), dettaglio con payment intent e sessione, export CSV/XLSX con le colonne di pagamento in coda. L'email al cliente dice "Pagamento ricevuto: 29,00 €" (segnaposto `{amount}` e `{payment_block}`).
+- Nuove colonne in `#__webgbooking_bookings`: `payment_status`, `amount_cents`, `currency`, `stripe_session_id`, `stripe_payment_intent`, `hold_until`, `paid_at`, `pending_ctx`; nuova tabella `#__webgbooking_stripe_events` (ALTER/CREATE idempotenti).
+
+### Chiusure della fase 1
+- **Promemoria anche all'ospite** invitato (senza link di gestione e senza il telefono del cliente).
+- **Eliminare dall'admin rimuove anche l'evento Google** (e chiude una sessione Stripe aperta); il messaggio dice cosa e' stato fatto.
+
 ## 0.31.0 (pacchetto) · componente 0.4.0 · plugin di sistema 0.26.0 · plugin task 0.1.0 (nuovo)
 
 Fase 1 per sostituire Calendly.

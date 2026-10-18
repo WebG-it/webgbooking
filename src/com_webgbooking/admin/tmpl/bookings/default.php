@@ -25,7 +25,28 @@ $badgeClass = [
     'cancelled' => 'bg-danger',
     'completed' => 'bg-info',
     'no-show'   => 'bg-dark',
+    'awaiting_payment' => 'bg-info',
+    'expired'   => 'bg-secondary',
+    'needs_review' => 'bg-danger',
 ];
+$stLabel = static function (string $st): string {
+    $k = 'COM_WEBGBOOKING_STATUS_' . strtoupper(str_replace('-', '', $st));
+
+    return Text::_($k) !== $k ? Text::_($k) : $st;
+};
+$payInfo = static function ($i): string {
+    $ps = (string) ($i->payment_status ?? '');
+    if ($ps === '' || (int) ($i->amount_cents ?? 0) <= 0) {
+        return '';
+    }
+    $amt = number_format(((int) $i->amount_cents) / 100, 2, ',', '.') . ' ' . strtoupper((string) $i->currency);
+    $lbl = Text::_('COM_WEBGBOOKING_PAY_' . strtoupper($ps));
+    if ($ps === 'paid' && $i->status === 'cancelled') {
+        $lbl = Text::_('COM_WEBGBOOKING_PAY_REFUND_DUE');
+    }
+
+    return $amt . ' · ' . $lbl;
+};
 ?>
 <div class="row mb-3 g-2">
     <?php
@@ -70,6 +91,7 @@ $badgeClass = [
                     <th scope="col"><?php echo HTMLHelper::_('searchtools.sort', 'COM_WEBGBOOKING_COL_NAME', 'customer_name', $listDirn, $listOrder); ?></th>
                     <th scope="col"><?php echo HTMLHelper::_('searchtools.sort', 'COM_WEBGBOOKING_COL_EMAIL', 'customer_email', $listDirn, $listOrder); ?></th>
                     <th scope="col" class="d-none d-md-table-cell"><?php echo HTMLHelper::_('searchtools.sort', 'COM_WEBGBOOKING_COL_PHONE', 'customer_phone', $listDirn, $listOrder); ?></th>
+                    <th scope="col" class="d-none d-lg-table-cell"><?php echo Text::_('COM_WEBGBOOKING_COL_PAYMENT'); ?></th>
                     <th scope="col" class="d-none d-lg-table-cell"><?php echo Text::_('COM_WEBGBOOKING_COL_LOCATION'); ?></th>
                     <th scope="col" class="d-none d-lg-table-cell"><?php echo Text::_('COM_WEBGBOOKING_COL_MEETING'); ?></th>
                     <th scope="col"><?php echo HTMLHelper::_('searchtools.sort', 'COM_WEBGBOOKING_COL_STATUS', 'status', $listDirn, $listOrder); ?></th>
@@ -78,7 +100,7 @@ $badgeClass = [
             </thead>
             <tbody>
                 <?php if (empty($this->items)) : ?>
-                    <tr><td colspan="10"><?php echo Text::_('COM_WEBGBOOKING_EMPTY'); ?></td></tr>
+                    <tr><td colspan="11"><?php echo Text::_('COM_WEBGBOOKING_EMPTY'); ?></td></tr>
                 <?php else : ?>
                     <?php foreach ($this->items as $rowNum => $i) : ?>
                         <?php
@@ -106,6 +128,15 @@ $badgeClass = [
                             <td><a href="mailto:<?php echo htmlspecialchars((string) $i->customer_email, ENT_QUOTES, 'UTF-8'); ?>"><?php echo htmlspecialchars((string) $i->customer_email, ENT_QUOTES, 'UTF-8'); ?></a></td>
                             <td class="d-none d-md-table-cell"><?php echo htmlspecialchars((string) ($i->customer_phone ?? ''), ENT_QUOTES, 'UTF-8'); ?></td>
                             <td class="d-none d-lg-table-cell">
+                                <?php $pi = $payInfo($i); ?>
+                                <?php if ($pi !== '') : ?>
+                                    <div><?php echo htmlspecialchars($pi, ENT_QUOTES, 'UTF-8'); ?></div>
+                                    <?php if (!empty($i->stripe_payment_intent) || !empty($i->stripe_session_id)) : ?>
+                                        <div class="small text-muted"><?php echo htmlspecialchars((string) ($i->stripe_payment_intent ?: $i->stripe_session_id), ENT_QUOTES, 'UTF-8'); ?></div>
+                                    <?php endif; ?>
+                                <?php endif; ?>
+                            </td>
+                            <td class="d-none d-lg-table-cell">
                                 <?php echo htmlspecialchars((($i->location ?? '') === 'phone' ? Text::_('COM_WEBGBOOKING_LOC_PHONE') : Text::_('COM_WEBGBOOKING_LOC_MEET')) . (!empty($i->duration_min) ? ' · ' . (int) $i->duration_min . ' min' : ''), ENT_QUOTES, 'UTF-8'); ?>
                                 <?php if (($i->location ?? '') === 'phone' && !empty($i->customer_phone)) : ?>
                                     <div class="small text-muted"><?php echo htmlspecialchars((string) $i->customer_phone, ENT_QUOTES, 'UTF-8'); ?></div>
@@ -116,7 +147,7 @@ $badgeClass = [
                                     <a href="<?php echo htmlspecialchars((string) $i->meeting_url, ENT_QUOTES, 'UTF-8'); ?>" target="_blank" rel="noopener noreferrer"><?php echo Text::_('COM_WEBGBOOKING_MEETING_LINK'); ?></a>
                                 <?php endif; ?>
                             </td>
-                            <td><span class="badge <?php echo $badge; ?>"><?php echo htmlspecialchars((string) $i->status, ENT_QUOTES, 'UTF-8'); ?></span></td>
+                            <td><span class="badge <?php echo $badge; ?>"><?php echo htmlspecialchars($stLabel((string) $i->status), ENT_QUOTES, 'UTF-8'); ?></span></td>
                             <td class="d-none d-md-table-cell"><?php echo htmlspecialchars((string) $i->created, ENT_QUOTES, 'UTF-8'); ?></td>
                         </tr>
                     <?php endforeach; ?>
