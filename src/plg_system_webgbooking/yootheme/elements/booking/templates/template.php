@@ -162,6 +162,7 @@ $actionsCfg = [
     'redirect' => $redir,
     'analytics' => preg_match('/^[A-Za-z0-9_\-]{1,40}$/', trim((string) ($props['analytics_event'] ?? ''))) ? trim((string) $props['analytics_event']) : 'wgb_booking_completed',
     'reminder' => $remCfg,
+    'manual'   => !empty($props['confirm_manual']),
     'customer' => [
         'on'      => !isset($props['act_customer_on']) || !empty($props['act_customer_on']),
         'subject' => (string) ($props['email_subject'] ?? ''),
@@ -266,7 +267,7 @@ $uid = 'wgb-' . substr(md5(uniqid('', true)), 0, 8);
 // initial parse in BOTH the front end and the YOOtheme customizer preview — unlike WebAssetManager
 // scripts, which the customizer does not reliably flush to the live preview (the calendar stayed
 // blank). A MutationObserver in wgb.js then re-initialises every instance the builder re-renders.
-$wgbVer    = '0.32.0';
+$wgbVer    = Webgbooking::ASSET_VER; // one constant for the cache-buster; tools/build.py refuses a build where it differs from the package version
 $wgbAsset  = Uri::root(true) . '/plugins/system/webgbooking/yootheme/elements/booking/assets';
 $assetTags = '<link rel="stylesheet" href="' . htmlspecialchars($wgbAsset . '/wgb.css?' . $wgbVer, ENT_QUOTES, 'UTF-8') . '">'
     . '<script src="' . htmlspecialchars($wgbAsset . '/wgb.js?' . $wgbVer, ENT_QUOTES, 'UTF-8') . '" defer></script>';

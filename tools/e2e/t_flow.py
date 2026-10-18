@@ -105,7 +105,7 @@ mcount_before = len(mails()); jx('rm -f /tmp/gmock/log.jsonl')
 tokf = re.findall(r'<input type="hidden" name="([0-9a-f]{32})" value="1"', lst)[0]
 out = post_multi(adm, BASE + '/administrator/index.php?option=com_webgbooking&view=bookings', [('task', 'booking.cancel'), ('boxchecked', '2'), ('option', 'com_webgbooking'), (tokf, '1'), ('cid[]', str(ids[0])), ('cid[]', str(ids[1]))])
 txt = re.sub('<[^>]+>', ' ', out)
-check('C4 bulk cancel: statuses', row(ids[0])['status'] == 'cancelled' and row(ids[1])['status'] == 'cancelled' and row(ids[2])['status'] == 'pending', [row(i)['status'] for i in ids])
+check('C4 bulk cancel: the two selected are cancelled, the third (free booking, now confirmed at once) is untouched', row(ids[0])['status'] == 'cancelled' and row(ids[1])['status'] == 'cancelled' and row(ids[2])['status'] == 'confirmed', [row(i)['status'] for i in ids])
 dels = [l for l in gm_log() if l['method'] == 'DELETE']
 check('C5 bulk cancel deleted both Google events', len(dels) == 2, dels)
 mm = [decode_mail(mail_text(p)) for p in mails()[mcount_before:]]

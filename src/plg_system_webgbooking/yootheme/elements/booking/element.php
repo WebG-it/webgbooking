@@ -128,6 +128,13 @@ return [
             'type' => 'text',
         ],
 
+        'confirm_manual' => [
+            'label' => 'Manual confirmation',
+            'type' => 'checkbox',
+            'text' => 'I confirm each booking myself: it stays "pending" and the customer gets a "request received" email',
+            'default' => false,
+        ],
+
         // --- ACTIONS (per element, signed server-side via HMAC, not client-tamperable) ---
         'act_customer_on' => ['label' => 'Customer email', 'type' => 'checkbox', 'text' => 'Send the confirmation email to the customer', 'default' => true],
         'email_subject' => [
@@ -342,7 +349,7 @@ return [
                             'label' => 'Customer email',
                             'type' => 'group',
                             'divider' => true,
-                            'fields' => ['act_customer_on', 'email_subject', 'email_body'],
+                            'fields' => ['confirm_manual', 'act_customer_on', 'email_subject', 'email_body'],
                         ],
                         [
                             'label' => 'Staff email',

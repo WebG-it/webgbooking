@@ -19,6 +19,23 @@ use Joomla\Registry\Registry;
 
 class GoogleModel extends BaseDatabaseModel
 {
+    /** Exception code meaning: Google says the saved refresh token is revoked or expired. */
+    private const E_EXPIRED = 401;
+
+    /** One line to the component log (administrator/logs/webgbooking.php): the detail the screen never shows. */
+    private function log(string $msg): void
+    {
+        static $ready = false;
+        try {
+            if (!$ready) {
+                \Joomla\CMS\Log\Log::addLogger(['text_file' => 'webgbooking.php'], \Joomla\CMS\Log\Log::ALL, ['webgbooking']);
+                $ready = true;
+            }
+            \Joomla\CMS\Log\Log::add($msg, \Joomla\CMS\Log\Log::WARNING, 'webgbooking');
+        } catch (\Throwable $e) {
+        }
+    }
+
     private function pluginParams(): Registry
     {
         $plugin = PluginHelper::getPlugin('system', 'webgbooking');
@@ -37,10 +54,12 @@ class GoogleModel extends BaseDatabaseModel
             'calendars'   => [],
             'sheetId'     => '',
             'sheetTab'    => '',
-            'sheets'      => [],
             'tabs'        => [],
-            'sheetsError' => '',
-            'apiError'    => '',
+            // none = never connected, expired = Google refused the saved token (revoked / expired), ok = token works
+            'state'       => 'none',
+            'expired'     => false,
+            // true when Google answered with an error that is not an expired token (detail goes to the log, never on screen)
+            'apiProblem'  => false,
             'error'       => '',
         ];
 
@@ -69,6 +88,8 @@ class GoogleModel extends BaseDatabaseModel
                 return $status;
             }
 
+            $status->state = 'ok';
+
             // Connected: load the user's calendars and current selections.
             $write    = $row->calendar_id ?: 'primary';
             $readList = json_decode((string) ($row->read_calendars ?? ''), true);
@@ -86,20 +107,28 @@ class GoogleModel extends BaseDatabaseModel
                     ];
                 }
 
-                // Google Sheets: list the user's spreadsheets and the tabs of the selected one.
-                try {
-                    $status->sheets = $this->listSpreadsheets($token);
-                } catch (\Throwable $eSheets) {
-                    $status->sheetsError = $eSheets->getMessage();
-                }
+                // Optional Sheets copy: only the tab names of the sheet the admin pasted (Sheets scope, no Drive).
                 if ($status->sheetId !== '') {
                     try {
                         $status->tabs = $this->listTabs($token, $status->sheetId);
                     } catch (\Throwable $eTabs) {
+                        $this->log('sheet tabs: ' . $eTabs->getMessage());
                     }
                 }
             } catch (\Throwable $e) {
-                $status->apiError = $e->getMessage();
+                if ($e->getCode() === self::E_EXPIRED) {
+                    // The saved token no longer works: the honest state is "expired", with ONE way out (reconnect).
+                    $status->state     = 'expired';
+                    $status->expired   = true;
+                    $status->calendars = [];
+                    $status->tabs      = [];
+                    if ($clientId !== '') {
+                        $status->connectUrl = $this->buildConnectUrl($db, $clientId, $status->redirect);
+                    }
+                } else {
+                    $status->apiProblem = true;
+                }
+                $this->log('google page: ' . $e->getMessage());
             }
         } catch (\Throwable $e) {
             $status->error = $e->getMessage();
@@ -132,15 +161,18 @@ class GoogleModel extends BaseDatabaseModel
     {
         $db  = $this->getDatabase();
         $row = $db->setQuery(
-            $db->getQuery(true)->select($db->quoteName(['id', 'sheet_id']))->from($db->quoteName('#__webgbooking_google'))
+            $db->getQuery(true)->select($db->quoteName(['id', 'sheet_id', 'sheet_tab']))->from($db->quoteName('#__webgbooking_google'))
         )->loadObject();
 
         if (!$row) {
             return;
         }
 
-        // Spreadsheet changed → drop the previous tab so we never append to a tab that no longer exists.
-        if ((string) ($row->sheet_id ?? '') !== $sheetId) {
+        // Spreadsheet changed and the tab field still holds the OLD sheet's tab: drop it (a tab typed for the new one is kept).
+        if ((string) ($row->sheet_id ?? '') !== $sheetId && $tab === (string) ($row->sheet_tab ?? '')) {
+            $tab = '';
+        }
+        if ($sheetId === '') {
             $tab = '';
         }
 
@@ -151,33 +183,6 @@ class GoogleModel extends BaseDatabaseModel
             'updated'   => Factory::getDate()->toSql(),
         ];
         $db->updateObject('#__webgbooking_google', $obj, 'id');
-    }
-
-    /** List the user's Google spreadsheets (needs the drive.metadata.readonly scope). @return array<int,object> */
-    private function listSpreadsheets(string $token): array
-    {
-        $resp = (new HttpFactory())->getHttp()->get(
-            'https://www.googleapis.com/drive/v3/files?' . http_build_query([
-                'q'        => "mimeType='application/vnd.google-apps.spreadsheet' and trashed=false",
-                'fields'   => 'files(id,name)',
-                'orderBy'  => 'modifiedTime desc',
-                'pageSize' => 100,
-            ]),
-            ['Authorization' => 'Bearer ' . $token]
-        );
-
-        $data = json_decode((string) $resp->body, true) ?: [];
-
-        if (isset($data['error'])) {
-            throw new \RuntimeException((string) ($data['error']['message'] ?? 'Drive API error'));
-        }
-
-        $out = [];
-        foreach ($data['files'] ?? [] as $f) {
-            $out[] = (object) ['id' => $f['id'], 'name' => $f['name'] ?? $f['id']];
-        }
-
-        return $out;
     }
 
     /** Tab (worksheet) titles of a spreadsheet. @return array<int,string> */
@@ -216,10 +221,16 @@ class GoogleModel extends BaseDatabaseModel
             ['Content-Type' => 'application/x-www-form-urlencoded']
         );
 
-        $token = json_decode((string) $resp->body, true)['access_token'] ?? '';
+        $data  = json_decode((string) $resp->body, true);
+        $data  = is_array($data) ? $data : [];
+        $token = (string) ($data['access_token'] ?? '');
 
         if ($token === '') {
-            throw new \RuntimeException('No access token (' . substr((string) $resp->body, 0, 200) . ')');
+            // Only Google's error code and description go to the log: never the request, the token or the raw body.
+            $code = preg_replace('/[^a-z_]/', '', strtolower((string) ($data['error'] ?? 'unknown')));
+            $desc = substr((string) preg_replace('/[^A-Za-z0-9 .,:;()\/-]/', '', (string) ($data['error_description'] ?? '')), 0, 200);
+
+            throw new \RuntimeException('token refused by Google: ' . $code . ($desc !== '' ? ' (' . $desc . ')' : ''), $code === 'invalid_grant' ? self::E_EXPIRED : 0);
         }
 
         return $token;
@@ -234,6 +245,13 @@ class GoogleModel extends BaseDatabaseModel
         );
 
         $data = json_decode((string) $resp->body, true) ?: [];
+
+        if (isset($data['error'])) {
+            $err = $data['error'];
+            $msg = is_array($err) ? (string) ($err['message'] ?? '') : (string) $err;
+
+            throw new \RuntimeException('calendar list refused: HTTP ' . (int) $resp->code . ' ' . substr((string) preg_replace('/[^A-Za-z0-9 .,:;()\/-]/', '', $msg), 0, 300));
+        }
 
         return $data['items'] ?? [];
     }
@@ -303,10 +321,9 @@ class GoogleModel extends BaseDatabaseModel
             'client_id'              => $clientId,
             'redirect_uri'           => $redirect,
             'response_type'          => 'code',
-            'scope'                  => 'openid email https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.metadata.readonly',
+            'scope'                  => 'openid email https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/spreadsheets',
             'access_type'            => 'offline',
             'prompt'                 => 'consent',
-            'include_granted_scopes' => 'true',
             'state'                  => $state,
         ]);
     }

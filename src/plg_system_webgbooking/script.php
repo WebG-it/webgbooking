@@ -88,6 +88,7 @@ return new class () implements InstallerScriptInterface {
                 . $db->quoteName('fx_last') . ' DATETIME NULL,'
                 . $db->quoteName('avail_cfg') . ' TEXT NULL,'
                 . $db->quoteName('ip_hash') . ' VARCHAR(32) NULL,'
+                . $db->quoteName('staff_to') . ' VARCHAR(500) NULL,'
                 . 'PRIMARY KEY (' . $db->quoteName('id') . '),'
                 . 'KEY ' . $db->quoteName('idx_date') . ' (' . $db->quoteName('booking_date') . ',' . $db->quoteName('booking_time') . '),'
                 . 'KEY ' . $db->quoteName('idx_token') . ' (' . $db->quoteName('manage_token') . ')'
@@ -127,6 +128,8 @@ return new class () implements InstallerScriptInterface {
                 'fx_last'               => 'DATETIME NULL',
                 'avail_cfg'             => 'TEXT NULL',
                 'ip_hash'               => 'VARCHAR(32) NULL',
+                // 0.33.2: the element's staff recipient(s), so reschedule / cancel / alerts reach the same people as the booking
+                'staff_to'              => 'VARCHAR(500) NULL',
             ];
             foreach ($newCols as $name => $def) {
                 try {

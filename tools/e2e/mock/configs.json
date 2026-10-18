@@ -110,5 +110,25 @@
   "redirect_url": "/\\evil.example",
   "act_webhook_on": true,
   "webhook_url": "ftp://x.example/h"
+ },
+ "manual30": {
+  "title": "Manual",
+  "event_duration": "30",
+  "event_location": "meet",
+  "confirm_manual": true
+ },
+ "staffto": {
+  "title": "Staff",
+  "event_duration": "30",
+  "event_location": "meet",
+  "staff_to": "elem-staff@example.invalid",
+  "allow_guest": false
+ },
+ "paidstaff": {
+  "title": "Paid staff",
+  "event_duration": "30",
+  "event_location": "meet",
+  "price_amount": "29",
+  "staff_to": "elem-staff@example.invalid"
  }
 }

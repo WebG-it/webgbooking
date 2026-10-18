@@ -35,6 +35,8 @@ foreach (['stripe_sk', 'stripe_whsec'] as $k) {
         $opts[$k] = 'g:' . base64_encode($iv0 . $tag0 . $ct0);
     }
 }
+$refreshPlain = (string) ($opts['google_refresh'] ?? 'mock-refresh-token');
+unset($opts['google_refresh']);
 $db->setQuery($db->getQuery(true)->update('#__extensions')->set($db->quoteName('params') . ' = ' . $db->quote(json_encode($opts)))
     ->where("type='plugin' AND element='webgbooking' AND folder='system'"))->execute();
 
@@ -42,7 +44,7 @@ $secret = (string) $app->get('secret');
 $key = hash('sha256', $secret, true);
 $iv = random_bytes(12);
 $tag = '';
-$ct = openssl_encrypt('mock-refresh-token', 'aes-256-gcm', $key, OPENSSL_RAW_DATA, $iv, $tag);
+$ct = openssl_encrypt($refreshPlain, 'aes-256-gcm', $key, OPENSSL_RAW_DATA, $iv, $tag);
 $enc = 'g:' . base64_encode($iv . $tag . $ct);
 
 $db->setQuery('DELETE FROM ' . $db->quoteName('#__webgbooking_google'))->execute();

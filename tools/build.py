@@ -56,6 +56,20 @@ def main():
         zip_dir(os.path.join(SRC, child), os.path.join(packages, child + ".zip"))
 
     version = manifest_version(os.path.join(pkg_dir, "pkg_webgbooking.xml"))
+
+    # Everything that carries a version must agree, or the build stops (the asset cache-buster stayed on an old
+    # number for two releases because nothing checked it).
+    plugin = open(os.path.join(SRC, "plg_system_webgbooking", "src", "Extension", "Webgbooking.php"), encoding="utf-8").read()
+    asset = re.search(r"const ASSET_VER = '([^']+)'", plugin).group(1)
+    wrong = {"ASSET_VER": asset} if asset != version else {}
+    for child, manifest in (("com_webgbooking", "com_webgbooking.xml"), ("plg_system_webgbooking", "webgbooking.xml"), ("plg_task_webgbookingreminders", "webgbookingreminders.xml")):
+        v = manifest_version(os.path.join(SRC, child, manifest))
+        if v != version:
+            wrong[child] = v
+    if re.search(r"\$wgbVer\s*=\s*'[0-9]", open(os.path.join(SRC, "plg_system_webgbooking", "yootheme", "elements", "booking", "templates", "template.php"), encoding="utf-8").read()):
+        wrong["template.php wgbVer"] = "hard-coded"
+    if wrong:
+        sys.exit("version mismatch: package is %s but %s" % (version, wrong))
     dist = os.path.join(ROOT, "dist")
     os.makedirs(dist, exist_ok=True)
     out = os.path.join(dist, "pkg_webgbooking-%s.zip" % version)

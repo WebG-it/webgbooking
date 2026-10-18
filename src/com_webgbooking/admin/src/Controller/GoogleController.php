@@ -68,17 +68,24 @@ class GoogleController extends BaseController
         $this->checkToken();
         $this->assertAdmin();
 
-        $input = Factory::getApplication()->getInput();
-        // A pasted ID/URL (works with the Sheets scope alone) takes precedence over the Drive picker.
-        $manual = trim($input->getString('sheet_id_manual', ''));
-        $sheetId = $manual !== '' ? $this->extractSheetId($manual) : trim($input->getString('sheet_id', ''));
-        $tab     = trim($input->getString('sheet_tab', ''));
+        $input  = Factory::getApplication()->getInput();
+        // Only a pasted URL / ID (Sheets scope alone: no Drive picker). Empty = the copy to Sheets is off.
+        $manual  = trim($input->getString('sheet_id_manual', ''));
+        $sheetId = $manual !== '' ? $this->extractSheetId($manual) : '';
+        $tab     = mb_substr(trim($input->getString('sheet_tab', '')), 0, 190);
+
+        if ($manual !== '' && $sheetId === '') {
+            $this->setMessage(Text::_('COM_WEBGBOOKING_GOOGLE_SHEET_BADID'), 'warning');
+            $this->setRedirect('index.php?option=com_webgbooking&view=google');
+
+            return;
+        }
 
         try {
             $this->getModel('Google')->saveSheet($sheetId, $tab);
-            $this->setMessage(Text::_('COM_WEBGBOOKING_GOOGLE_SHEET_SAVED'));
+            $this->setMessage(Text::_($sheetId === '' ? 'COM_WEBGBOOKING_GOOGLE_SHEET_OFF' : 'COM_WEBGBOOKING_GOOGLE_SHEET_SAVED'));
         } catch (\Throwable $e) {
-            $this->setMessage($e->getMessage(), 'error');
+            $this->setMessage(Text::_('COM_WEBGBOOKING_GOOGLE_SHEET_SAVEFAIL'), 'error');
         }
 
         $this->setRedirect('index.php?option=com_webgbooking&view=google');

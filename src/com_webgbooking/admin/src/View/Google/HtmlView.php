@@ -32,7 +32,9 @@ class HtmlView extends BaseHtmlView
             $app->enqueueMessage(Text::_('COM_WEBGBOOKING_GOOGLE_OK'), 'success');
         }
         if ($err = $app->getInput()->getString('wgberror', '')) {
-            $app->enqueueMessage(Text::sprintf('COM_WEBGBOOKING_GOOGLE_ERR', $err), 'error');
+            // The plugin passes a short code (state / token / exchange): show one clear line, never raw text.
+            $key = 'COM_WEBGBOOKING_GOOGLE_ERR_' . strtoupper(preg_replace('/[^a-z]/', '', strtolower($err)));
+            $app->enqueueMessage(Text::_(\in_array($err, ['state', 'token', 'exchange'], true) ? $key : 'COM_WEBGBOOKING_GOOGLE_ERR_OTHER'), 'error');
         }
 
         ToolbarHelper::title(Text::_('COM_WEBGBOOKING_SUBMENU_GOOGLE'), 'users');

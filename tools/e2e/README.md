@@ -30,6 +30,9 @@ Ogni prova stampa `PASS`/`FAIL` e chiude con `RESULT pass=N fail=M`. Alla fine: 
 | `t_pay_admin.py` | opzioni Stripe (cifrate, mai rimandate al form, verifica chiave), lista/filtro/dettaglio/export, annullo e eliminazione con Google e Stripe, promemoria all'ospite |
 | `t_fix.py` | le correzioni 0.33.0 punto per punto: test/live, Google fail closed + cache + retry, effetti dopo il pagamento e pagamenti orfani, eventi GA4, disponibilita' per elemento, epoca/scadenza dei token, UID .ics, anti abuso, `pending_ctx`, segreti, importi, header, piccole correzioni |
 | `t_v331.py` | gli ultimi cinque punti: effetti rimasti `pending`, evento Google creato ma risposta persa (un solo evento), mail ospite separata, livemode mancante, prefisso chiave sconosciuto |
+| `t_google.py` | pagina Google del componente: stati nessun collegamento / collegamento scaduto / collegato, un solo bottone primario per stato, ritorno dal consenso, sezione Fogli opzionale e chiusa, nessuna chiamata Drive ne' scope Drive, nessun messaggio grezzo di Google a schermo, un token vecchio continua a funzionare |
+| `t_v332.py` | prenotazioni gratuite confermate subito (e opzione Conferma manuale), destinatario staff dell'elemento per nuova prenotazione, riprogrammazione, annullo, needs_review e avviso effetti, con ripiego sull'indirizzo del plugin |
+| `t_update.py` | l'aggiornamento come lo fa Joomla davvero: riga di `#__updates` legata al pacchetto (extension_id, client_id), elenco in Estensioni > Aggiorna, applicazione da li'. Si lancia dopo aver installato una release PIU' VECCHIA, contro l'update server pubblico |
 | `t_lock.py` | il lock per giorno e' vero: chi lo trova occupato aspetta e viene rifiutato |
 
 Ogni suite comincia con `reset_env()` (in `wgbtest.py`): le suite si possono lanciare in qualsiasi ordine e piu' volte sullo stesso container.

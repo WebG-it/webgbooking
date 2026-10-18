@@ -22,11 +22,28 @@ if ($host === 'www.googleapis.com' && $gfail === 'freebusy' && $path === '/calen
 if ($host === 'www.googleapis.com' && $gfail === 'events' && strpos($path, '/events') !== false && $method !== 'DELETE') { http_response_code(500); echo json_encode(['error' => ['message' => 'backend error']]); exit; }
 
 if ($host === 'oauth2.googleapis.com') {
+    parse_str($body, $tf);
+    if (($tf['grant_type'] ?? '') === 'authorization_code') {            // consent finished: hand out a refresh token
+        if (($tf['code'] ?? '') !== 'goodcode') { http_response_code(400); echo json_encode(['error' => 'invalid_grant']); exit; }
+        $jwt = 'e30.' . rtrim(strtr(base64_encode(json_encode(['email' => 'reconnected@wgbtest.invalid'])), '+/', '-_'), '=') . '.sig';
+        echo json_encode(['access_token' => 'mock-access-token', 'refresh_token' => 'mock-refresh-token', 'id_token' => $jwt, 'expires_in' => 3600]);
+        exit;
+    }
+    if (($tf['refresh_token'] ?? '') === 'mock-revoked') { http_response_code(400); echo json_encode(['error' => 'invalid_grant', 'error_description' => 'Token has been expired or revoked.']); exit; }
     echo json_encode(['access_token' => 'mock-access-token', 'expires_in' => 3600, 'token_type' => 'Bearer']);
     exit;
 }
 if ($host === 'sheets.googleapis.com') {
+    if ($method === 'GET') { echo json_encode(['sheets' => [['properties' => ['title' => 'Prenotazioni']], ['properties' => ['title' => 'Archivio']]]]); exit; }
     echo json_encode(['updates' => ['updatedRows' => 1]]);
+    exit;
+}
+if ($host === 'www.googleapis.com' && strpos($path, '/drive/') === 0) {
+    http_response_code(403); echo json_encode(['error' => ['message' => 'Drive API has not been used in project 100455972354 before or it is disabled.']]); exit;
+}
+if ($host === 'www.googleapis.com' && $path === '/calendar/v3/users/me/calendarList') {
+    if ($gfail === 'calendarlist') { http_response_code(403); echo json_encode(['error' => ['message' => 'Google Calendar API has not been used in project 100455972354 before or it is disabled.']]); exit; }
+    echo json_encode(['items' => [['id' => 'primary', 'summary' => 'Marco', 'primary' => true], ['id' => 'altro@example.invalid', 'summary' => 'Altro']]]);
     exit;
 }
 if ($host === 'api.stripe.com') {

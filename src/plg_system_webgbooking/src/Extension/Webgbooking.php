@@ -33,7 +33,7 @@ use Joomla\Event\SubscriberInterface;
 final class Webgbooking extends CMSPlugin implements SubscriberInterface
 {
     /** Cache-buster for the bundled front-end assets (wgb.css/js, UIkit). Bump when those change. */
-    public const ASSET_VER = '0.33.1';
+    public const ASSET_VER = '0.33.2';
 
     protected $autoloadLanguage = true;
 
@@ -313,7 +313,9 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                         'customer_email'  => $email,
                         'customer_phone'  => $phone,
                         'notes'           => $notes,
-                        'status'          => 'pending',
+                        // Free bookings are confirmed at once; the element can keep the old "I confirm each one" flow.
+                        'status'          => !empty($actions['manual']) ? 'pending' : 'confirmed',
+                        'staff_to'        => $this->cleanRecipients((string) (($actions['staff'] ?? [])['to'] ?? '')),
                         'source_url'      => substr((string) $input->server->getString('HTTP_REFERER', ''), 0, 255),
                         'meeting_url'     => $loc === 'phone' ? '' : trim((string) $this->params->get('meeting_url', '')),
                         'guest_email'     => $guest,
@@ -392,7 +394,11 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
 
             $this->respond([
                 'ok'      => true,
-                'message' => Text::_($loc === 'phone' ? 'PLG_SYSTEM_WEBGBOOKING_BOOK_OK_PHONE' : 'PLG_SYSTEM_WEBGBOOKING_BOOK_OK'),
+                'message' => Text::_(
+                    !empty($actions['manual'])
+                        ? ($loc === 'phone' ? 'PLG_SYSTEM_WEBGBOOKING_BOOK_OK_PHONE' : 'PLG_SYSTEM_WEBGBOOKING_BOOK_OK')
+                        : ($loc === 'phone' ? 'PLG_SYSTEM_WEBGBOOKING_BOOK_OK_PHONE_CONFIRMED' : 'PLG_SYSTEM_WEBGBOOKING_BOOK_OK_CONFIRMED')
+                ),
             ]);
         } catch (\Throwable $e) {
             $this->respond(['ok' => false, 'message' => Text::_('PLG_SYSTEM_WEBGBOOKING_BOOK_ERR')]);
@@ -1130,7 +1136,8 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                 'fx' . (int) $row->id,
                 Text::sprintf('PLG_SYSTEM_WEBGBOOKING_ALERT_FX_SUBJECT', $row->booking_date, $row->booking_time),
                 Text::sprintf('PLG_SYSTEM_WEBGBOOKING_ALERT_FX_BODY', (int) $row->id, $row->customer_name, $row->customer_email, implode(', ', $failed), $state === 'failed' ? Text::_('PLG_SYSTEM_WEBGBOOKING_ALERT_FX_GAVEUP') : Text::_('PLG_SYSTEM_WEBGBOOKING_ALERT_FX_WILLRETRY')),
-                12
+                12,
+                $row
             );
         }
     }
@@ -1423,7 +1430,8 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                 (string) ($row->stripe_payment_intent ?: $row->stripe_session_id),
                 (int) $row->id
             ),
-            24
+            24,
+            $row
         );
     }
 
@@ -2200,9 +2208,10 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             } else {
                 $elSub      = (string) ($row->emailSubjectTpl ?? '');
                 $elBody     = (string) ($row->emailBodyTpl ?? '');
-                $subjectTpl = $elSub !== '' ? $elSub : (trim((string) $this->params->get('email_subject', '')) ?: Text::_('PLG_SYSTEM_WEBGBOOKING_EMAIL_CUSTOMER_SUBJECT'));
+                $isRequest  = (string) ($row->status ?? '') === 'pending';
+                $subjectTpl = $elSub !== '' ? $elSub : (trim((string) $this->params->get('email_subject', '')) ?: Text::_($isRequest ? 'PLG_SYSTEM_WEBGBOOKING_EMAIL_CUSTOMER_SUBJECT_REQUEST' : 'PLG_SYSTEM_WEBGBOOKING_EMAIL_CUSTOMER_SUBJECT'));
                 $subject    = strtr($subjectTpl, ['{name}' => $row->customer_name, '{date}' => $dateFmt, '{time}' => $row->booking_time]);
-                $bodyTpl    = $elBody !== '' ? $elBody : (trim((string) $this->params->get('email_body', '')) ?: $this->defaultEmailBody());
+                $bodyTpl    = $elBody !== '' ? $elBody : (trim((string) $this->params->get('email_body', '')) ?: $this->defaultEmailBody($isRequest));
             }
             $this->sendHtmlMail($mf, $row->customer_email, $subject, $this->wrapEmail($this->renderTpl($bodyTpl, $row, $manageUrl, $dateFmt, !$reschedule)), $ics);
 
@@ -2220,15 +2229,42 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
         $this->sendHtmlMail($mf, $row->guest_email, $gSubject, $this->wrapEmail($this->guestEmailBody($row, $dateFmt)), $icsGuest);
     }
 
+    /** Keep only valid addresses of a comma separated list (max 500 chars). */
+    private function cleanRecipients(string $list): string
+    {
+        $ok = [];
+        foreach (explode(',', $list) as $a) {
+            $a = trim($a);
+            if ($a !== '' && filter_var($a, FILTER_VALIDATE_EMAIL)) {
+                $ok[] = $a;
+            }
+        }
+
+        return mb_substr(implode(', ', $ok), 0, 500);
+    }
+
+    /**
+     * Who the staff emails of this booking go to: the recipient(s) of the element it was made from (stored on the
+     * booking, so reschedule, cancellation and alerts reach the same people as the "new booking" email), else the
+     * plugin Notify e-mail, else the site sender.
+     */
+    private function staffRecipients(?object $row = null): array
+    {
+        $own = $this->cleanRecipients((string) ($row->staff_to ?? ($row->_staffTo ?? '')));
+        if ($own !== '') {
+            return array_map('trim', explode(',', $own));
+        }
+        $admin = trim((string) $this->params->get('notify_email', '')) ?: (string) $this->getApplication()->getConfig()->get('mailfrom');
+
+        return $admin !== '' ? [$admin] : [];
+    }
+
     /** Staff email: per-element HTML template, or the plain default. */
     private function notifyStaff(object $row, $mf, string $manageUrl, string $dateFmt, string $admin): void
     {
         // ---- Staff email action: per-element HTML template, or the plain default. ----
         if ($row->_staffOn ?? true) {
-            $tos = array_values(array_filter(array_map('trim', explode(',', (string) ($row->_staffTo ?? '')))));
-            if (!$tos && $admin !== '') {
-                $tos = [$admin];
-            }
+            $tos = $this->staffRecipients($row);
             if ($tos) {
                 $sSubTpl = (string) ($row->_staffSubject ?? '');
                 $sSub    = $sSubTpl !== '' ? strtr($sSubTpl, ['{name}' => $row->customer_name, '{date}' => $dateFmt, '{time}' => $row->booking_time]) : Text::sprintf('PLG_SYSTEM_WEBGBOOKING_EMAIL_ADMIN_SUBJECT', $row->booking_date, $row->booking_time);
@@ -2367,9 +2403,9 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
     }
 
     /** Default, nicely-designed email body (translatable; uses {placeholders}). */
-    private function defaultEmailBody(): string
+    private function defaultEmailBody(bool $request = false): string
     {
-        return $this->bodyTemplate('PLG_SYSTEM_WEBGBOOKING_EMAIL_CONFIRMED');
+        return $this->bodyTemplate($request ? 'PLG_SYSTEM_WEBGBOOKING_EMAIL_REQUEST' : 'PLG_SYSTEM_WEBGBOOKING_EMAIL_CONFIRMED');
     }
 
     /** Shared email body template with a configurable intro line. */
@@ -2961,7 +2997,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
     }
 
     /** Plain email to the staff, at most once every $hours for the same $key (so a failing calendar is one mail, not one per visitor). */
-    private function alertStaff(string $key, string $subject, string $body, int $hours = 6): void
+    private function alertStaff(string $key, string $subject, string $body, int $hours = 6, ?object $row = null): void
     {
         try {
             $last = (int) $this->kvGet('alert:' . $key);
@@ -2969,12 +3005,12 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                 return;
             }
             $this->kvSet('alert:' . $key, (string) time());
-            $admin = trim((string) $this->params->get('notify_email', '')) ?: (string) $this->getApplication()->getConfig()->get('mailfrom');
-            if ($admin === '') {
+            $tos = $this->staffRecipients($row);
+            if (!$tos) {
                 return;
             }
             $m = Factory::getContainer()->get(MailerFactoryInterface::class)->createMailer();
-            $m->addRecipient($admin);
+            $m->addRecipient($tos);
             $m->setSubject($subject);
             $m->setBody($body);
             $m->Send();
@@ -3502,12 +3538,12 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
 
         try {
             $mf    = Factory::getContainer()->get(MailerFactoryInterface::class);
-            $admin = trim((string) $this->params->get('notify_email', '')) ?: (string) $this->getApplication()->getConfig()->get('mailfrom');
+            $tos = $this->staffRecipients($row);
 
-            if (!$byAdmin && $admin !== '') {
+            if (!$byAdmin && $tos) {
                 try {
                     $m = $mf->createMailer();
-                    $m->addRecipient($admin);
+                    $m->addRecipient($tos);
                     $m->setSubject(Text::sprintf('PLG_SYSTEM_WEBGBOOKING_CANCEL_ADMIN_SUBJECT', $row->booking_date, $row->booking_time));
                     $m->setBody(Text::sprintf('PLG_SYSTEM_WEBGBOOKING_CANCEL_ADMIN_BODY', $row->booking_date, $row->booking_time, $row->customer_name, $row->customer_email)
                         . (($row->payment_status ?? '') === 'paid' ? "\n\n" . Text::sprintf('PLG_SYSTEM_WEBGBOOKING_CANCEL_REFUND_STAFF', self::formatAmount((int) $row->amount_cents, (string) $row->currency, $this->langTag()), (string) ($row->stripe_payment_intent ?? '')) : ''));
