@@ -130,5 +130,77 @@
   "event_location": "meet",
   "price_amount": "29",
   "staff_to": "elem-staff@example.invalid"
+ },
+ "brevo1": {
+  "title": "Brevo sempre",
+  "service": "Brevo sempre",
+  "show_newsletter": true,
+  "act_brevo_on": true,
+  "brevo_lists": "7",
+  "brevo_when": "always",
+  "brevo_attrs": "CITTA=Citta\nprogetto = progetto",
+  "custom_fields": "Citta | text\nProgetto | text"
+ },
+ "brevo_nl": {
+  "title": "Brevo newsletter",
+  "service": "Brevo newsletter",
+  "show_newsletter": true,
+  "act_brevo_on": true,
+  "brevo_lists": "7, 12",
+  "brevo_when": "newsletter"
+ },
+ "brevo_doi": {
+  "title": "Brevo DOI",
+  "service": "Brevo DOI",
+  "show_newsletter": true,
+  "act_brevo_on": true,
+  "brevo_lists": "12",
+  "brevo_when": "newsletter",
+  "brevo_doi": true,
+  "brevo_doi_template": "5",
+  "brevo_doi_redirect": "https://www.example.invalid/grazie"
+ },
+ "brevo_doi_bad": {
+  "title": "Brevo DOI senza modello",
+  "service": "Brevo DOI senza modello",
+  "show_newsletter": true,
+  "act_brevo_on": true,
+  "brevo_lists": "12",
+  "brevo_when": "newsletter",
+  "brevo_doi": true
+ },
+ "hookprof": {
+  "title": "Hook con profilo",
+  "service": "Hook con profilo",
+  "act_webhook_on": true,
+  "webhook_url": "https://www.googleapis.com/hook",
+  "webhook_profile": "crm"
+ },
+ "hookprof_url": {
+  "title": "Hook profilo con URL",
+  "service": "Hook profilo con URL",
+  "act_webhook_on": true,
+  "webhook_profile": "zap"
+ },
+ "hookother": {
+  "title": "Hook senza profilo",
+  "service": "Hook senza profilo",
+  "act_webhook_on": true,
+  "webhook_url": "https://www.googleapis.com/hook"
+ },
+ "hookmissing": {
+  "title": "Hook profilo mancante",
+  "service": "Hook profilo mancante",
+  "act_webhook_on": true,
+  "webhook_url": "https://www.googleapis.com/hook",
+  "webhook_profile": "nonesiste"
+ },
+ "paidhook": {
+  "title": "Pagato con hook",
+  "service": "Pagato con hook",
+  "price_amount": "29",
+  "act_webhook_on": true,
+  "webhook_url": "https://www.googleapis.com/hook",
+  "webhook_profile": "crm"
  }
 }

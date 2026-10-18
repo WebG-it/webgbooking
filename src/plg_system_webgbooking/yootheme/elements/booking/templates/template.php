@@ -178,6 +178,19 @@ $actionsCfg = [
         'on'     => !empty($props['act_webhook_on']),
         'url'    => preg_match('#^https?://[^\s]+$#i', trim((string) ($props['webhook_url'] ?? ''))) ? trim((string) $props['webhook_url']) : '',
         'method' => (string) ($props['webhook_method'] ?? 'POST'),
+        // Only the NAME of a header profile: the headers (and their secrets) live in the plugin options, never in this markup.
+        'profile' => mb_substr(trim((string) ($props['webhook_profile'] ?? '')), 0, 60),
+    ],
+    'brevo' => [
+        'on'    => !empty($props['act_brevo_on']),
+        'lists' => array_slice(array_values(array_filter(array_map('intval', preg_split('/[\s,;]+/', (string) ($props['brevo_lists'] ?? '')) ?: []), static fn($i) => $i > 0)), 0, 20),
+        'when'  => (string) ($props['brevo_when'] ?? 'newsletter') === 'always' ? 'always' : 'newsletter',
+        'attrs' => mb_substr((string) ($props['brevo_attrs'] ?? ''), 0, 1500),
+        'doi'   => [
+            'on'       => !empty($props['brevo_doi']),
+            'template' => (int) ($props['brevo_doi_template'] ?? 0),
+            'redirect' => preg_match('#^https://[^\s\\\\]+$#i', trim((string) ($props['brevo_doi_redirect'] ?? ''))) ? trim((string) $props['brevo_doi_redirect']) : '',
+        ],
     ],
 ];
 $secret    = (string) Factory::getApplication()->get('secret');

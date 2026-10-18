@@ -36,6 +36,11 @@ class HtmlView extends BaseHtmlView
 
         ToolbarHelper::title(Text::_('COM_WEBGBOOKING_BOOKING_DETAIL'), 'calendar');
 
+        // Manual-confirmation flow: a pending booking is confirmed AND the customer is told, in one click.
+        if ($this->item->status === 'pending' && Factory::getApplication()->getIdentity()->authorise('core.edit.state', 'com_webgbooking')) {
+            ToolbarHelper::custom('booking.confirmnotify', 'publish', '', 'COM_WEBGBOOKING_TB_CONFIRMNOTIFY', false);
+        }
+
         // Cancel from the detail page too (same action as the list: Google event + customer email).
         if ($this->item->status !== 'cancelled' && Factory::getApplication()->getIdentity()->authorise('core.edit.state', 'com_webgbooking')) {
             ToolbarHelper::custom('booking.cancel', 'cancel', '', 'COM_WEBGBOOKING_TB_CANCEL', false);

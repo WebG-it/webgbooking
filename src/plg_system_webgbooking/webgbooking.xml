@@ -7,7 +7,7 @@
     <creationDate>2026-06</creationDate>
     <copyright>(C) 2026 Marco Galassi / WebG</copyright>
     <license>GNU General Public License version 2 or later</license>
-    <version>0.33.2</version>
+    <version>0.34.0</version>
     <description>PLG_SYSTEM_WEBGBOOKING_XML_DESCRIPTION</description>
     <scriptfile>script.php</scriptfile>
     <namespace path="src">WebG\Plugin\System\Webgbooking</namespace>
@@ -126,6 +126,50 @@
                 <field name="reminder_body" type="editor" filter="raw" default="" height="220"
                     label="PLG_SYSTEM_WEBGBOOKING_REMINDER_BODY_LABEL"
                     description="PLG_SYSTEM_WEBGBOOKING_EMAIL_PLACEHOLDERS" />
+            </fieldset>
+
+            <fieldset name="integrations" label="PLG_SYSTEM_WEBGBOOKING_INT_FIELDSET"
+                addfieldprefix="WebG\Plugin\System\Webgbooking\Field">
+                <field type="note" name="brevo_note" class="alert alert-info"
+                    label="PLG_SYSTEM_WEBGBOOKING_BREVO_FIELDSET"
+                    description="PLG_SYSTEM_WEBGBOOKING_BREVO_DESC" />
+                <field name="brevo_key" type="secret" default=""
+                    label="PLG_SYSTEM_WEBGBOOKING_BREVO_KEY_LABEL"
+                    description="PLG_SYSTEM_WEBGBOOKING_BREVO_KEY_DESC" />
+                <field name="brevo_attr_first" type="text" default="NOME" size="20" autocomplete="off"
+                    label="PLG_SYSTEM_WEBGBOOKING_BREVO_ATTR_FIRST_LABEL"
+                    description="PLG_SYSTEM_WEBGBOOKING_BREVO_ATTR_DESC" />
+                <field name="brevo_attr_last" type="text" default="COGNOME" size="20" autocomplete="off"
+                    label="PLG_SYSTEM_WEBGBOOKING_BREVO_ATTR_LAST_LABEL" />
+                <field name="brevo_attr_sms" type="text" default="SMS" size="20" autocomplete="off"
+                    label="PLG_SYSTEM_WEBGBOOKING_BREVO_ATTR_SMS_LABEL" />
+                <field name="brevo_default_cc" type="text" default="39" size="5" autocomplete="off"
+                    label="PLG_SYSTEM_WEBGBOOKING_BREVO_CC_LABEL"
+                    description="PLG_SYSTEM_WEBGBOOKING_BREVO_CC_DESC" />
+
+                <field type="note" name="whp_note" class="alert alert-info"
+                    label="PLG_SYSTEM_WEBGBOOKING_WHP_FIELDSET"
+                    description="PLG_SYSTEM_WEBGBOOKING_WHP_DESC" />
+                <field name="booking_webhook_profile" type="text" default="" size="30" autocomplete="off"
+                    label="PLG_SYSTEM_WEBGBOOKING_WHP_GLOBAL_LABEL"
+                    description="PLG_SYSTEM_WEBGBOOKING_WHP_GLOBAL_DESC" />
+                <field name="whp1_name" type="text" default="" size="30" autocomplete="off"
+                    label="PLG_SYSTEM_WEBGBOOKING_WHP_NAME_LABEL" />
+                <field name="whp1_headers" type="secretarea" default="" filter="raw"
+                    label="PLG_SYSTEM_WEBGBOOKING_WHP_HEADERS_LABEL"
+                    description="PLG_SYSTEM_WEBGBOOKING_WHP_HEADERS_DESC" />
+                <field name="whp2_name" type="text" default="" size="30" autocomplete="off"
+                    label="PLG_SYSTEM_WEBGBOOKING_WHP_NAME_LABEL" />
+                <field name="whp2_headers" type="secretarea" default="" filter="raw"
+                    label="PLG_SYSTEM_WEBGBOOKING_WHP_HEADERS_LABEL" />
+                <field name="whp3_name" type="text" default="" size="30" autocomplete="off"
+                    label="PLG_SYSTEM_WEBGBOOKING_WHP_NAME_LABEL" />
+                <field name="whp3_headers" type="secretarea" default="" filter="raw"
+                    label="PLG_SYSTEM_WEBGBOOKING_WHP_HEADERS_LABEL" />
+                <field name="whp4_name" type="text" default="" size="30" autocomplete="off"
+                    label="PLG_SYSTEM_WEBGBOOKING_WHP_NAME_LABEL" />
+                <field name="whp4_headers" type="secretarea" default="" filter="raw"
+                    label="PLG_SYSTEM_WEBGBOOKING_WHP_HEADERS_LABEL" />
             </fieldset>
 
             <fieldset name="payments" label="PLG_SYSTEM_WEBGBOOKING_PAY_FIELDSET"

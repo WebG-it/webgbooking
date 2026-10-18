@@ -28,7 +28,10 @@ foreach ($argv as $i => $a) {
     }
 }
 $encKey = hash('sha256', (string) $app->get('secret'), true);
-foreach (['stripe_sk', 'stripe_whsec'] as $k) {
+foreach (['whp1_headers', 'whp2_headers', 'whp3_headers', 'whp4_headers'] as $k) {
+    if (isset($opts[$k])) { $opts[$k] = str_replace('\\n', "\n", $opts[$k]); }      // "A: 1\nB: 2" on the command line
+}
+foreach (['stripe_sk', 'stripe_whsec', 'brevo_key', 'whp1_headers', 'whp2_headers', 'whp3_headers', 'whp4_headers'] as $k) {
     if (!empty($opts[$k]) && strncmp($opts[$k], 'g:', 2) !== 0) {
         $iv0 = random_bytes(12); $tag0 = '';
         $ct0 = openssl_encrypt($opts[$k], 'aes-256-gcm', $encKey, OPENSSL_RAW_DATA, $iv0, $tag0);

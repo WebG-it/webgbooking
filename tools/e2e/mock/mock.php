@@ -13,7 +13,8 @@ $json   = json_decode($body, true);
 $events = file_exists("$dir/events.json") ? json_decode(file_get_contents("$dir/events.json"), true) : [];
 if (!is_array($events)) { $events = []; }
 $seqf = "$dir/seq";
-$log = ['t' => date('c'), 'host' => $host, 'method' => $method, 'path' => $path, 'query' => $query, 'body' => $json ?? $body];
+$reqh = function_exists('getallheaders') ? array_change_key_case(getallheaders(), CASE_LOWER) : [];
+$log = ['t' => date('c'), 'host' => $host, 'method' => $method, 'path' => $path, 'query' => $query, 'body' => $json ?? $body, 'headers' => $reqh];
 file_put_contents("$dir/log.jsonl", json_encode($log) . "\n", FILE_APPEND);
 header('Content-Type: application/json');
 $gfail = file_exists("$dir/google_fail") ? trim(file_get_contents("$dir/google_fail")) : '';
@@ -45,6 +46,55 @@ if ($host === 'www.googleapis.com' && $path === '/calendar/v3/users/me/calendarL
     if ($gfail === 'calendarlist') { http_response_code(403); echo json_encode(['error' => ['message' => 'Google Calendar API has not been used in project 100455972354 before or it is disabled.']]); exit; }
     echo json_encode(['items' => [['id' => 'primary', 'summary' => 'Marco', 'primary' => true], ['id' => 'altro@example.invalid', 'summary' => 'Altro']]]);
     exit;
+}
+if ($host === 'www.googleapis.com' && $path === '/hook') {                // a customer's webhook receiver (test)
+    $hf = file_exists("$dir/hook_fail") ? (int) trim(file_get_contents("$dir/hook_fail")) : 0;
+    if ($hf > 0) { http_response_code($hf); echo json_encode(['error' => 'mock hook failing']); exit; }
+    echo json_encode(['ok' => true]); exit;
+}
+if ($host === 'api.brevo.com') {                                              // Brevo API (contacts, double opt-in, account)
+    $bf = "$dir/brevo.json";
+    $bs = file_exists($bf) ? json_decode(file_get_contents($bf), true) : [];
+    if (!is_array($bs)) { $bs = []; }
+    $bs += ['contacts' => [], 'doi' => []];
+    $bfail = file_exists("$dir/brevo_fail") ? trim(file_get_contents("$dir/brevo_fail")) : '';
+    $bwant = file_exists("$dir/brevo_key") ? trim(file_get_contents("$dir/brevo_key")) : '';
+    $bout = function ($code, $arr) { http_response_code($code); echo json_encode($arr); exit; };
+    if ($path === '/__mock/state') { $bout(200, $bs); }
+    if ($bwant === '' || ($reqh['api-key'] ?? '') !== $bwant) { $bout(401, ['message' => 'Key not found', 'code' => 'unauthorized']); }
+    if ($bfail === '500') { $bout(500, ['message' => 'internal error', 'code' => 'server_error']); }
+    if ($bfail === '429') { $bout(429, ['message' => 'Too many requests', 'code' => 'too_many_requests']); }
+    $allowed = file_exists("$dir/brevo_attrs") ? array_filter(array_map('trim', explode(',', file_get_contents("$dir/brevo_attrs")))) : ['NOME', 'COGNOME', 'SMS', 'CITTA', 'PROGETTO'];
+    $lists = [7, 12];
+    $chk = function ($attrs, $ids) use ($allowed, $lists, $bout) {
+        foreach ((array) $attrs as $k => $v) { if (!in_array($k, $allowed, true)) { $bout(400, ['code' => 'invalid_parameter', 'message' => 'Invalid attributes: ' . $k . ' does not exist']); } }
+        foreach ((array) $ids as $i) { if (!in_array((int) $i, $lists, true)) { $bout(400, ['code' => 'invalid_parameter', 'message' => 'Invalid list id ' . (int) $i]); } }
+    };
+    if ($path === '/v3/account' && $method === 'GET') { $bout(200, ['email' => 'owner@brevo.test', 'companyName' => 'WebG Mock']); }
+    if ($path === '/v3/contacts' && $method === 'POST') {
+        $em = strtolower(trim((string) ($json['email'] ?? '')));
+        if ($em === '') { $bout(400, ['code' => 'missing_parameter', 'message' => 'email is required']); }
+        $chk($json['attributes'] ?? [], $json['listIds'] ?? []);
+        $exists = isset($bs['contacts'][$em]);
+        if ($exists && empty($json['updateEnabled'])) { $bout(400, ['code' => 'duplicate_parameter', 'message' => 'Contact already exist']); }
+        $c = $bs['contacts'][$em] ?? ['attributes' => [], 'listIds' => []];
+        $c['attributes'] = array_merge($c['attributes'], (array) ($json['attributes'] ?? []));
+        $c['listIds'] = array_values(array_unique(array_merge($c['listIds'], array_map('intval', (array) ($json['listIds'] ?? [])))));
+        $c['updates'] = ($c['updates'] ?? 0) + 1;
+        $bs['contacts'][$em] = $c;
+        file_put_contents($bf, json_encode($bs));
+        if ($exists) { http_response_code(204); exit; }
+        $bout(201, ['id' => count($bs['contacts'])]);
+    }
+    if ($path === '/v3/contacts/doubleOptinConfirmation' && $method === 'POST') {
+        $em = strtolower(trim((string) ($json['email'] ?? '')));
+        if ($em === '' || empty($json['templateId']) || empty($json['redirectionUrl']) || empty($json['includeListIds'])) { $bout(400, ['code' => 'missing_parameter', 'message' => 'email, templateId, redirectionUrl and includeListIds are required']); }
+        $chk($json['attributes'] ?? [], $json['includeListIds']);
+        $bs['doi'][] = ['email' => $em, 'attributes' => (array) ($json['attributes'] ?? []), 'lists' => $json['includeListIds'], 'templateId' => $json['templateId'], 'redirectionUrl' => $json['redirectionUrl']];
+        file_put_contents($bf, json_encode($bs));
+        http_response_code(201); echo '{}'; exit;
+    }
+    $bout(404, ['message' => 'mock brevo: not handled', 'code' => 'document_not_found']);
 }
 if ($host === 'api.stripe.com') {
     $sf = "$dir/stripe.json";

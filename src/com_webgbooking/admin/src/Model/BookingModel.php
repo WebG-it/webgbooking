@@ -128,6 +128,25 @@ class BookingModel extends BaseDatabaseModel
         return $this->writeStatus($ids, $status);
     }
 
+    /**
+     * Pending -> confirmed AND the confirmation email to the customer, through the booking engine (the plugin).
+     * Returns ['status' => ok|already|missing|error, 'mail' => bool].
+     */
+    public function confirmAndNotify(int $id): array
+    {
+        try {
+            if (PluginHelper::isEnabled('system', 'webgbooking')) {
+                $engine = Factory::getApplication()->bootPlugin('webgbooking', 'system');
+                if (method_exists($engine, 'adminConfirmBooking')) {
+                    return $engine->adminConfirmBooking($id);
+                }
+            }
+        } catch (\Throwable $e) {
+        }
+
+        return ['status' => 'error', 'mail' => false];
+    }
+
     /** Plain status update (no side effects). */
     private function writeStatus(array $ids, string $status): int
     {

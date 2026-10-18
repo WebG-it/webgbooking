@@ -63,14 +63,16 @@ def month(ev, frm, to):
     return json.loads(Sess().get(q)).get('days', {})
 
 
-def book(cfgname, date, time_, name='Mario Rossi', email='mario@example.invalid', phone='', location='', guest='', notes='', privacy='1', sess=None, cfg=None):
+def book(cfgname, date, time_, name='Mario Rossi', email='mario@example.invalid', phone='', location='', guest='', notes='', privacy='1', sess=None, cfg=None, newsletter='0', extra=None):
     cfg = cfg or page_cfg(cfgname)
     s = sess or Sess()
     tk = json.loads(s.get(AJAX + '&action=token'))['token']
     d = {'action': 'book', tk: '1', 'date': date, 'time': time_, 'name': name, 'email': email, 'phone': phone, 'notes': notes, 'guest': guest,
-         'privacy': privacy, 'website': '', 'newsletter': '0', 'form': cfg['form']}
+         'privacy': privacy, 'website': '', 'newsletter': newsletter, 'form': cfg['form']}
     if location:
         d['location'] = location
+    if extra:
+        d.update(extra)
     out = s.post(AJAX + '&action=book', d)
     try:
         return json.loads(out)

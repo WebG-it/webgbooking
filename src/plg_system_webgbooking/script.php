@@ -89,6 +89,7 @@ return new class () implements InstallerScriptInterface {
                 . $db->quoteName('avail_cfg') . ' TEXT NULL,'
                 . $db->quoteName('ip_hash') . ' VARCHAR(32) NULL,'
                 . $db->quoteName('staff_to') . ' VARCHAR(500) NULL,'
+                . $db->quoteName('hook_cfg') . ' TEXT NULL,'
                 . 'PRIMARY KEY (' . $db->quoteName('id') . '),'
                 . 'KEY ' . $db->quoteName('idx_date') . ' (' . $db->quoteName('booking_date') . ',' . $db->quoteName('booking_time') . '),'
                 . 'KEY ' . $db->quoteName('idx_token') . ' (' . $db->quoteName('manage_token') . ')'
@@ -130,6 +131,8 @@ return new class () implements InstallerScriptInterface {
                 'ip_hash'               => 'VARCHAR(32) NULL',
                 // 0.33.2: the element's staff recipient(s), so reschedule / cancel / alerts reach the same people as the booking
                 'staff_to'              => 'VARCHAR(500) NULL',
+                // 0.34.0: where the element's webhook points (name of the header profile, no secret), for the later events
+                'hook_cfg'              => 'TEXT NULL',
             ];
             foreach ($newCols as $name => $def) {
                 try {

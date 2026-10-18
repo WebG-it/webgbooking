@@ -33,7 +33,7 @@ use Joomla\Event\SubscriberInterface;
 final class Webgbooking extends CMSPlugin implements SubscriberInterface
 {
     /** Cache-buster for the bundled front-end assets (wgb.css/js, UIkit). Bump when those change. */
-    public const ASSET_VER = '0.33.2';
+    public const ASSET_VER = '0.34.0';
 
     protected $autoloadLanguage = true;
 
@@ -316,6 +316,8 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                         // Free bookings are confirmed at once; the element can keep the old "I confirm each one" flow.
                         'status'          => !empty($actions['manual']) ? 'pending' : 'confirmed',
                         'staff_to'        => $this->cleanRecipients((string) (($actions['staff'] ?? [])['to'] ?? '')),
+                        // Where the element's webhook points (no secrets: the header profile is only a NAME), for the later events.
+                        'hook_cfg'        => $this->hookCfgJson($actions),
                         'source_url'      => substr((string) $input->server->getString('HTTP_REFERER', ''), 0, 255),
                         'meeting_url'     => $loc === 'phone' ? '' : trim((string) $this->params->get('meeting_url', '')),
                         'guest_email'     => $guest,
@@ -794,7 +796,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             $plain = $this->dec($v);
             if ($plain === '') {
                 $this->secretFail[$name] = true;
-                $this->wlog('Stripe option "' . $name . '" is stored encrypted but cannot be decrypted (was the Joomla secret changed?): enter it again in the plugin options');
+                $this->wlog('Secret option "' . $name . '" is stored encrypted but cannot be decrypted (was the Joomla secret changed?): enter it again in the plugin options');
             }
 
             return $plain;
@@ -1085,13 +1087,23 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
 
         // 5. webhook
         if (empty($steps['webhook'])) {
-            $wh       = $actions['webhook'] ?? [];
-            $whUrl    = (!empty($wh['on']) && !empty($wh['url'])) ? (string) $wh['url'] : '';
-            $whMethod = !empty($wh['on']) ? (string) ($wh['method'] ?? '') : '';
-            if ($this->postBookingWebhook($row, $whUrl, $whMethod)) {
+            // The same rule as for the later events (see hookCfgJson): a paid booking is announced as booking.paid.
+            $cfg   = json_decode($this->hookCfgJson($actions), true);
+            $event = ($row->payment_status ?? '') === 'paid' ? 'booking.paid' : 'booking.created';
+            if ($this->hookSend($row, $event, (array) $cfg)) {
                 $steps['webhook'] = true;
             } else {
                 $failed[] = 'webhook';
+            }
+        }
+
+        // 5b. Brevo contact (own step: a Brevo outage never re-sends emails or re-creates events)
+        if (empty($steps['brevo']) && !empty(($actions['brevo'] ?? [])['on'])) {
+            $r = $this->brevoSync($row, (array) $actions['brevo'], $newsletter);
+            if ($r === 'retry') {
+                $failed[] = 'brevo';
+            } else {
+                $steps['brevo'] = $r;   // ok | skip | error (an error that a retry cannot fix: logged and mailed to the staff once)
             }
         }
 
@@ -1190,6 +1202,8 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                 0,
                 $limit
             )->loadObjectList();
+
+            $n += $this->retryHooks();
 
             foreach ($rows ?: [] as $row) {
                 $old = (string) ($row->fx_last ?? '');
@@ -1488,6 +1502,11 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                         ->where($db->quoteName('id') . ' = ' . (int) $row->id)
                         ->where($db->quoteName('status') . ' = ' . $db->quote('awaiting_payment'))
                 )->execute();
+                if ((int) $db->getAffectedRows() === 1) {
+                    $row->status = 'expired';
+                    $row->payment_status = 'expired';
+                    $this->fireHook($row, 'booking.expired');
+                }
                 $n += (int) $db->getAffectedRows();
             }
         } catch (\Throwable $e) {
@@ -1573,6 +1592,11 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                             ->where($db->quoteName('id') . ' = ' . (int) $row->id)
                             ->where($db->quoteName('status') . ' = ' . $db->quote('awaiting_payment'))
                     )->execute();
+                    if ((int) $db->getAffectedRows() === 1) {
+                        $row->status = 'expired';
+                        $row->payment_status = 'expired';
+                        $this->fireHook($row, 'booking.expired');
+                    }
                     $result = 'expired';
                 }
             }
@@ -1761,7 +1785,8 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             $new['config_bump']  = '0';
 
             $freshSk = '';
-            foreach (['stripe_sk', 'stripe_whsec'] as $k) {
+            $fresh   = [];
+            foreach (['stripe_sk', 'stripe_whsec', 'brevo_key', 'whp1_headers', 'whp2_headers', 'whp3_headers', 'whp4_headers'] as $k) {
                 $v = trim((string) ($new[$k] ?? ''));
                 if ($v === '') {
                     $new[$k] = (string) ($old[$k] ?? '');
@@ -1769,6 +1794,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                     $new[$k] = '';
                 } elseif (strncmp($v, 'g:', 2) !== 0) {
                     $new[$k] = $this->enc($v);
+                    $fresh[$k] = $v;
                     if ($k === 'stripe_sk') {
                         $freshSk = $v;
                     }
@@ -1801,6 +1827,24 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                     $app->enqueueMessage(Text::_('PLG_SYSTEM_WEBGBOOKING_PAY_KEY_UNVERIFIABLE'), 'warning');
                 } else {
                     $app->enqueueMessage(Text::sprintf('PLG_SYSTEM_WEBGBOOKING_PAY_KEY_BAD', (int) $chk['code']), 'warning');
+                }
+            }
+
+            // Brevo: a newly entered key is checked at once (GET /v3/account). Header profiles: only counts are shown.
+            if (isset($fresh['brevo_key'])) {
+                $chk = $this->checkBrevoKey($fresh['brevo_key']);
+                if ($chk['ok']) {
+                    $app->enqueueMessage(Text::sprintf('PLG_SYSTEM_WEBGBOOKING_BREVO_KEY_OK', $chk['account']), 'message');
+                } elseif (!empty($chk['unverifiable'])) {
+                    $app->enqueueMessage(Text::_('PLG_SYSTEM_WEBGBOOKING_BREVO_KEY_UNVERIFIABLE'), 'warning');
+                } else {
+                    $app->enqueueMessage(Text::sprintf('PLG_SYSTEM_WEBGBOOKING_BREVO_KEY_BAD', (int) $chk['code']), 'warning');
+                }
+            }
+            foreach ([1, 2, 3, 4] as $i) {
+                if (isset($fresh['whp' . $i . '_headers'])) {
+                    $u = '';
+                    $app->enqueueMessage(Text::sprintf('PLG_SYSTEM_WEBGBOOKING_WHP_SAVED', (string) ($new['whp' . $i . '_name'] ?? ('#' . $i)), \count(self::parseHeaderLines($fresh['whp' . $i . '_headers'], $u))), 'message');
                 }
             }
         } catch (\Throwable $e) {
@@ -2003,56 +2047,391 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
         return (bool) preg_match('#^https?://[^\s]+$#i', $url) && filter_var($url, FILTER_VALIDATE_URL) !== false;
     }
 
+    /** Where the element's webhook points, kept on the booking for the later events. No secrets: the profile is a name. */
+    private function hookCfgJson(array $actions): string
+    {
+        $wh = (array) ($actions['webhook'] ?? []);
+        $on = !empty($wh['on']);
+
+        return (string) json_encode([
+            'url'     => ($on && !empty($wh['url'])) ? (string) $wh['url'] : '',
+            'method'  => $on ? (string) ($wh['method'] ?? '') : '',
+            'profile' => $on ? (string) ($wh['profile'] ?? '') : '',
+        ]);
+    }
+
     /**
-     * Forward the full booking to a webhook (per-element override → plugin global), POST or GET.
-     * True when delivered or when there is nothing to deliver; false on a transport error or a 5xx (worth a retry).
+     * A header profile saved in the plugin options (Integrations tab): a NAME the element refers to, and behind it
+     * the headers with their secrets (encrypted, never sent back to any form, never put in the page markup).
+     * One "Header: value" per line; a line "URL: https://..." gives the endpoint too (Zapier/Make URLs are secrets).
+     * Returns ['url' => '', 'headers' => [name => value], 'found' => bool].
      */
-    private function postBookingWebhook(object $row, string $overrideUrl = '', string $method = ''): bool
+    private function webhookProfile(string $name): array
+    {
+        $out  = ['url' => '', 'headers' => [], 'found' => false];
+        $name = trim($name);
+        if ($name === '') {
+            return $out;
+        }
+        for ($i = 1; $i <= 4; $i++) {
+            if (strcasecmp(trim((string) $this->params->get('whp' . $i . '_name', '')), $name) !== 0) {
+                continue;
+            }
+            $out['found'] = true;
+            foreach (self::parseHeaderLines($this->stripeSecretOpt('whp' . $i . '_headers'), $out['url']) as $h => $v) {
+                $out['headers'][$h] = $v;
+            }
+            break;
+        }
+
+        return $out;
+    }
+
+    /** Parse "Header: value" lines. Invalid or forbidden lines are skipped. $url receives a "URL:" line. */
+    public static function parseHeaderLines(string $raw, string &$url = ''): array
+    {
+        $out = [];
+        foreach (preg_split('/\r\n|\r|\n/', $raw) ?: [] as $line) {
+            $line = trim($line);
+            if ($line === '' || strpos($line, ':') === false) {
+                continue;
+            }
+            [$h, $v] = array_map('trim', explode(':', $line, 2));
+            if (strcasecmp($h, 'url') === 0) {
+                if (self::httpUrlOk($v)) {
+                    $url = $v;
+                }
+                continue;
+            }
+            if (
+                !preg_match('/^[A-Za-z0-9-]{1,60}$/', $h) || $v === '' || \strlen($v) > 1000 || preg_match('/[\x00-\x1f\x7f]/', $v)
+                || \in_array(strtolower($h), ['host', 'content-length', 'content-type', 'transfer-encoding', 'connection', 'accept-encoding'], true)
+            ) {
+                continue;
+            }
+            if (\count($out) >= 6) {
+                break;
+            }
+            $out[$h] = $v;
+        }
+
+        return $out;
+    }
+
+    /** The JSON a webhook receives (the same keys for every event; `event` says which one it is). */
+    private function hookPayload(object $row, string $event, array $extra = []): array
+    {
+        return $extra + [
+            'event'       => $event,
+            'id'          => (int) $row->id,
+            'date'        => $row->booking_date,
+            'time'        => $row->booking_time,
+            'name'        => $row->customer_name,
+            'email'       => $row->customer_email,
+            'phone'       => $row->customer_phone,
+            'guest'       => $row->guest_email,
+            'notes'       => $row->notes,
+            'meeting_url' => $row->meeting_url,
+            'status'      => $row->status,
+            'location'    => $this->rowLocation($row),
+            'duration'    => $this->rowDuration($row),
+            'event_name'  => (string) ($row->event_name ?? ''),
+            'payment_status' => (string) ($row->payment_status ?? ''),
+            'amount'      => isset($row->amount_cents) && $row->amount_cents !== null ? round(((int) $row->amount_cents) / 100, 2) : null,
+            'currency'    => (string) ($row->currency ?? ''),
+            'custom'      => $this->customMap($row),
+        ];
+    }
+
+    /**
+     * Deliver one webhook call. $cfg = ['url', 'method', 'profile'] as stored on the booking (url may be empty).
+     * Endpoint: the element's URL, else the profile's "URL:" line, else the plugin-wide webhook. The plugin-wide
+     * header profile only ever goes to the plugin-wide URL: never to an endpoint the element chose for itself.
+     * True when delivered or when there is nothing to deliver; false on a transport error, 429 or 5xx (worth a retry).
+     */
+    private function hookSend(object $row, string $event, array $cfg, array $extra = []): bool
     {
         try {
-            $url = $overrideUrl !== '' ? $overrideUrl : trim((string) $this->params->get('booking_webhook', ''));
+            $profName = trim((string) ($cfg['profile'] ?? ''));
+            $prof     = $this->webhookProfile($profName);
+            if ($profName !== '' && !$prof['found']) {
+                $this->wlog('Webhook: il profilo di intestazioni "' . mb_substr($profName, 0, 40) . '" non esiste nelle opzioni del plugin (scheda Integrazioni): la chiamata parte senza intestazioni aggiuntive');
+            }
+            $url     = trim((string) ($cfg['url'] ?? ''));
+            $headers = $prof['headers'];
+            if ($url === '' && $prof['url'] !== '') {
+                $url = $prof['url'];
+            }
+            if ($url === '') {
+                $url = trim((string) $this->params->get('booking_webhook', ''));
+                if ($profName === '') {
+                    $g = $this->webhookProfile(trim((string) $this->params->get('booking_webhook_profile', '')));
+                    $headers = $g['headers'];
+                    if ($url === '') {
+                        $url = $g['url'];
+                    }
+                }
+            }
             if ($url === '') {
                 return true;
             }
             if (!self::httpUrlOk($url)) {
-                $this->wlog('booking webhook URL ignored: not an http(s) URL');
+                $this->wlog('Webhook: l\'indirizzo non e\' un URL http(s), ignorato');
 
                 return true;
             }
 
-            $method = strtoupper($method !== '' ? $method : (string) $this->params->get('booking_webhook_method', 'POST'));
-            $data   = [
-                'event'       => 'booking.created',
-                'id'          => (int) $row->id,
-                'date'        => $row->booking_date,
-                'time'        => $row->booking_time,
-                'name'        => $row->customer_name,
-                'email'       => $row->customer_email,
-                'phone'       => $row->customer_phone,
-                'guest'       => $row->guest_email,
-                'notes'       => $row->notes,
-                'meeting_url' => $row->meeting_url,
-                'status'      => $row->status,
-                'location'    => $this->rowLocation($row),
-                'duration'    => $this->rowDuration($row),
-                'event_name'  => (string) ($row->event_name ?? ''),
-                'payment_status' => (string) ($row->payment_status ?? ''),
-                'amount'      => isset($row->amount_cents) && $row->amount_cents !== null ? round(((int) $row->amount_cents) / 100, 2) : null,
-                'currency'    => (string) ($row->currency ?? ''),
-                'custom'      => $this->customMap($row),
-            ];
+            $method = strtoupper(trim((string) ($cfg['method'] ?? '')) !== '' ? (string) $cfg['method'] : (string) $this->params->get('booking_webhook_method', 'POST'));
+            $data   = $this->hookPayload($row, $event, $extra);
 
             $http = (new HttpFactory())->getHttp();
             if ($method === 'GET') {
                 $sep  = strpos($url, '?') === false ? '?' : '&';
-                $resp = $http->get($url . $sep . http_build_query($data), [], 8);
+                $resp = $http->get($url . $sep . http_build_query($data), $headers, 8);
             } else {
-                $resp = $http->post($url, json_encode($data), ['Content-Type' => 'application/json'], 8);
+                $resp = $http->post($url, json_encode($data), $headers + ['Content-Type' => 'application/json'], 8);
+            }
+            $code = self::httpCode($resp);
+            if ($code >= 400 && $code < 500 && $code !== 429) {
+                $this->wlog('Webhook: il destinatario ha risposto HTTP ' . $code . ' all\'evento ' . $event . ' (prenotazione ' . (int) $row->id . '): non riprovo, controlla indirizzo e intestazioni');
             }
 
-            return self::httpCode($resp) < 500;
+            return $code < 500 && $code !== 429;
         } catch (\Throwable $e) {
             return false;
+        }
+    }
+
+    /**
+     * Tell the webhook about something that happened to a booking AFTER it was created (moved, cancelled,
+     * confirmed, expired). A failed delivery goes to a small outbox (kv `hq:`) that the scheduled task retries.
+     */
+    private function fireHook(object $row, string $event, array $extra = []): void
+    {
+        try {
+            $cfg = json_decode((string) ($row->hook_cfg ?? ''), true);
+            if (!$this->hookSend($row, $event, \is_array($cfg) ? $cfg : [], $extra)) {
+                $this->kvSet('hq:' . (int) $row->id . ':' . preg_replace('/[^a-z.]/', '', $event) . ':' . bin2hex(random_bytes(3)), (string) json_encode(['id' => (int) $row->id, 'event' => $event, 'extra' => $extra, 'tries' => 1, 'at' => time()]));
+            }
+        } catch (\Throwable $e) {
+        }
+    }
+
+    /** Redeliver the webhook calls that failed (backoff 2, 4, 6 ... minutes, at most 8 tries). Returns how many were sent. */
+    private function retryHooks(int $limit = 20): int
+    {
+        $n = 0;
+        try {
+            $db   = Factory::getContainer()->get(DatabaseInterface::class);
+            $rows = $db->setQuery(
+                $db->getQuery(true)->select($db->quoteName(['k', 'v']))->from($db->quoteName('#__webgbooking_kv'))
+                    ->where($db->quoteName('k') . ' LIKE ' . $db->quote('hq:%'))->order($db->quoteName('updated') . ' ASC'),
+                0,
+                $limit
+            )->loadObjectList();
+
+            foreach ($rows ?: [] as $r) {
+                $q = json_decode((string) $r->v, true);
+                if (!\is_array($q) || empty($q['id'])) {
+                    $this->kvDelete((string) $r->k);
+                    continue;
+                }
+                $tries = (int) ($q['tries'] ?? 1);
+                if (time() - (int) ($q['at'] ?? 0) < $tries * 120) {
+                    continue;
+                }
+                $row = $db->setQuery($db->getQuery(true)->select('*')->from($db->quoteName('#__webgbooking_bookings'))->where($db->quoteName('id') . ' = ' . (int) $q['id']))->loadObject();
+                if (!$row) {
+                    $this->kvDelete((string) $r->k);
+                    continue;
+                }
+                $cfg = json_decode((string) ($row->hook_cfg ?? ''), true);
+                if ($this->hookSend($row, (string) $q['event'], \is_array($cfg) ? $cfg : [], (array) ($q['extra'] ?? []))) {
+                    $this->kvDelete((string) $r->k);
+                    $n++;
+                } elseif ($tries >= 8) {
+                    $this->kvDelete((string) $r->k);
+                    $this->wlog('Webhook: evento ' . $q['event'] . ' della prenotazione ' . (int) $q['id'] . ' non consegnato dopo 8 tentativi, lo lascio');
+                    $this->alertStaff('hookfail' . (int) $q['id'] . $q['event'], Text::_('PLG_SYSTEM_WEBGBOOKING_ALERT_HOOK_SUBJECT'), Text::sprintf('PLG_SYSTEM_WEBGBOOKING_ALERT_HOOK_BODY', (int) $q['id'], (string) $q['event']), 24, $row);
+                } else {
+                    $q['tries'] = $tries + 1;
+                    $q['at']    = time();
+                    $this->kvSet((string) $r->k, (string) json_encode($q));
+                }
+            }
+        } catch (\Throwable $e) {
+        }
+
+        return $n;
+    }
+
+    // ------------------------------------------------------------------------------------------------
+    // Brevo (native): the booker as a contact, optionally on a list, with double opt-in when they ticked the newsletter
+    // ------------------------------------------------------------------------------------------------
+
+    /** A phone number in E.164 (+39...), or '' when it cannot be made into one with confidence. */
+    public static function e164(string $phone, string $defaultCc = '39'): string
+    {
+        $d = preg_replace('/[^\d+]/', '', trim($phone));
+        if ($d === '' || strpos((string) $d, '+', 1) !== false) {
+            return '';
+        }
+        if (strncmp($d, '00', 2) === 0) {
+            $d = '+' . substr($d, 2);
+        }
+        if ($d[0] !== '+') {
+            $cc = preg_replace('/\D/', '', $defaultCc);
+            if ($cc === '') {
+                return '';
+            }
+            // Italian numbers keep their leading 0 (landlines); elsewhere a single trunk 0 is dropped.
+            $d = '+' . $cc . ($cc === '39' ? $d : preg_replace('/^0/', '', $d));
+        }
+
+        return preg_match('/^\+[1-9]\d{7,14}$/', $d) ? $d : '';
+    }
+
+    /** Brevo attributes for a booking: first name / surname / SMS + "ATTRIBUTE=Question label" mappings. */
+    private function brevoAttributes(object $row, string $mapping): array
+    {
+        $attr = static fn(string $v, string $def): string => strtoupper(preg_replace('/[^A-Za-z0-9_]/', '', trim($v) !== '' ? $v : $def));
+        $aFirst = $attr((string) $this->params->get('brevo_attr_first', ''), 'NOME');
+        $aLast  = $attr((string) $this->params->get('brevo_attr_last', ''), 'COGNOME');
+        $aSms   = $attr((string) $this->params->get('brevo_attr_sms', ''), 'SMS');
+
+        $out   = [];
+        $parts = explode(' ', trim((string) preg_replace('/\s+/u', ' ', (string) $row->customer_name)), 2);
+        if ($aFirst !== '' && $parts[0] !== '') {
+            $out[$aFirst] = $parts[0];
+        }
+        if ($aLast !== '' && !empty($parts[1])) {
+            $out[$aLast] = $parts[1];     // the first word is the name, the rest the surname (De Luca, Dalla Chiesa ...)
+        }
+        $sms = self::e164((string) $row->customer_phone, (string) $this->params->get('brevo_default_cc', '39'));
+        if ($aSms !== '' && $sms !== '') {
+            $out[$aSms] = $sms;
+        }
+
+        $answers = [];
+        foreach ($this->customMap($row) as $label => $value) {
+            $answers[mb_strtolower(trim((string) $label))] = (string) $value;
+        }
+        foreach (preg_split('/\r\n|\r|\n/', $mapping) ?: [] as $line) {
+            if (strpos($line, '=') === false) {
+                continue;
+            }
+            [$name, $label] = array_map('trim', explode('=', $line, 2));
+            $name = strtoupper($name);
+            $v    = $answers[mb_strtolower($label)] ?? '';
+            if (preg_match('/^[A-Z][A-Z0-9_]{0,49}$/', $name) && $v !== '') {
+                $out[$name] = mb_substr($v, 0, 500);
+            }
+        }
+
+        return $out;
+    }
+
+    /** One Brevo API call. Returns [http code, decoded body]. Throws on a transport error (the caller retries). */
+    private function brevoCall(string $method, string $path, ?array $body, string $key): array
+    {
+        $http = (new HttpFactory())->getHttp();
+        $h    = ['api-key' => $key, 'accept' => 'application/json', 'Content-Type' => 'application/json'];
+        $url  = 'https://api.brevo.com' . $path;
+        $resp = $method === 'GET' ? $http->get($url, $h, 15) : $http->post($url, (string) json_encode($body), $h, 15);
+        $data = json_decode(self::httpBody($resp), true);
+
+        return [self::httpCode($resp), \is_array($data) ? $data : []];
+    }
+
+    /** Check a Brevo API key (GET /v3/account). ['ok' => bool, 'account' => string, 'code' => int, 'unverifiable' => bool]. */
+    public function checkBrevoKey(string $key): array
+    {
+        try {
+            [$code, $data] = $this->brevoCall('GET', '/v3/account', null, $key);
+            if ($code === 200) {
+                return ['ok' => true, 'account' => mb_substr((string) ($data['companyName'] ?? $data['email'] ?? ''), 0, 80), 'code' => 200];
+            }
+
+            return ['ok' => false, 'code' => $code, 'unverifiable' => $code >= 500 || $code === 429];
+        } catch (\Throwable $e) {
+            return ['ok' => false, 'code' => 0, 'unverifiable' => true];
+        }
+    }
+
+    private function brevoFail(object $row, string $why): void
+    {
+        $this->wlog('Brevo: contatto della prenotazione ' . (int) $row->id . ' non salvato, ' . $why);
+        $this->alertStaff(
+            'brevo' . (int) $row->id,
+            Text::_('PLG_SYSTEM_WEBGBOOKING_ALERT_BREVO_SUBJECT'),
+            Text::sprintf('PLG_SYSTEM_WEBGBOOKING_ALERT_BREVO_BODY', (int) $row->id, $row->customer_name, $row->customer_email, $why),
+            12,
+            $row
+        );
+    }
+
+    /**
+     * Create or update the booker as a Brevo contact. Never removes the contact from other lists.
+     * Returns ok | skip | error (permanent, already logged and mailed to the staff) | retry (Brevo or the network is down).
+     */
+    private function brevoSync(object $row, array $bv, bool $newsletter): string
+    {
+        try {
+            if (($bv['when'] ?? 'newsletter') !== 'always' && !$newsletter) {
+                return 'skip';
+            }
+            $key = $this->stripeSecretOpt('brevo_key');
+            if ($key === '') {
+                $this->brevoFail($row, 'la chiave API non e\' impostata nelle opzioni del plugin (scheda Integrazioni)');
+
+                return 'error';
+            }
+
+            $lists = array_values(array_unique(array_filter(array_map('intval', (array) ($bv['lists'] ?? [])), static fn($i) => $i > 0)));
+            $attrs = $this->brevoAttributes($row, (string) ($bv['attrs'] ?? ''));
+            $doi   = (array) ($bv['doi'] ?? []);
+
+            if (!empty($doi['on']) && $newsletter) {
+                if ((int) ($doi['template'] ?? 0) < 1 || !$lists) {
+                    $this->brevoFail($row, 'il double opt-in richiede almeno una lista e l\'id del modello di email Brevo');
+
+                    return 'error';
+                }
+                [$code, $data] = $this->brevoCall('POST', '/v3/contacts/doubleOptinConfirmation', [
+                    'email'          => $row->customer_email,
+                    'attributes'     => (object) $attrs,
+                    'includeListIds' => $lists,
+                    'templateId'     => (int) $doi['template'],
+                    'redirectionUrl' => (string) (($doi['redirect'] ?? '') !== '' ? $doi['redirect'] : Uri::root()),
+                ], $key);
+            } else {
+                $body = ['email' => $row->customer_email, 'attributes' => (object) $attrs, 'updateEnabled' => true];
+                if ($lists) {
+                    $body['listIds'] = $lists;
+                }
+                [$code, $data] = $this->brevoCall('POST', '/v3/contacts', $body, $key);
+            }
+
+            if ($code >= 200 && $code < 300) {
+                return 'ok';
+            }
+            if ($code === 429 || $code >= 500) {
+                $this->wlog('Brevo: risposta HTTP ' . $code . ', riprovo (prenotazione ' . (int) $row->id . ')');
+
+                return 'retry';
+            }
+            $msg = mb_substr((string) preg_replace('/[^\p{L}\p{N} .,:;()\/\'_-]/u', '', (string) ($data['message'] ?? '')), 0, 200);
+            if ($code === 401 || $code === 403) {
+                $this->brevoFail($row, 'Brevo rifiuta la chiave API (HTTP ' . $code . '): controllala nelle opzioni del plugin');
+            } else {
+                $this->brevoFail($row, 'Brevo ha risposto HTTP ' . $code . ($msg !== '' ? ' (' . $msg . ')' : '') . ': controlla ID delle liste, nomi degli attributi e modello');
+            }
+
+            return 'error';
+        } catch (\Throwable $e) {
+            $this->wlog('Brevo: Brevo non raggiungibile, riprovo (prenotazione ' . (int) $row->id . ')');
+
+            return 'retry';
         }
     }
 
@@ -2182,7 +2561,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             }
             if ($parts === 'all' || $parts === 'staff') {
                 try {
-                    $this->notifyStaff($row, $mf, $manageUrl, $dateFmt, $admin);
+                    $this->notifyStaff($row, $mf, $manageUrl, $dateFmt, $admin, $reschedule);
                 } catch (\Throwable $e) {
                     $ok = false;
                     $this->wlog('staff email failed for booking ' . (int) $row->id);
@@ -2260,15 +2639,15 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
     }
 
     /** Staff email: per-element HTML template, or the plain default. */
-    private function notifyStaff(object $row, $mf, string $manageUrl, string $dateFmt, string $admin): void
+    private function notifyStaff(object $row, $mf, string $manageUrl, string $dateFmt, string $admin, bool $moved = false): void
     {
         // ---- Staff email action: per-element HTML template, or the plain default. ----
         if ($row->_staffOn ?? true) {
             $tos = $this->staffRecipients($row);
             if ($tos) {
                 $sSubTpl = (string) ($row->_staffSubject ?? '');
-                $sSub    = $sSubTpl !== '' ? strtr($sSubTpl, ['{name}' => $row->customer_name, '{date}' => $dateFmt, '{time}' => $row->booking_time]) : Text::sprintf('PLG_SYSTEM_WEBGBOOKING_EMAIL_ADMIN_SUBJECT', $row->booking_date, $row->booking_time);
-                $sBody   = (string) ($row->_staffBody ?? '');
+                $sSub    = $moved ? Text::sprintf('PLG_SYSTEM_WEBGBOOKING_EMAIL_ADMIN_SUBJECT_MOVED', $row->booking_date, $row->booking_time) : ($sSubTpl !== '' ? strtr($sSubTpl, ['{name}' => $row->customer_name, '{date}' => $dateFmt, '{time}' => $row->booking_time]) : Text::sprintf('PLG_SYSTEM_WEBGBOOKING_EMAIL_ADMIN_SUBJECT', $row->booking_date, $row->booking_time));
+                $sBody   = $moved ? '' : (string) ($row->_staffBody ?? '');
                 if ($sBody !== '') {
                     $this->sendHtmlMail($mf, $tos, $sSub, $this->wrapEmail($this->renderTpl($sBody, $row, $manageUrl, $dateFmt)), '');
                 } else {
@@ -2286,7 +2665,8 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                     $m = $mf->createMailer();
                     $m->addRecipient($tos);
                     $m->setSubject($sSub);
-                    $m->setBody(Text::sprintf('PLG_SYSTEM_WEBGBOOKING_EMAIL_ADMIN_BODY', $row->booking_date, $row->booking_time, $row->customer_name, $row->customer_email, $row->customer_phone ?: '-', $row->notes ?: '-') . $meetLine . $guestLine . $custLines);
+                    $movedLine = $moved ? Text::sprintf('PLG_SYSTEM_WEBGBOOKING_EMAIL_ADMIN_MOVED_INTRO', (string) ($row->_prevDate ?? ''), (string) ($row->_prevTime ?? '')) . "\n\n" : '';
+                    $m->setBody($movedLine . Text::sprintf('PLG_SYSTEM_WEBGBOOKING_EMAIL_ADMIN_BODY', $row->booking_date, $row->booking_time, $row->customer_name, $row->customer_email, $row->customer_phone ?: '-', $row->notes ?: '-') . $meetLine . $guestLine . $custLines);
                     $m->Send();
                 }
             }
@@ -3296,6 +3676,40 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
         }
     }
 
+    /**
+     * "Confirm and tell the customer" (admin, manual-confirmation flow): pending -> confirmed, the confirmation email
+     * (with the .ics) goes to the customer and the webhook hears booking.confirmed. Idempotent: a second click does nothing.
+     * Returns ['status' => ok|already|missing|error, 'mail' => bool].
+     */
+    public function adminConfirmBooking(int $id): array
+    {
+        try {
+            $db  = Factory::getContainer()->get(DatabaseInterface::class);
+            $row = $db->setQuery($db->getQuery(true)->select('*')->from($db->quoteName('#__webgbooking_bookings'))->where($db->quoteName('id') . ' = ' . (int) $id))->loadObject();
+            if (!$row) {
+                return ['status' => 'missing', 'mail' => false];
+            }
+            $db->setQuery(
+                $db->getQuery(true)->update($db->quoteName('#__webgbooking_bookings'))
+                    ->set($db->quoteName('status') . ' = ' . $db->quote('confirmed'))
+                    ->set($db->quoteName('updated') . ' = ' . $db->quote(Factory::getDate()->toSql()))
+                    ->where($db->quoteName('id') . ' = ' . (int) $id)
+                    ->where($db->quoteName('status') . ' = ' . $db->quote('pending'))
+            )->execute();
+            if ((int) $db->getAffectedRows() !== 1) {
+                return ['status' => 'already', 'mail' => false];
+            }
+            $row->status = 'confirmed';
+            $this->useSiteLanguage();
+            $mail = $this->notify($row, false, 'customer');
+            $this->fireHook($row, 'booking.confirmed', ['confirmed_by' => 'staff']);
+
+            return ['status' => 'ok', 'mail' => $mail];
+        } catch (\Throwable $e) {
+            return ['status' => 'error', 'mail' => false];
+        }
+    }
+
     /** Shared cancellation: DB status, Google event, email. $byAdmin skips the staff notification. */
     private function cancelRow(object $row, bool $byAdmin): array
     {
@@ -3330,6 +3744,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
         }
 
         $mail = $this->notifyCancellation($row, $byAdmin);
+        $this->fireHook($row, 'booking.cancelled', ['cancelled_by' => $byAdmin ? 'staff' : 'customer']);
 
         return ['status' => 'ok', 'google' => $google, 'mail' => $mail, 'refund' => ($row->payment_status ?? '') === 'paid'];
     }
@@ -3425,6 +3840,8 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
         $lockName = $this->lockName($db, $date);
         $locked   = false;
         $slotOk   = false;
+        $prevDate = (string) $row->booking_date;
+        $prevTime = (string) $row->booking_time;
 
         try {
             $tz   = new \DateTimeZone($this->siteTz());
@@ -3485,7 +3902,10 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                 $this->patchGoogleEvent($row);
             }
 
+            $row->_prevDate = $prevDate;
+            $row->_prevTime = $prevTime;
             $this->notify($row, true);
+            $this->fireHook($row, 'booking.rescheduled', ['previous_date' => $prevDate, 'previous_time' => $prevTime]);
 
             $this->respond(['ok' => true, 'message' => Text::_('PLG_SYSTEM_WEBGBOOKING_RESCHEDULE_OK')]);
         } catch (\Throwable $e) {

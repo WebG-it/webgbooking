@@ -6,7 +6,7 @@ cp /tmp/mock/mock.php /var/www/mock/mock.php
 cd /etc/ssl/wgbmock
 openssl req -x509 -newkey rsa:2048 -nodes -keyout ca.key -out ca.crt -subj "/CN=wgb-test-ca" -days 30 2>/dev/null
 openssl req -newkey rsa:2048 -nodes -keyout leaf.key -out leaf.csr -subj "/CN=www.googleapis.com" 2>/dev/null
-printf "subjectAltName=DNS:www.googleapis.com,DNS:oauth2.googleapis.com,DNS:sheets.googleapis.com,DNS:api.stripe.com\n" > san.cnf
+printf "subjectAltName=DNS:www.googleapis.com,DNS:oauth2.googleapis.com,DNS:sheets.googleapis.com,DNS:api.stripe.com,DNS:api.brevo.com\n" > san.cnf
 openssl x509 -req -in leaf.csr -CA ca.crt -CAkey ca.key -CAcreateserial -out leaf.crt -days 30 -extfile san.cnf 2>/dev/null
 # trust the mock CA in the bundle Joomla's curl transport uses (test container only)
 BUNDLE=$(cd /var/www/html && php -r 'require "libraries/vendor/autoload.php"; echo Composer\CaBundle\CaBundle::getBundledCaBundlePath();')
@@ -15,7 +15,7 @@ a2enmod ssl >/dev/null 2>&1 || true
 cat > /etc/apache2/sites-available/mock-ssl.conf <<'CONF'
 <VirtualHost *:443>
     ServerName www.googleapis.com
-    ServerAlias oauth2.googleapis.com sheets.googleapis.com api.stripe.com
+    ServerAlias oauth2.googleapis.com sheets.googleapis.com api.stripe.com api.brevo.com
     DocumentRoot /var/www/mock
     SSLEngine on
     SSLCertificateFile /etc/ssl/wgbmock/leaf.crt
@@ -29,8 +29,8 @@ CONF
 a2ensite mock-ssl >/dev/null 2>&1
 apache2ctl graceful
 # googleapis hosts resolve to this very container
-grep -v -e googleapis -e api.stripe.com /etc/hosts > /tmp/hosts.new || true
-echo "127.0.0.1 www.googleapis.com oauth2.googleapis.com sheets.googleapis.com api.stripe.com" >> /tmp/hosts.new
+grep -v -e googleapis -e api.stripe.com -e api.brevo.com /etc/hosts > /tmp/hosts.new || true
+echo "127.0.0.1 www.googleapis.com oauth2.googleapis.com sheets.googleapis.com api.stripe.com api.brevo.com" >> /tmp/hosts.new
 cat /tmp/hosts.new > /etc/hosts
 # SMTP sink in the background
 nohup php /tmp/mock/smtpsink.php > /tmp/smtpsink.log 2>&1 &

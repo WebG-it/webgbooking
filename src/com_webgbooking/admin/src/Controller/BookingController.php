@@ -35,6 +35,30 @@ class BookingController extends BaseController
         $this->changeStatus('confirm');
     }
 
+    /** Manual-confirmation flow: confirm AND email the customer (the plain "confirm" only changes the status). */
+    public function confirmnotify()
+    {
+        $this->checkToken();
+        $this->assertAllowed('core.edit.state');
+
+        $ids = $this->cid();
+        $id  = $ids[0] ?? 0;
+        try {
+            $r = $id > 0 ? $this->getModel('Booking')->confirmAndNotify($id) : ['status' => 'missing', 'mail' => false];
+            if (($r['status'] ?? '') === 'ok') {
+                $this->setMessage(Text::_(!empty($r['mail']) ? 'COM_WEBGBOOKING_CONFIRMNOTIFY_OK' : 'COM_WEBGBOOKING_CONFIRMNOTIFY_MAILFAIL'), !empty($r['mail']) ? 'message' : 'warning');
+            } elseif (($r['status'] ?? '') === 'already' || ($r['status'] ?? '') === 'missing') {
+                $this->setMessage(Text::_('COM_WEBGBOOKING_CONFIRMNOTIFY_ALREADY'), 'warning');
+            } else {
+                $this->setMessage(Text::_('COM_WEBGBOOKING_CONFIRMNOTIFY_ERROR'), 'error');
+            }
+        } catch (\Throwable $e) {
+            $this->setMessage(Text::_('COM_WEBGBOOKING_CONFIRMNOTIFY_ERROR'), 'error');
+        }
+
+        $this->setRedirect(Route::_('index.php?option=com_webgbooking&view=booking&id=' . (int) $id, false));
+    }
+
     public function cancel()
     {
         $this->changeStatus('cancel');
