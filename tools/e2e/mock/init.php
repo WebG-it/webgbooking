@@ -19,6 +19,7 @@ $opts = [
     'notify_email' => 'staff@wgbtest.invalid', 'slot_duration' => '30',
     'google_client_id' => 'mock-client-id', 'google_client_secret' => 'mock-client-secret', 'google_calendar_id' => 'primary',
     'reminders_enabled' => '1', 'reminder_times' => '24h, 1h',
+    'limit_ip_hour' => '1000', 'max_holds_ip' => '50', 'max_open_holds' => '500', 'config_epoch' => '1', 'config_ttl_days' => '30',
 ];
 foreach ($argv as $i => $a) {
     if ($i > 0 && strpos($a, '=') !== false) {

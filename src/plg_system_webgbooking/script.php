@@ -43,6 +43,8 @@ return new class () implements InstallerScriptInterface {
             return true;
         }
 
+        $problems = [];
+
         try {
             $db = Factory::getContainer()->get(DatabaseInterface::class);
 
@@ -80,6 +82,12 @@ return new class () implements InstallerScriptInterface {
                 . $db->quoteName('hold_until') . ' DATETIME NULL,'
                 . $db->quoteName('paid_at') . ' DATETIME NULL,'
                 . $db->quoteName('pending_ctx') . ' MEDIUMTEXT NULL,'
+                . $db->quoteName('fx_state') . ' VARCHAR(10) NULL,'
+                . $db->quoteName('fx_steps') . ' TEXT NULL,'
+                . $db->quoteName('fx_tries') . ' INT NULL,'
+                . $db->quoteName('fx_last') . ' DATETIME NULL,'
+                . $db->quoteName('avail_cfg') . ' TEXT NULL,'
+                . $db->quoteName('ip_hash') . ' VARCHAR(32) NULL,'
                 . 'PRIMARY KEY (' . $db->quoteName('id') . '),'
                 . 'KEY ' . $db->quoteName('idx_date') . ' (' . $db->quoteName('booking_date') . ',' . $db->quoteName('booking_time') . '),'
                 . 'KEY ' . $db->quoteName('idx_token') . ' (' . $db->quoteName('manage_token') . ')'
@@ -112,6 +120,13 @@ return new class () implements InstallerScriptInterface {
                 'hold_until'            => 'DATETIME NULL',
                 'paid_at'               => 'DATETIME NULL',
                 'pending_ctx'           => 'MEDIUMTEXT NULL',
+                // 0.33.0: resumable effects, per-element availability, anti-abuse
+                'fx_state'              => 'VARCHAR(10) NULL',
+                'fx_steps'              => 'TEXT NULL',
+                'fx_tries'              => 'INT NULL',
+                'fx_last'               => 'DATETIME NULL',
+                'avail_cfg'             => 'TEXT NULL',
+                'ip_hash'               => 'VARCHAR(32) NULL',
             ];
             foreach ($newCols as $name => $def) {
                 try {
@@ -120,17 +135,19 @@ return new class () implements InstallerScriptInterface {
                         $db->setQuery('ALTER TABLE ' . $db->quoteName('#__webgbooking_bookings') . ' ADD COLUMN ' . $db->quoteName($name) . ' ' . $def)->execute();
                     }
                 } catch (\Throwable $e) {
+                    $problems[] = 'column ' . $name . ': ' . $e->getMessage();
                 }
             }
 
             // Index to find a booking from a Stripe session id (webhook / return page) and the unpaid holds.
-            foreach (['idx_stripe_session' => ['stripe_session_id(100)'], 'idx_status_hold' => ['status', 'hold_until']] as $ix => $cols) {
+            foreach (['idx_stripe_session' => ['stripe_session_id(100)'], 'idx_status_hold' => ['status', 'hold_until'], 'idx_fx' => ['fx_state', 'fx_last'], 'idx_ip' => ['ip_hash', 'created']] as $ix => $cols) {
                 try {
                     $has = $db->setQuery('SHOW INDEX FROM ' . $db->quoteName('#__webgbooking_bookings') . ' WHERE Key_name = ' . $db->quote($ix))->loadResult();
                     if (!$has) {
                         $db->setQuery('ALTER TABLE ' . $db->quoteName('#__webgbooking_bookings') . ' ADD INDEX ' . $db->quoteName($ix) . ' (' . implode(',', array_map(fn($c) => strpos($c, '(') === false ? $db->quoteName($c) : $c, $cols)) . ')')->execute();
                     }
                 } catch (\Throwable $e) {
+                    $problems[] = 'index ' . $ix . ': ' . $e->getMessage();
                 }
             }
 
@@ -142,6 +159,16 @@ return new class () implements InstallerScriptInterface {
                 . $db->quoteName('created') . ' DATETIME NOT NULL,'
                 . $db->quoteName('result') . ' VARCHAR(40) NULL,'
                 . 'PRIMARY KEY (' . $db->quoteName('event_id') . ')'
+                . ') DEFAULT CHARSET=utf8mb4'
+            )->execute();
+
+            // Key/value store: alert throttles, freeBusy cache, one-time outcome tokens.
+            $db->setQuery(
+                'CREATE TABLE IF NOT EXISTS ' . $db->quoteName('#__webgbooking_kv') . ' ('
+                . $db->quoteName('k') . ' VARCHAR(120) NOT NULL,'
+                . $db->quoteName('v') . ' MEDIUMTEXT NULL,'
+                . $db->quoteName('updated') . ' DATETIME NOT NULL,'
+                . 'PRIMARY KEY (' . $db->quoteName('k') . ')'
                 . ') DEFAULT CHARSET=utf8mb4'
             )->execute();
 
@@ -170,6 +197,7 @@ return new class () implements InstallerScriptInterface {
                         $db->setQuery('ALTER TABLE ' . $db->quoteName('#__webgbooking_google') . ' ADD COLUMN ' . $db->quoteName($name) . ' ' . $colType . ' NULL')->execute();
                     }
                 } catch (\Throwable $e) {
+                    $problems[] = 'google column ' . $name . ': ' . $e->getMessage();
                 }
             }
 
@@ -185,7 +213,17 @@ return new class () implements InstallerScriptInterface {
             }
 
         } catch (\Throwable $e) {
-            // Non-fatal.
+            $problems[] = 'tables: ' . $e->getMessage();
+        }
+
+        // Not silent any more: a failed ALTER means the plugin would run against a table that lacks columns.
+        if ($problems) {
+            try {
+                \Joomla\CMS\Log\Log::addLogger(['text_file' => 'webgbooking.php'], \Joomla\CMS\Log\Log::ALL, ['webgbooking']);
+                \Joomla\CMS\Log\Log::add('WebG Booking database update problems: ' . implode(' | ', $problems), \Joomla\CMS\Log\Log::ERROR, 'webgbooking');
+                Factory::getApplication()->enqueueMessage('WebG Booking: the database update did not complete (' . \count($problems) . ' problem(s): ' . implode('; ', array_slice($problems, 0, 3)) . '). Bookings may fail until this is fixed: check the Joomla database user rights (ALTER, CREATE) and reinstall the package.', 'error');
+            } catch (\Throwable $e) {
+            }
         }
 
         return true;

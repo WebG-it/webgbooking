@@ -6,14 +6,14 @@
         <description>WebG Booking package (component + system plugin + reminders task).</description>
         <element>pkg_webgbooking</element>
         <type>package</type>
-        <version>0.32.0</version>
+        <version>0.33.0</version>
         <maintainer>Marco Galassi (WebG)</maintainer>
         <maintainerurl>https://www.webg.it</maintainerurl>
         <infourl title="WebG Booking">https://github.com/WebG-it/webgbooking</infourl>
         <downloads>
-            <downloadurl type="full" format="zip">https://raw.githubusercontent.com/WebG-it/webgbooking/main/dist/pkg_webgbooking-0.32.0.zip</downloadurl>
+            <downloadurl type="full" format="zip">https://raw.githubusercontent.com/WebG-it/webgbooking/main/dist/pkg_webgbooking-0.33.0.zip</downloadurl>
         </downloads>
-        <sha256>bd6a5ceac84e3efa557638545c5718f0b8f25dbd25dea6491260bd5964ce79ac</sha256>
+        <sha256>acd7552149e14742aae8d885eceb48a6706c25f26087e679070ea27611bbae71</sha256>
         <tags>
             <tag>stable</tag>
         </tags>

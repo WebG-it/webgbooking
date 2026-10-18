@@ -33,7 +33,7 @@ use Joomla\Event\SubscriberInterface;
 final class Webgbooking extends CMSPlugin implements SubscriberInterface
 {
     /** Cache-buster for the bundled front-end assets (wgb.css/js, UIkit). Bump when those change. */
-    public const ASSET_VER = '0.32.0';
+    public const ASSET_VER = '0.33.0';
 
     protected $autoloadLanguage = true;
 
@@ -43,6 +43,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             'onAfterInitialise' => ['onAfterInitialise', Priority::LOW],
             'onAjaxWebgbooking' => 'onAjax',
             'onExtensionBeforeSave' => 'onExtensionBeforeSave',
+            'onBeforeCompileHead' => 'onBeforeCompileHead',
         ];
     }
 
@@ -104,6 +105,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
         }
 
         $app->setHeader('Content-Type', 'application/json; charset=utf-8', true);
+        $this->privacyHeaders($app);
         $app->sendHeaders();
 
         // Stripe webhook: signed by Stripe, no Joomla session/CSRF.
@@ -189,17 +191,36 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
         try {
             $db = Factory::getContainer()->get(DatabaseInterface::class);
 
-            // Basic rate limit: at most 3 bookings per email per hour.
-            $recent = (int) $db->setQuery(
-                $db->getQuery(true)
-                    ->select('COUNT(*)')
-                    ->from($db->quoteName('#__webgbooking_bookings'))
-                    ->where($db->quoteName('customer_email') . ' = ' . $db->quote($email))
-                    ->where($db->quoteName('created') . ' > ' . $db->quote(Factory::getDate('-1 hour')->toSql()))
-            )->loadResult();
+            $nowSql = Factory::getDate()->toSql();
+            $hourAgo = Factory::getDate('-1 hour')->toSql();
+            $ipHash = $this->clientIpHash($input);
+            // Rows that never counted: unpaid holds that lapsed and expired ones (a visitor who abandoned Stripe
+            // twice must not be locked out of booking).
+            $live = '(' . $db->quoteName('status') . ' != ' . $db->quote('expired')
+                . ' AND NOT (' . $db->quoteName('status') . ' = ' . $db->quote('awaiting_payment') . ' AND ' . $db->quoteName('hold_until') . ' < ' . $db->quote($nowSql) . '))';
 
+            // Rate limit per email: at most 3 live bookings per hour.
+            $recent = (int) $db->setQuery(
+                $db->getQuery(true)->select('COUNT(*)')->from($db->quoteName('#__webgbooking_bookings'))
+                    ->where($db->quoteName('customer_email') . ' = ' . $db->quote($email))
+                    ->where($db->quoteName('created') . ' > ' . $db->quote($hourAgo))
+                    ->where($live)
+            )->loadResult();
             if ($recent >= 3) {
                 $this->respond(['ok' => false, 'message' => Text::_('PLG_SYSTEM_WEBGBOOKING_BOOK_ERR')]);
+            }
+
+            // Per IP (hashed with the site secret, the address itself is not stored): bookings per hour and open holds.
+            if ($ipHash !== '') {
+                $perIp = (int) $db->setQuery(
+                    $db->getQuery(true)->select('COUNT(*)')->from($db->quoteName('#__webgbooking_bookings'))
+                        ->where($db->quoteName('ip_hash') . ' = ' . $db->quote($ipHash))
+                        ->where($db->quoteName('created') . ' > ' . $db->quote($hourAgo))
+                        ->where($live)
+                )->loadResult();
+                if ($perIp >= max(1, (int) $this->params->get('limit_ip_hour', 15))) {
+                    $this->respond(['ok' => false, 'message' => Text::_('PLG_SYSTEM_WEBGBOOKING_TOO_MANY')]);
+                }
             }
 
             $customData = $this->collectCustomFields($actions['fields'] ?? [], $input);
@@ -211,16 +232,54 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             $vnow  = (new \DateTime('now', $vtz))->getTimestamp();
             $vnext = (new \DateTime($date . ' 00:00:00', $vtz))->modify('+1 day')->format('Y-m-d');
             $cfg   = $this->slotConfig($ev);
-            $busy  = $this->googleBusy($date, $vnext, $vtz); // network call BEFORE taking the lock
+            $busy  = $this->googleBusy($date, $vnext, $vtz, false); // fresh network call BEFORE taking the lock
+            if ($busy === null) {
+                $this->respond(['ok' => false, 'message' => Text::_('PLG_SYSTEM_WEBGBOOKING_CAL_UNAVAILABLE')]);
+            }
 
             $price  = (array) ($actions['price'] ?? []);
-            $priced = (int) ($price['amt'] ?? 0) > 0;
+            if (!empty($price['invalid'])) {
+                // The price field of this element could not be read (ambiguous amount, unsupported currency):
+                // refuse instead of selling it for free.
+                $this->alertStaff('price-invalid', Text::_('PLG_SYSTEM_WEBGBOOKING_ALERT_PRICE_SUBJECT'), Text::_('PLG_SYSTEM_WEBGBOOKING_ALERT_PRICE_BODY'), 24);
+                $this->respond(['ok' => false, 'message' => Text::_('PLG_SYSTEM_WEBGBOOKING_PAY_UNAVAILABLE')]);
+            }
+            $priced = (int) ($price['amt'] ?? 0) > 0 && \in_array(strtoupper((string) ($price['cur'] ?? 'EUR')), self::CURRENCIES, true);
             $sk     = '';
             if ($priced) {
                 $sk = $this->stripeSecretOpt('stripe_sk');
                 if ($sk === '') {
                     // Paid event but Stripe is not configured: never take a booking we cannot charge for.
                     $this->respond(['ok' => false, 'message' => Text::_('PLG_SYSTEM_WEBGBOOKING_PAY_UNAVAILABLE')]);
+                }
+                // The key must belong to the configured mode (a live key with "test" selected, or the opposite, is a misconfiguration).
+                $keyMode = preg_match('/^(sk|rk)_live_/', $sk) ? 'live' : (preg_match('/^(sk|rk)_test_/', $sk) ? 'test' : '');
+                if ($keyMode !== '' && $keyMode !== ($this->stripeLive() ? 'live' : 'test')) {
+                    $this->wlog('paid booking refused: the Stripe key is a ' . $keyMode . ' key but the plugin mode is ' . ($this->stripeLive() ? 'live' : 'test'));
+                    $this->alertStaff('key-mode', Text::_('PLG_SYSTEM_WEBGBOOKING_ALERT_KEYMODE_SUBJECT'), Text::_('PLG_SYSTEM_WEBGBOOKING_ALERT_KEYMODE_BODY'), 12);
+                    $this->respond(['ok' => false, 'message' => Text::_('PLG_SYSTEM_WEBGBOOKING_PAY_UNAVAILABLE')]);
+                }
+
+                // Open holds are a scarce resource: per IP and globally.
+                if ($ipHash !== '') {
+                    $ipHolds = (int) $db->setQuery(
+                        $db->getQuery(true)->select('COUNT(*)')->from($db->quoteName('#__webgbooking_bookings'))
+                            ->where($db->quoteName('ip_hash') . ' = ' . $db->quote($ipHash))
+                            ->where($db->quoteName('status') . ' = ' . $db->quote('awaiting_payment'))
+                            ->where($db->quoteName('hold_until') . ' >= ' . $db->quote($nowSql))
+                    )->loadResult();
+                    if ($ipHolds >= max(1, (int) $this->params->get('max_holds_ip', 2))) {
+                        $this->respond(['ok' => false, 'message' => Text::_('PLG_SYSTEM_WEBGBOOKING_TOO_MANY')]);
+                    }
+                }
+                $allHolds = (int) $db->setQuery(
+                    $db->getQuery(true)->select('COUNT(*)')->from($db->quoteName('#__webgbooking_bookings'))
+                        ->where($db->quoteName('status') . ' = ' . $db->quote('awaiting_payment'))
+                        ->where($db->quoteName('hold_until') . ' >= ' . $db->quote($nowSql))
+                )->loadResult();
+                if ($allHolds >= max(1, (int) $this->params->get('max_open_holds', 60))) {
+                    $this->alertStaff('holds-cap', Text::_('PLG_SYSTEM_WEBGBOOKING_ALERT_HOLDS_SUBJECT'), Text::sprintf('PLG_SYSTEM_WEBGBOOKING_ALERT_HOLDS_BODY', $allHolds), 6);
+                    $this->respond(['ok' => false, 'message' => Text::_('PLG_SYSTEM_WEBGBOOKING_TOO_MANY')]);
                 }
             }
 
@@ -268,7 +327,21 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                         'event_name'      => $ev['name'],
                         'reminder_cfg'    => (string) json_encode($rem),
                         'reminders_sent'  => (string) json_encode($this->pastOffsets($rem, $startTs, $vnow)),
+                        'ip_hash'         => $ipHash,
+                        'avail_cfg'       => (string) json_encode(array_filter(['ws' => $ev['ws'], 'we' => $ev['we'], 'wd' => $ev['wd'], 'nt' => $ev['nt'], 'wn' => $ev['wn']], static fn($v) => $v !== null)),
+                        // Kept until the effects are done (or the hold dies): lets a retry resume. Cleared after.
+                        'pending_ctx'     => (string) json_encode([
+                            'actions'    => $actions,
+                            'newsletter' => $input->post->getInt('newsletter', 0) === 1 ? 1 : 0,
+                            'redirect'   => (string) ($actions['redirect'] ?? ''),
+                            'analytics'  => (string) ($actions['analytics'] ?? ''),
+                        ]),
                     ];
+                    if (!$priced) {
+                        $row->fx_state = 'pending';
+                        $row->fx_steps = '{}';
+                        $row->fx_tries = 0;
+                    }
                     if ($priced) {
                         // Slot is HELD (not confirmed) until Stripe says paid: nothing is sent or created yet.
                         $row->status         = 'awaiting_payment';
@@ -276,11 +349,6 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                         $row->amount_cents   = (int) $price['amt'];
                         $row->currency       = strtoupper(substr((string) ($price['cur'] ?? 'EUR'), 0, 3));
                         $row->hold_until     = Factory::getDate('+' . $this->holdMinutes() . ' minutes')->toSql();
-                        $row->pending_ctx    = (string) json_encode([
-                            'actions'    => $actions,
-                            'newsletter' => $input->post->getInt('newsletter', 0) === 1 ? 1 : 0,
-                            'redirect'   => (string) ($actions['redirect'] ?? ''),
-                        ]);
                     }
                     $db->insertObject('#__webgbooking_bookings', $row, 'id');
                 }
@@ -298,6 +366,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                     // Could not open a payment: release the held slot at once.
                     $db->setQuery(
                         $db->getQuery(true)->update($db->quoteName('#__webgbooking_bookings'))
+                            ->set($db->quoteName('pending_ctx') . ' = NULL')
                             ->set($db->quoteName('status') . ' = ' . $db->quote('expired'))
                             ->set($db->quoteName('payment_status') . ' = ' . $db->quote('expired'))
                             ->where($db->quoteName('id') . ' = ' . (int) $row->id)
@@ -306,12 +375,20 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                 }
                 $upd = (object) ['id' => $row->id, 'stripe_session_id' => (string) $session['id']];
                 $db->updateObject('#__webgbooking_bookings', $upd, 'id');
+                // What the return page needs after the stored config has been cleared (no personal data).
+                $this->kvSet('ret:' . $session['id'], (string) json_encode(['redirect' => (string) ($actions['redirect'] ?? ''), 'analytics' => (string) ($actions['analytics'] ?? '')]));
 
                 $this->respond(['ok' => true, 'redirect' => (string) $session['url'], 'message' => Text::_('PLG_SYSTEM_WEBGBOOKING_PAY_REDIRECTING')]);
             }
 
             // Free event: Google event (+ Meet link unless phone), emails, newsletter, webhook, Sheet.
-            $this->completeBooking($row, $actions, $input->post->getInt('newsletter', 0) === 1);
+            try {
+                $this->completeBooking($row, $actions, $input->post->getInt('newsletter', 0) === 1);
+            } catch (\Throwable $e) {
+                // Stored and flagged: the scheduled task retries the missing steps.
+                $this->wlog('effects of booking ' . (int) $row->id . ' threw: flagged for retry');
+                $db->setQuery($db->getQuery(true)->update($db->quoteName('#__webgbooking_bookings'))->set($db->quoteName('fx_state') . ' = ' . $db->quote('retry'))->where($db->quoteName('id') . ' = ' . (int) $row->id)->where($db->quoteName('fx_state') . ' != ' . $db->quote('done')))->execute();
+            }
 
             $this->respond([
                 'ok'      => true,
@@ -327,9 +404,11 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
     // ------------------------------------------------------------------------------------------------
 
     /** Sign the (small) event config so GET endpoints (month/slots) can trust it without the full form token. */
-    public static function signEv(array $ev, string $secret): string
+    public static function signEv(array $ev, string $secret, int $epoch = 1): string
     {
-        $payload = base64_encode((string) json_encode($ev));
+        $ev['v']   = $epoch;
+        $ev['iat'] = time();
+        $payload   = base64_encode((string) json_encode($ev));
 
         return $payload . '.' . hash_hmac('sha256', 'ev.' . $payload, $secret);
     }
@@ -343,7 +422,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                 $calc = hash_hmac('sha256', 'ev.' . $payload, (string) $this->getApplication()->get('secret'));
                 if (hash_equals($calc, $sig)) {
                     $cfg = json_decode((string) base64_decode($payload), true);
-                    if (\is_array($cfg)) {
+                    if (\is_array($cfg) && $this->tokenFresh($cfg)) {
                         return $this->resolveEvent($cfg);
                     }
                 }
@@ -367,12 +446,37 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
         $ba  = $has('ba') ? (int) $e['ba'] : (int) $this->params->get('buffer_after', 0);
         $loc = (string) ($e['loc'] ?? 'meet');
 
+        // Availability overrides for this element (empty = the plugin-wide values)
+        $ws = isset($e['ws']) && preg_match('/^\d{1,2}:\d{2}$/', (string) $e['ws']) ? (string) $e['ws'] : null;
+        $we = isset($e['we']) && preg_match('/^\d{1,2}:\d{2}$/', (string) $e['we']) ? (string) $e['we'] : null;
+        if ($ws !== null && $we !== null) {
+            $m1 = array_map('intval', explode(':', $ws));
+            $m2 = array_map('intval', explode(':', $we));
+            if ($m1[0] * 60 + $m1[1] >= $m2[0] * 60 + $m2[1] || $m1[0] > 23 || $m2[0] > 24) {
+                $ws = $we = null;
+            }
+        } else {
+            $ws = $we = null;
+        }
+        $wd = null;
+        if (isset($e['wd']) && \is_array($e['wd'])) {
+            $wd = array_values(array_unique(array_filter(array_map('intval', $e['wd']), static fn($d) => $d >= 0 && $d <= 6)));
+            $wd = $wd ?: null;
+        }
+        $nt = isset($e['nt']) && is_numeric($e['nt']) ? max(0, min(720, (int) $e['nt'])) : null;
+        $wn = isset($e['wn']) && is_numeric($e['wn']) && (int) $e['wn'] > 0 ? max(1, min(365, (int) $e['wn'])) : null;
+
         return [
             'dur'  => max(5, min(480, $dur)),
             'bb'   => max(0, min(240, $bb)),
             'ba'   => max(0, min(240, $ba)),
             'loc'  => \in_array($loc, ['meet', 'phone', 'choice'], true) ? $loc : 'meet',
             'name' => mb_substr(trim(strip_tags((string) ($e['name'] ?? ''))), 0, 120),
+            'ws'   => $ws,
+            'we'   => $we,
+            'wd'   => $wd,
+            'nt'   => $nt,
+            'wn'   => $wn,
         ];
     }
 
@@ -495,6 +599,17 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
         }
     }
 
+    /** Hash of the visitor's address (site-secret HMAC): enough to rate-limit, nothing personal stored. */
+    private function clientIpHash($input): string
+    {
+        $ip = trim((string) $input->server->getString('HTTP_CF_CONNECTING_IP', ''));
+        if ($ip === '' || !filter_var($ip, FILTER_VALIDATE_IP)) {
+            $ip = trim((string) $input->server->getString('REMOTE_ADDR', ''));
+        }
+
+        return filter_var($ip, FILTER_VALIDATE_IP) ? substr(hash_hmac('sha256', 'ip|' . $ip, (string) $this->getApplication()->get('secret')), 0, 24) : '';
+    }
+
     /** Duration (minutes) of a stored booking; older rows without the column use the plugin default. */
     private function rowDuration(object $row): int
     {
@@ -518,7 +633,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             'ba'   => (int) ($row->buffer_after ?? 0),
             'loc'  => $this->rowLocation($row),
             'name' => (string) ($row->event_name ?? ''),
-        ]);
+        ] + (array) json_decode((string) ($row->avail_cfg ?? ''), true));
     }
 
     /**
@@ -561,26 +676,77 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
     // Paid events (Stripe Checkout, REST over Joomla HTTP, no SDK)
     // ------------------------------------------------------------------------------------------------
 
-    /** "49", "49,00", "1.234,50", "49.9" -> cents (0 when empty/invalid/too large). */
-    public static function parseAmount(string $text): int
+    // ------------------------------------------------------------------------------------------------
+    // Amounts and currencies
+    // ------------------------------------------------------------------------------------------------
+
+    /** Currencies the plugin charges in. All have 2 decimals (zero/three-decimal currencies are NOT supported on purpose). */
+    public const CURRENCIES = ['EUR', 'USD', 'GBP', 'CHF'];
+
+    /**
+     * Strict amount parser: "49", "49,00", "49.5", "1.234,50", "1,234.50" -> cents.
+     * Returns 0 for empty/zero (free event) and NULL for anything ambiguous or malformed ("49.999", "1,234", "4,9,9",
+     * "49abc", above 999999.99): an unreadable price must never silently turn a paid event into a free one.
+     */
+    public static function parseAmountStrict(string $text): ?int
     {
-        $t = preg_replace('/[^\d.,]/', '', trim($text));
-        if ($t === '' || $t === null) {
+        $t = trim($text);
+        if ($t === '') {
             return 0;
         }
-        $lastC = strrpos($t, ',');
-        $lastD = strrpos($t, '.');
-        $sep   = $lastC === false ? $lastD : ($lastD === false ? $lastC : max($lastC, $lastD));
-        if ($sep !== false && \strlen($t) - $sep - 1 <= 2) {
-            $int = preg_replace('/[.,]/', '', substr($t, 0, $sep));
-            $dec = substr($t, $sep + 1);
-        } else {
-            $int = preg_replace('/[.,]/', '', $t);
+        if (!preg_match('/^[\s€$£]*([\d.,\s]+?)[\s€$£]*$/u', $t, $m) && !preg_match('/^(?:EUR|USD|GBP|CHF)?\s*([\d.,]+)\s*(?:EUR|USD|GBP|CHF)?$/i', $t, $m)) {
+            return null;
+        }
+        $n = preg_replace('/\s+/', '', $m[1]);
+        if ($n === '' || !preg_match('/\d/', $n)) {
+            return null;
+        }
+        $hasC = strpos($n, ',') !== false;
+        $hasD = strpos($n, '.') !== false;
+
+        if (!$hasC && !$hasD) {
+            $int = $n;
             $dec = '';
+        } elseif ($hasC && $hasD) {
+            $dpos = max(strrpos($n, ','), strrpos($n, '.'));
+            $dsep = $n[$dpos];
+            $tsep = $dsep === ',' ? '.' : ',';
+            $dec  = substr($n, $dpos + 1);
+            $ip   = substr($n, 0, $dpos);
+            if (!preg_match('/^\d{1,2}$/', $dec) || !preg_match('/^\d{1,3}(?:' . preg_quote($tsep, '/') . '\d{3})+$/', $ip)) {
+                return null;
+            }
+            $int = str_replace($tsep, '', $ip);
+        } else {
+            $sep = $hasC ? ',' : '.';
+            $parts = explode($sep, $n);
+            if (\count($parts) === 2) {
+                if (!preg_match('/^\d+$/', $parts[0]) || !preg_match('/^\d{1,2}$/', $parts[1])) {
+                    return null;     // 3 digits after a single separator ("49.999", "1,234") is ambiguous: refuse
+                }
+                $int = $parts[0];
+                $dec = $parts[1];
+            } else {
+                // repeated separator: only valid as thousands grouping "1.234.567"
+                if (!preg_match('/^\d{1,3}(?:' . preg_quote($sep, '/') . '\d{3})+$/', $n)) {
+                    return null;
+                }
+                $int = str_replace($sep, '', $n);
+                $dec = '';
+            }
+        }
+        if (\strlen(ltrim($int, '0')) > 6) {
+            return null;
         }
         $cents = ((int) $int) * 100 + (int) str_pad($dec, 2, '0');
 
-        return ($cents > 0 && $cents <= 99999999) ? $cents : 0;
+        return $cents <= 99999999 ? $cents : null;
+    }
+
+    /** Lenient wrapper kept for callers that only need "cents or 0". */
+    public static function parseAmount(string $text): int
+    {
+        return (int) self::parseAmountStrict($text);
     }
 
     /** Human amount, e.g. "49,00 €" (it/de/fr/es style) or "€49.00". */
@@ -602,12 +768,52 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
         }
     }
 
-    /** Stripe secret key of the plugin options (stored AES-256-GCM encrypted), or ''. */
+    /** Names of Stripe secrets stored encrypted that could NOT be decrypted (Joomla secret rotated?). */
+    private array $secretFail = [];
+
+    /**
+     * Stripe secret of the plugin options, decrypted, or ''.
+     * - Found in clear (set by hand in the database / imported options): it is encrypted and written back on this
+     *   first read, and keeps working.
+     * - Stored encrypted but undecryptable (the Joomla "secret" changed): '' + a log line WITHOUT values + the admin
+     *   screens show a warning ("re-enter the key"); this is not the same as "not configured".
+     */
     private function stripeSecretOpt(string $name): string
     {
         $v = trim((string) $this->params->get($name, ''));
+        if ($v === '') {
+            return '';
+        }
+        if (strncmp($v, 'g:', 2) === 0) {
+            $plain = $this->dec($v);
+            if ($plain === '') {
+                $this->secretFail[$name] = true;
+                $this->wlog('Stripe option "' . $name . '" is stored encrypted but cannot be decrypted (was the Joomla secret changed?): enter it again in the plugin options');
+            }
 
-        return strncmp($v, 'g:', 2) === 0 ? $this->dec($v) : $v;
+            return $plain;
+        }
+
+        // in clear: encrypt now
+        try {
+            $db  = Factory::getContainer()->get(DatabaseInterface::class);
+            $raw = (string) $db->setQuery(
+                $db->getQuery(true)->select($db->quoteName('params'))->from($db->quoteName('#__extensions'))
+                    ->where($db->quoteName('element') . ' = ' . $db->quote('webgbooking'))->where($db->quoteName('folder') . ' = ' . $db->quote('system'))
+            )->loadResult();
+            $p = json_decode($raw, true);
+            if (\is_array($p) && isset($p[$name]) && strncmp((string) $p[$name], 'g:', 2) !== 0) {
+                $p[$name] = $this->enc($v);
+                $db->setQuery(
+                    $db->getQuery(true)->update($db->quoteName('#__extensions'))->set($db->quoteName('params') . ' = ' . $db->quote((string) json_encode($p)))
+                        ->where($db->quoteName('element') . ' = ' . $db->quote('webgbooking'))->where($db->quoteName('folder') . ' = ' . $db->quote('system'))
+                )->execute();
+                $this->wlog('Stripe option "' . $name . '" was stored in clear: encrypted now');
+            }
+        } catch (\Throwable $e) {
+        }
+
+        return $v;
     }
 
     private function stripeLive(): bool
@@ -686,7 +892,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                 ],
             ]],
             'payment_intent_data' => ['receipt_email' => (string) $row->customer_email, 'description' => $name . ' ' . $when],
-            'metadata'            => ['booking_id' => (string) $row->id],
+            'metadata'            => ['booking_id' => (string) $row->id, 'site' => $this->siteKey()],
         ], $sk);
 
         return ($code >= 200 && $code < 300 && !empty($s['id']) && !empty($s['url'])) ? $s : null;
@@ -713,12 +919,32 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
         return $code >= 200 && $code < 300;
     }
 
-    /** Check a key against Stripe (GET /v1/account). ['ok'=>bool, 'account'=>string, 'code'=>int] */
+    /**
+     * Check a key against Stripe. A normal secret key can read the account. A restricted key (rk_) often cannot
+     * (403): then a Checkout Sessions list is tried, which is exactly the permission the plugin needs. If that is
+     * refused too the key is "unverifiable" (not rejected). 401 = Stripe does not know the key.
+     *
+     * @return array{ok:bool, account:string, code:int, restricted?:bool, unverifiable?:bool}
+     */
     public function checkStripeKey(string $sk): array
     {
         [$code, $s] = $this->stripeCall('GET', '/v1/account', [], $sk);
+        if ($code === 200) {
+            return ['ok' => true, 'account' => (string) ($s['id'] ?? ''), 'code' => 200];
+        }
+        if ($code === 403) {
+            [$c2] = $this->stripeCall('GET', '/v1/checkout/sessions?limit=1', [], $sk);
+            if ($c2 === 200) {
+                return ['ok' => true, 'account' => '', 'code' => 200, 'restricted' => true];
+            }
+            if ($c2 === 403) {
+                return ['ok' => false, 'account' => '', 'code' => 403, 'unverifiable' => true];
+            }
 
-        return ['ok' => $code === 200, 'account' => (string) ($s['id'] ?? ''), 'code' => $code];
+            return ['ok' => false, 'account' => '', 'code' => $c2];
+        }
+
+        return ['ok' => false, 'account' => '', 'code' => $code];
     }
 
     /**
@@ -755,20 +981,24 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
         return false;
     }
 
-    /** Every side effect of a confirmed booking (Google event/Meet, emails, newsletter, webhook, Sheet). */
+    /**
+     * Every side effect of a confirmed booking, STEP BY STEP and resumable: Google event/Meet, customer email, staff
+     * email, newsletter, webhook, Sheet. What is done is recorded in `fx_steps`, so a failure in one step never blocks
+     * the others and a retry (task scheduler) redoes only what is missing, never an email that already went out.
+     * "Paid" and "effects done" are separate facts: a paid booking whose effects failed stays flagged (`fx_state`)
+     * and the staff is told.
+     *
+     * Meet bookings with Google connected but the event not created yet: the customer gets the confirmation at once
+     * with "I will send you the video link shortly" (no empty link), and a "here is your link" email as soon as a
+     * retry creates the event.
+     */
     private function completeBooking(object $row, array $actions, bool $newsletter): void
     {
-        $meet = $this->createGoogleEvent($row);
-        if ($meet !== '') {
-            $row->meeting_url = $meet;
-        }
-        $db  = Factory::getContainer()->get(DatabaseInterface::class);
-        $upd = (object) [
-            'id'              => $row->id,
-            'meeting_url'     => $row->meeting_url,
-            'google_event_id' => (string) ($row->google_event_id ?? ''),
-        ];
-        $db->updateObject('#__webgbooking_bookings', $upd, 'id');
+        $db    = Factory::getContainer()->get(DatabaseInterface::class);
+        $steps = json_decode((string) ($row->fx_steps ?? ''), true);
+        $steps = \is_array($steps) ? $steps : [];
+        $tries = (int) ($row->fx_tries ?? 0) + 1;
+        $failed = [];
 
         $cust  = $actions['customer'] ?? [];
         $staff = $actions['staff'] ?? [];
@@ -780,18 +1010,192 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
         $row->_staffSubject   = (string) ($staff['subject'] ?? '');
         $row->_staffBody      = (string) ($staff['body'] ?? '');
 
-        $this->notify($row);
+        $connected = $this->googleConnected();
 
-        if ($newsletter) {
-            $this->newsletterSignup($row);
+        // 1. Google event (+ Meet link unless it is a phone call)
+        if (empty($steps['google'])) {
+            try {
+                if (!$connected) {
+                    $steps['google'] = true;
+                } else {
+                    $meet = $this->createGoogleEvent($row);
+                    if (!empty($row->google_event_id)) {
+                        $steps['google'] = true;
+                        if ($meet !== '') {
+                            $row->meeting_url = $meet;
+                        }
+                        $upd = (object) ['id' => $row->id, 'meeting_url' => (string) $row->meeting_url, 'google_event_id' => (string) $row->google_event_id];
+                        $db->updateObject('#__webgbooking_bookings', $upd, 'id');
+                        $this->purgeBusyCache();
+                    } else {
+                        $failed[] = 'google';
+                    }
+                }
+            } catch (\Throwable $e) {
+                $failed[] = 'google';
+            }
         }
 
-        $wh       = $actions['webhook'] ?? [];
-        $whUrl    = (!empty($wh['on']) && !empty($wh['url'])) ? (string) $wh['url'] : '';
-        $whMethod = !empty($wh['on']) ? (string) ($wh['method'] ?? '') : '';
-        $this->postBookingWebhook($row, $whUrl, $whMethod);
+        $row->_meetPending = $connected && $this->rowLocation($row) === 'meet' && empty($steps['google']);
 
-        $this->appendToSheet($row);
+        // 2. customer (+ guest) email
+        if (empty($steps['mail_customer'])) {
+            if ($this->notify($row, false, 'customer')) {
+                $steps['mail_customer'] = true;
+                if ($row->_meetPending) {
+                    $steps['linkmail'] = 'needed';
+                }
+            } else {
+                $failed[] = 'mail_customer';
+            }
+        }
+
+        // 3. staff email
+        if (empty($steps['mail_staff'])) {
+            if ($this->notify($row, false, 'staff')) {
+                $steps['mail_staff'] = true;
+            } else {
+                $failed[] = 'mail_staff';
+            }
+        }
+
+        // 4. newsletter opt-in
+        if ($newsletter && empty($steps['newsletter'])) {
+            if ($this->newsletterSignup($row)) {
+                $steps['newsletter'] = true;
+            } else {
+                $failed[] = 'newsletter';
+            }
+        }
+
+        // 5. webhook
+        if (empty($steps['webhook'])) {
+            $wh       = $actions['webhook'] ?? [];
+            $whUrl    = (!empty($wh['on']) && !empty($wh['url'])) ? (string) $wh['url'] : '';
+            $whMethod = !empty($wh['on']) ? (string) ($wh['method'] ?? '') : '';
+            if ($this->postBookingWebhook($row, $whUrl, $whMethod)) {
+                $steps['webhook'] = true;
+            } else {
+                $failed[] = 'webhook';
+            }
+        }
+
+        // 6. Google Sheet row
+        if (empty($steps['sheet'])) {
+            if ($this->appendToSheet($row)) {
+                $steps['sheet'] = true;
+            } else {
+                $failed[] = 'sheet';
+            }
+        }
+
+        // 7. the promised video link, once the event exists
+        if (($steps['linkmail'] ?? '') === 'needed' && !empty($steps['google'])) {
+            if ($this->sendLinkMail($row)) {
+                $steps['linkmail'] = 'sent';
+            } else {
+                $failed[] = 'linkmail';
+            }
+        }
+
+        $done  = !$failed && ($steps['linkmail'] ?? '') !== 'needed';
+        $state = $done ? 'done' : ($tries >= 10 ? 'failed' : 'retry');
+        $set   = [
+            $db->quoteName('fx_state') . ' = ' . $db->quote($state),
+            $db->quoteName('fx_steps') . ' = ' . $db->quote((string) json_encode($steps)),
+            $db->quoteName('fx_tries') . ' = ' . (int) $tries,
+            $db->quoteName('fx_last') . ' = ' . $db->quote(Factory::getDate()->toSql()),
+        ];
+        if ($done) {
+            $set[] = $db->quoteName('pending_ctx') . ' = NULL';   // nothing left to resume: drop the stored config
+        }
+        try {
+            $db->setQuery($db->getQuery(true)->update($db->quoteName('#__webgbooking_bookings'))->set($set)->where($db->quoteName('id') . ' = ' . (int) $row->id))->execute();
+        } catch (\Throwable $e) {
+        }
+        $row->fx_state = $state;
+
+        if ($failed) {
+            $this->wlog('booking ' . (int) $row->id . ': effects not completed (' . implode(',', $failed) . '), try ' . $tries);
+            $this->alertStaff(
+                'fx' . (int) $row->id,
+                Text::sprintf('PLG_SYSTEM_WEBGBOOKING_ALERT_FX_SUBJECT', $row->booking_date, $row->booking_time),
+                Text::sprintf('PLG_SYSTEM_WEBGBOOKING_ALERT_FX_BODY', (int) $row->id, $row->customer_name, $row->customer_email, implode(', ', $failed), $state === 'failed' ? Text::_('PLG_SYSTEM_WEBGBOOKING_ALERT_FX_GAVEUP') : Text::_('PLG_SYSTEM_WEBGBOOKING_ALERT_FX_WILLRETRY')),
+                12
+            );
+        }
+    }
+
+    /** "Here is your video link" email, sent once a delayed Google event finally exists. */
+    private function sendLinkMail(object $row): bool
+    {
+        try {
+            if (empty($row->meeting_url)) {
+                return true; // nothing to send (Google gave no Meet link)
+            }
+            $this->useSiteLanguage();
+            $mf      = Factory::getContainer()->get(MailerFactoryInterface::class);
+            $e       = fn($s) => htmlspecialchars((string) $s, ENT_QUOTES, 'UTF-8');
+            $dateFmt = (new \DateTime($row->booking_date))->format('d/m/Y');
+            $body    = '<p style="margin:0 0 14px;">' . $e(Text::_('PLG_SYSTEM_WEBGBOOKING_EMAIL_HELLO')) . ' ' . $e($row->customer_name) . ',</p>'
+                . '<p style="margin:0 0 14px;">' . $e(Text::sprintf('PLG_SYSTEM_WEBGBOOKING_LINKMAIL_INTRO', $dateFmt, $row->booking_time)) . '</p>'
+                . '<p style="margin:20px 0;"><a href="' . $e($row->meeting_url) . '" style="display:inline-block;background:#1f2937;color:#ffffff;text-decoration:none;padding:11px 22px;border-radius:8px;font-weight:600;">' . $e(Text::_('PLG_SYSTEM_WEBGBOOKING_EMAIL_MEET_BTN')) . '</a></p>';
+            $this->sendHtmlMail($mf, $row->customer_email, Text::_('PLG_SYSTEM_WEBGBOOKING_LINKMAIL_SUBJECT'), $this->wrapEmail($body), '');
+
+            return true;
+        } catch (\Throwable $ex) {
+            return false;
+        }
+    }
+
+    /**
+     * Retry the effects of confirmed bookings that did not complete (Google down, SMTP hiccup, an exception).
+     * Resumes from `fx_steps`; claims the row with a compare-and-set on `fx_last` so two runs never overlap.
+     * Returns how many bookings were retried.
+     */
+    public function retryEffects(int $limit = 30): int
+    {
+        $n = 0;
+        try {
+            $db   = Factory::getContainer()->get(DatabaseInterface::class);
+            $cut  = Factory::getDate('-2 minutes')->toSql();
+            $rows = $db->setQuery(
+                $db->getQuery(true)->select('*')->from($db->quoteName('#__webgbooking_bookings'))
+                    ->where($db->quoteName('fx_state') . ' = ' . $db->quote('retry'))
+                    ->where($db->quoteName('status') . ' IN (' . $db->quote('pending') . ',' . $db->quote('confirmed') . ')')
+                    ->where('(' . $db->quoteName('fx_last') . ' IS NULL OR ' . $db->quoteName('fx_last') . ' < ' . $db->quote($cut) . ')')
+                    ->order($db->quoteName('id') . ' ASC'),
+                0,
+                $limit
+            )->loadObjectList();
+
+            foreach ($rows ?: [] as $row) {
+                $old = (string) ($row->fx_last ?? '');
+                $now = Factory::getDate()->toSql();
+                $db->setQuery(
+                    $db->getQuery(true)->update($db->quoteName('#__webgbooking_bookings'))
+                        ->set($db->quoteName('fx_last') . ' = ' . $db->quote($now))
+                        ->where($db->quoteName('id') . ' = ' . (int) $row->id)
+                        ->where($db->quoteName('fx_state') . ' = ' . $db->quote('retry'))
+                        ->where('COALESCE(' . $db->quoteName('fx_last') . ", '') = " . $db->quote($old))
+                )->execute();
+                if ((int) $db->getAffectedRows() !== 1) {
+                    continue;
+                }
+                $ctx = json_decode((string) ($row->pending_ctx ?? ''), true);
+                $ctx = \is_array($ctx) ? $ctx : [];
+                $this->useSiteLanguage();
+                try {
+                    $this->completeBooking($row, (array) ($ctx['actions'] ?? []), !empty($ctx['newsletter']));
+                } catch (\Throwable $e) {
+                    $this->wlog('retry of booking ' . (int) $row->id . ' threw');
+                }
+                $n++;
+            }
+        } catch (\Throwable $e) {
+        }
+
+        return $n;
     }
 
     private function bookingBySession(string $sessionId): ?object
@@ -825,12 +1229,24 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
         }
     }
 
+    /** Short stable id of THIS site, put in Stripe metadata so a Stripe account shared by several sites is not mixed up. */
+    private function siteKey(): string
+    {
+        $host = (string) (parse_url(Uri::root(), PHP_URL_HOST) ?: 'site');
+
+        return substr(md5(strtolower($host)), 0, 10);
+    }
+
     /**
      * A paid Checkout Session reached us (webhook or return page). Idempotent: only the transition from
      * awaiting_payment/expired to paid has effects, a second call returns 'already'.
-     * If the hold had lapsed the slot is re-checked: still free -> confirmed anyway, taken -> needs_review + staff alert.
+     * - session.livemode must match the plugin mode, else nothing is confirmed ('mismatch' + staff alert).
+     * - If the hold had lapsed the slot is re-checked: still free -> confirmed anyway, taken -> needs_review + alert.
+     * - A session paid for a booking that is no longer waiting (admin cancelled the hold meanwhile) is recorded as
+     *   an orphan payment and the staff is told to refund ('orphan').
+     * - 'busy' = the day lock could not be taken: nothing was changed, the caller must let Stripe retry.
      *
-     * @return string confirmed | review | already | mismatch
+     * @return string confirmed | review | already | mismatch | orphan | busy
      */
     private function finalizePaid(object $row, array $session): string
     {
@@ -840,19 +1256,33 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
         $tz   = new \DateTimeZone($this->siteTz());
         $nowT = (new \DateTime('now', $tz))->getTimestamp();
 
-        if (!\in_array($row->status, ['awaiting_payment', 'expired'], true) || ($row->payment_status ?? '') === 'paid') {
+        // Test money must not confirm a live booking (and the opposite).
+        if (isset($session['livemode']) && (bool) $session['livemode'] !== $this->stripeLive()) {
+            $this->wlog('payment for booking ' . (int) $row->id . ' ignored: Stripe livemode differs from the plugin mode');
+            $this->notifyPaymentReview($row, 'mode');
+
+            return 'mismatch';
+        }
+
+        if (($row->payment_status ?? '') === 'paid') {
             return 'already';
+        }
+
+        if (!\in_array($row->status, ['awaiting_payment', 'expired'], true)) {
+            return $this->recordOrphanPayment($row, $session);
         }
 
         $amountOk = (int) ($session['amount_total'] ?? -1) === (int) $row->amount_cents
             && strtolower((string) ($session['currency'] ?? '')) === strtolower((string) $row->currency);
 
-        $startTs = (new \DateTime($row->booking_date . ' ' . $row->booking_time . ':00', $tz))->getTimestamp();
+        $startTs    = (new \DateTime($row->booking_date . ' ' . $row->booking_time . ':00', $tz))->getTimestamp();
         $holdLapsed = $row->status === 'expired' || (!empty($row->hold_until) && Factory::getDate($row->hold_until)->toUnix() < time());
-        $outcome = 'confirmed';
+        $outcome    = 'confirmed';
 
         $lockName = $this->lockName($db, $row->booking_date);
-        $this->acquireLock($db, $lockName);
+        if (!$this->acquireLock($db, $lockName)) {
+            return 'busy';
+        }
         try {
             if (!$amountOk || $startTs <= $nowT) {
                 $outcome = 'review';
@@ -860,21 +1290,34 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                 $next = (new \DateTime($row->booking_date . ' 00:00:00', $tz))->modify('+1 day')->format('Y-m-d');
                 $cfg  = $this->slotConfig($this->eventFromRow($row));
                 $cfg['notice'] = 0; // only conflicts matter here, the customer already paid for this slot
-                $busy  = $this->googleBusy($row->booking_date, $next, $tz);
-                $slots = $this->computeDay($row->booking_date, $tz, $busy, 0, $cfg, $this->localBookings($row->booking_date, $next, $tz, (int) $row->id));
-                if (!\in_array($row->booking_time, $slots, true)) {
-                    $outcome = 'review';
+                $cfg['window'] = 3650;
+                $cfg['days']   = [0, 1, 2, 3, 4, 5, 6];
+                $busy = $this->googleBusy($row->booking_date, $next, $tz, false);
+                if ($busy === null) {
+                    $outcome = 'review'; // cannot prove the slot is free: a person decides
+                } else {
+                    $slots = $this->computeDay($row->booking_date, $tz, $busy, 0, $cfg, $this->localBookings($row->booking_date, $next, $tz, (int) $row->id));
+                    if (!\in_array($row->booking_time, $slots, true)) {
+                        $outcome = 'review';
+                    }
                 }
             }
 
-            $plan  = json_decode((string) ($row->reminder_cfg ?? ''), true);
-            $set   = [
+            $plan = json_decode((string) ($row->reminder_cfg ?? ''), true);
+            $set  = [
                 $db->quoteName('status') . ' = ' . $db->quote($outcome === 'confirmed' ? 'confirmed' : 'needs_review'),
                 $db->quoteName('payment_status') . ' = ' . $db->quote('paid'),
                 $db->quoteName('paid_at') . ' = ' . $db->quote($now),
                 $db->quoteName('updated') . ' = ' . $db->quote($now),
                 $db->quoteName('stripe_payment_intent') . ' = ' . $db->quote($pi),
             ];
+            if ($outcome === 'confirmed') {
+                $set[] = $db->quoteName('fx_state') . ' = ' . $db->quote('pending');
+                $set[] = $db->quoteName('fx_steps') . ' = ' . $db->quote('{}');
+                $set[] = $db->quoteName('fx_tries') . ' = 0';
+            } else {
+                $set[] = $db->quoteName('pending_ctx') . ' = NULL';
+            }
             if (\is_array($plan)) {
                 $set[] = $db->quoteName('reminders_sent') . ' = ' . $db->quote((string) json_encode($this->pastOffsets($plan, $startTs, $nowT)));
             }
@@ -899,7 +1342,6 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
         $row->payment_status = 'paid';
         $row->paid_at        = $now;
         $row->stripe_payment_intent = $pi;
-        $row->hold_until     = $row->hold_until ?? null;
 
         if ($outcome === 'review') {
             $this->notifyPaymentReview($row, $amountOk ? 'slot' : 'amount');
@@ -907,28 +1349,56 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             return $amountOk ? 'review' : 'mismatch';
         }
 
+        // The money is in and recorded above. The effects run now; if anything fails they stay flagged for retry.
         $ctx = json_decode((string) ($row->pending_ctx ?? ''), true);
         $ctx = \is_array($ctx) ? $ctx : [];
         $this->useSiteLanguage();
-        $this->completeBooking($row, (array) ($ctx['actions'] ?? []), !empty($ctx['newsletter']));
+        $row->fx_state = 'pending';
+        try {
+            $this->completeBooking($row, (array) ($ctx['actions'] ?? []), !empty($ctx['newsletter']));
+        } catch (\Throwable $e) {
+            $this->wlog('effects of paid booking ' . (int) $row->id . ' threw: flagged for retry');
+            try {
+                $db->setQuery($db->getQuery(true)->update($db->quoteName('#__webgbooking_bookings'))->set($db->quoteName('fx_state') . ' = ' . $db->quote('retry'))->where($db->quoteName('id') . ' = ' . (int) $row->id)->where($db->quoteName('fx_state') . ' != ' . $db->quote('done')))->execute();
+            } catch (\Throwable $e2) {
+            }
+        }
 
         return 'confirmed';
     }
 
-    /** Staff alert: money received but the booking cannot stand (slot taken / amount differs). Refund by hand. */
+    /** Money arrived for a booking that is no longer waiting (cancelled or otherwise closed): record it, tell the staff. */
+    private function recordOrphanPayment(object $row, array $session): string
+    {
+        $db = Factory::getContainer()->get(DatabaseInterface::class);
+        $db->setQuery(
+            $db->getQuery(true)->update($db->quoteName('#__webgbooking_bookings'))
+                ->set($db->quoteName('payment_status') . ' = ' . $db->quote('paid'))
+                ->set($db->quoteName('paid_at') . ' = ' . $db->quote(Factory::getDate()->toSql()))
+                ->set($db->quoteName('stripe_payment_intent') . ' = ' . $db->quote((string) ($session['payment_intent'] ?? '')))
+                ->set($db->quoteName('pending_ctx') . ' = NULL')
+                ->where($db->quoteName('id') . ' = ' . (int) $row->id)
+                ->where('COALESCE(' . $db->quoteName('payment_status') . ", '') != " . $db->quote('paid'))
+        )->execute();
+
+        if ((int) $db->getAffectedRows() === 1) {
+            $row->payment_status = 'paid';
+            $row->stripe_payment_intent = (string) ($session['payment_intent'] ?? '');
+            $this->notifyPaymentReview($row, 'orphan');
+        }
+
+        return 'orphan';
+    }
+
+    /** Staff alert: money received but the booking cannot stand (slot taken / amount differs / mode / orphan). Refund by hand. */
     private function notifyPaymentReview(object $row, string $why): void
     {
-        try {
-            $admin = trim((string) $this->params->get('notify_email', '')) ?: (string) $this->getApplication()->getConfig()->get('mailfrom');
-            if ($admin === '') {
-                return;
-            }
-            $mf = Factory::getContainer()->get(MailerFactoryInterface::class);
-            $m  = $mf->createMailer();
-            $m->addRecipient($admin);
-            $m->setSubject(Text::sprintf('PLG_SYSTEM_WEBGBOOKING_PAY_REVIEW_SUBJECT', $row->booking_date, $row->booking_time));
-            $m->setBody(Text::sprintf(
-                $why === 'amount' ? 'PLG_SYSTEM_WEBGBOOKING_PAY_REVIEW_BODY_AMOUNT' : 'PLG_SYSTEM_WEBGBOOKING_PAY_REVIEW_BODY_SLOT',
+        $keys = ['amount' => 'PLG_SYSTEM_WEBGBOOKING_PAY_REVIEW_BODY_AMOUNT', 'mode' => 'PLG_SYSTEM_WEBGBOOKING_PAY_REVIEW_BODY_MODE', 'orphan' => 'PLG_SYSTEM_WEBGBOOKING_PAY_REVIEW_BODY_ORPHAN'];
+        $this->alertStaff(
+            'pay-' . $why . '-' . (int) $row->id,
+            Text::sprintf('PLG_SYSTEM_WEBGBOOKING_PAY_REVIEW_SUBJECT', $row->booking_date, $row->booking_time),
+            Text::sprintf(
+                $keys[$why] ?? 'PLG_SYSTEM_WEBGBOOKING_PAY_REVIEW_BODY_SLOT',
                 $row->booking_date,
                 $row->booking_time,
                 $row->customer_name,
@@ -936,8 +1406,22 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                 self::formatAmount((int) $row->amount_cents, (string) $row->currency, $this->langTag()),
                 (string) ($row->stripe_payment_intent ?: $row->stripe_session_id),
                 (int) $row->id
-            ));
-            $m->Send();
+            ),
+            24
+        );
+    }
+
+    /** Drop one-time tokens and cache rows nobody will read again. */
+    private function purgeKv(): void
+    {
+        try {
+            $db = Factory::getContainer()->get(DatabaseInterface::class);
+            $db->setQuery(
+                $db->getQuery(true)->delete($db->quoteName('#__webgbooking_kv'))
+                    ->where('(' . $db->quoteName('k') . ' LIKE ' . $db->quote('ret:%') . ' AND ' . $db->quoteName('updated') . ' < ' . $db->quote(Factory::getDate('-3 days')->toSql()) . ')'
+                        . ' OR (' . $db->quoteName('k') . ' LIKE ' . $db->quote('done:%') . ' AND ' . $db->quoteName('updated') . ' < ' . $db->quote(Factory::getDate('-2 days')->toSql()) . ')'
+                        . ' OR (' . $db->quoteName('k') . ' LIKE ' . $db->quote('fb:%') . ' AND ' . $db->quoteName('updated') . ' < ' . $db->quote(Factory::getDate('-1 hour')->toSql()) . ')')
+            )->execute();
         } catch (\Throwable $e) {
         }
     }
@@ -946,6 +1430,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
     public function expireHolds(int $limit = 200): int
     {
         $n = 0;
+        $this->purgeKv();
         try {
             $db   = Factory::getContainer()->get(DatabaseInterface::class);
             $now  = Factory::getDate()->toSql();
@@ -972,6 +1457,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                 }
                 $db->setQuery(
                     $db->getQuery(true)->update($db->quoteName('#__webgbooking_bookings'))
+                        ->set($db->quoteName('pending_ctx') . ' = NULL')
                         ->set($db->quoteName('status') . ' = ' . $db->quote('expired'))
                         ->set($db->quoteName('payment_status') . ' = ' . $db->quote('expired'))
                         ->set($db->quoteName('updated') . ' = ' . $db->quote($now))
@@ -1034,8 +1520,21 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                 if ($row && ($obj['payment_status'] ?? '') === 'paid') {
                     $this->useSiteLanguage();
                     $result = $this->finalizePaid($row, $obj);
+                    if ($result === 'busy') {
+                        http_response_code(503); // nothing changed: Stripe will deliver it again
+                        $this->respond(['error' => 'busy']);
+                    }
                 } elseif ($row) {
                     $result = 'unpaid';
+                } elseif (!empty($obj['id']) && ($obj['payment_status'] ?? '') === 'paid' && (string) ($obj['metadata']['site'] ?? '') === $this->siteKey()) {
+                    // Paid session of THIS site with no booking row at all (hold deleted from the admin while the customer paid).
+                    $this->alertStaff(
+                        'orphan-' . $obj['id'],
+                        Text::_('PLG_SYSTEM_WEBGBOOKING_ALERT_ORPHAN_SUBJECT'),
+                        Text::sprintf('PLG_SYSTEM_WEBGBOOKING_ALERT_ORPHAN_BODY', (string) ($obj['id']), (string) ($obj['payment_intent'] ?? ''), self::formatAmount((int) ($obj['amount_total'] ?? 0), (string) ($obj['currency'] ?? 'eur'), $this->langTag()), (string) ($obj['customer_email'] ?? $obj['customer_details']['email'] ?? '')),
+                        24
+                    );
+                    $result = 'orphan';
                 }
             } elseif (\in_array($ev['type'], ['checkout.session.expired', 'checkout.session.async_payment_failed'], true)) {
                 $row = !empty($obj['id']) ? $this->bookingBySession((string) $obj['id']) : null;
@@ -1043,6 +1542,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                     $now = Factory::getDate()->toSql();
                     $db->setQuery(
                         $db->getQuery(true)->update($db->quoteName('#__webgbooking_bookings'))
+                            ->set($db->quoteName('pending_ctx') . ' = NULL')
                             ->set($db->quoteName('status') . ' = ' . $db->quote('expired'))
                             ->set($db->quoteName('payment_status') . ' = ' . $db->quote('expired'))
                             ->set($db->quoteName('updated') . ' = ' . $db->quote($now))
@@ -1086,14 +1586,26 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             $row = $this->bookingByTokenAny($token) ?: $row;
         }
 
-        $ctx = json_decode((string) ($row->pending_ctx ?? ''), true);
-        if (($row->payment_status ?? '') === 'paid' && $row->status !== 'needs_review') {
+        $ctx = json_decode((string) $this->kvGet('ret:' . $sessionId), true);
+        $ctx = \is_array($ctx) ? $ctx : (array) json_decode((string) ($row->pending_ctx ?? ''), true);
+        if (($row->payment_status ?? '') === 'paid' && !\in_array($row->status, ['needs_review', 'cancelled', 'expired', 'awaiting_payment'], true)) {
             $url = (string) ($ctx['redirect'] ?? '');
-            if ($url !== '' && preg_match('#^(https?://[^\s]+|/(?!/)[^\s]*)$#i', $url)) {
+            $ga  = $this->gaPayload($row, $ctx);
+            if ($url !== '' && preg_match('#^(https?://[^\s\\\\]+|/(?![/\\\\])[^\s\\\\]*)$#i', $url)) {
+                if ($ga !== null) {
+                    $tok = bin2hex(random_bytes(12));
+                    $this->kvSet('done:' . $tok, (string) json_encode($ga));
+                    $frag = '';
+                    if (($h = strpos($url, '#')) !== false) {
+                        $frag = substr($url, $h);
+                        $url  = substr($url, 0, $h);
+                    }
+                    $url .= (strpos($url, '?') === false ? '?' : '&') . 'wgb_done=' . $tok . $frag;
+                }
                 $this->getApplication()->redirect($url);
                 return;
             }
-            $this->htmlPage(Text::_('PLG_SYSTEM_WEBGBOOKING_PAY_OK_TITLE'), '<h1 class="ok">' . $e(Text::_('PLG_SYSTEM_WEBGBOOKING_PAY_OK_TITLE')) . '</h1><p class="muted">' . $e(Text::_('PLG_SYSTEM_WEBGBOOKING_PAY_OK_MSG')) . '</p>');
+            $this->htmlPage(Text::_('PLG_SYSTEM_WEBGBOOKING_PAY_OK_TITLE'), '<h1 class="ok">' . $e(Text::_('PLG_SYSTEM_WEBGBOOKING_PAY_OK_TITLE')) . '</h1><p class="muted">' . $e(Text::_('PLG_SYSTEM_WEBGBOOKING_PAY_OK_MSG')) . '</p>', $ga !== null ? $this->gaHead($ga) : '');
         }
         if (($row->payment_status ?? '') === 'paid') {
             $this->htmlPage(Text::_('PLG_SYSTEM_WEBGBOOKING_PAY_REVIEW_TITLE'), '<h1>' . $e(Text::_('PLG_SYSTEM_WEBGBOOKING_PAY_REVIEW_TITLE')) . '</h1><p class="muted">' . $e(Text::_('PLG_SYSTEM_WEBGBOOKING_PAY_REVIEW_MSG')) . '</p>');
@@ -1125,6 +1637,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             $now = Factory::getDate()->toSql();
             $db->setQuery(
                 $db->getQuery(true)->update($db->quoteName('#__webgbooking_bookings'))
+                    ->set($db->quoteName('pending_ctx') . ' = NULL')
                     ->set($db->quoteName('status') . ' = ' . $db->quote('expired'))
                     ->set($db->quoteName('payment_status') . ' = ' . $db->quote('expired'))
                     ->set($db->quoteName('updated') . ' = ' . $db->quote($now))
@@ -1183,8 +1696,14 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
     }
 
     /**
-     * Plugin options save: Stripe secrets are encrypted at rest (same AES-256-GCM scheme as the Google token).
-     * An empty field keeps the stored value, "-" clears it. A new secret key is checked against Stripe.
+     * Plugin options save.
+     * - Stripe secrets are encrypted at rest (same AES-256-GCM scheme as the Google token). Empty box = keep the
+     *   stored value, "-" = clear it.
+     * - A key that does not belong to the chosen mode (live key + "test", or the opposite) is an ERROR: the key and
+     *   the mode are not saved (the previous ones stay) and the admin is told.
+     * - A new secret key is checked with Stripe. Restricted keys (rk_) that cannot read the account are checked with
+     *   a Checkout Sessions read; if even that is refused the key is reported as "not verifiable", not rejected.
+     * - "Invalidate cached configurations" raises the config epoch (see tokenFresh()).
      */
     public function onExtensionBeforeSave(Event $event): void
     {
@@ -1202,10 +1721,20 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                 return;
             }
 
+            $app = $this->getApplication();
             $db  = Factory::getContainer()->get(DatabaseInterface::class);
             $old = (array) json_decode((string) $db->setQuery(
                 $db->getQuery(true)->select($db->quoteName('params'))->from($db->quoteName('#__extensions'))->where($db->quoteName('extension_id') . ' = ' . (int) ($table->extension_id ?? 0))
             )->loadResult(), true);
+
+            // config epoch: bump on request, never lower
+            $epoch = max(1, (int) ($old['config_epoch'] ?? 1));
+            if (!empty($new['config_bump']) && (string) $new['config_bump'] === '1') {
+                $epoch++;
+                $app->enqueueMessage(Text::sprintf('PLG_SYSTEM_WEBGBOOKING_EPOCH_BUMPED', $epoch), 'message');
+            }
+            $new['config_epoch'] = $epoch;
+            $new['config_bump']  = '0';
 
             $freshSk = '';
             foreach (['stripe_sk', 'stripe_whsec'] as $k) {
@@ -1221,25 +1750,147 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                     }
                 }
             }
+
+            // Key vs mode (the key actually in force after this save)
+            $mode = (string) ($new['stripe_mode'] ?? 'test') === 'live' ? 'live' : 'test';
+            $eff  = $freshSk !== '' ? $freshSk : (strncmp((string) ($new['stripe_sk'] ?? ''), 'g:', 2) === 0 ? $this->dec((string) $new['stripe_sk']) : '');
+            $keyMode = preg_match('/^(sk|rk)_live_/', $eff) ? 'live' : (preg_match('/^(sk|rk)_test_/', $eff) ? 'test' : '');
+            if ($keyMode !== '' && $keyMode !== $mode) {
+                $app->enqueueMessage(Text::sprintf('PLG_SYSTEM_WEBGBOOKING_PAY_KEY_MODE_ERROR', $keyMode, $mode), 'error');
+                $new['stripe_sk']   = (string) ($old['stripe_sk'] ?? '');
+                $new['stripe_mode'] = (string) ($old['stripe_mode'] ?? 'test');
+                $freshSk = '';
+            }
             $table->params = (string) json_encode($new);
 
             if ($freshSk !== '') {
-                $app  = $this->getApplication();
-                $mode = (string) ($new['stripe_mode'] ?? 'test');
-                $isTestKey = (bool) preg_match('/^(sk|rk)_test_/', $freshSk);
-                $isLiveKey = (bool) preg_match('/^(sk|rk)_live_/', $freshSk);
-                if (($mode === 'live' && $isTestKey) || ($mode !== 'live' && $isLiveKey)) {
-                    $app->enqueueMessage(Text::_('PLG_SYSTEM_WEBGBOOKING_PAY_KEY_MODE_MISMATCH'), 'warning');
-                }
                 $chk = $this->checkStripeKey($freshSk);
-                if ($chk['ok']) {
+                if ($chk['ok'] && !empty($chk['restricted'])) {
+                    $app->enqueueMessage(Text::_('PLG_SYSTEM_WEBGBOOKING_PAY_KEY_OK_RESTRICTED'), 'message');
+                } elseif ($chk['ok']) {
                     $app->enqueueMessage(Text::sprintf('PLG_SYSTEM_WEBGBOOKING_PAY_KEY_OK', $chk['account']), 'message');
+                } elseif (!empty($chk['unverifiable'])) {
+                    $app->enqueueMessage(Text::_('PLG_SYSTEM_WEBGBOOKING_PAY_KEY_UNVERIFIABLE'), 'warning');
                 } else {
                     $app->enqueueMessage(Text::sprintf('PLG_SYSTEM_WEBGBOOKING_PAY_KEY_BAD', (int) $chk['code']), 'warning');
                 }
             }
         } catch (\Throwable $e) {
         }
+    }
+
+    /**
+     * Thank-you page of a PAID booking (the element's redirect URL carries ?wgb_done=<token>): the token is a
+     * random, single-use, 24 h handle to {event, value, currency, transaction id}, never personal data. On the first
+     * view the booking-completed event is pushed to dataLayer (+ gtag when the site defines it), then the token is gone.
+     */
+    public function onBeforeCompileHead(): void
+    {
+        try {
+            $app = $this->getApplication();
+            if (!$app->isClient('site')) {
+                return;
+            }
+            $t = (string) $app->getInput()->getCmd('wgb_done', '');
+            if (!preg_match('/^[a-f0-9]{24}$/', $t)) {
+                return;
+            }
+            $raw = $this->kvGet('done:' . $t);
+            if ($raw === null) {
+                return;
+            }
+            $this->kvDelete('done:' . $t);
+            $d = json_decode($raw, true);
+            if (!\is_array($d) || time() - (int) ($d['t'] ?? 0) > 86400) {
+                return;
+            }
+            $doc = $app->getDocument();
+            if ($doc && method_exists($doc, 'addScriptDeclaration')) {
+                $doc->addScriptDeclaration($this->gaScript($d));
+            }
+        } catch (\Throwable $e) {
+        }
+    }
+
+    /** Head tags for the standalone return page: the site's GTM container or GA4 tag (if set in the options) + the event. */
+    private function gaHead(array $ga): string
+    {
+        $gtm = trim((string) $this->params->get('gtm_id', ''));
+        $g4  = trim((string) $this->params->get('ga4_id', ''));
+        $h   = '';
+        if (preg_match('/^GTM-[A-Z0-9]{4,12}$/', $gtm)) {
+            $h .= "<script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src='https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);})(window,document,'script','dataLayer','" . $gtm . "');</script>";
+        } elseif (preg_match('/^G-[A-Z0-9]{6,14}$/', $g4)) {
+            $h .= '<script async src="https://www.googletagmanager.com/gtag/js?id=' . $g4 . '"></script><script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag(\'js\',new Date());gtag(\'config\',\'' . $g4 . '\');</script>';
+        }
+
+        return $h . '<script>' . $this->gaScript($ga) . '</script>';
+    }
+
+    /** The JS that reports a completed paid booking. */
+    private function gaScript(array $d): string
+    {
+        $flags = JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT;
+        $name  = json_encode((string) $d['ev'], $flags);
+        $p     = json_encode(['value' => (float) $d['value'], 'currency' => (string) $d['cur'], 'transaction_id' => (string) $d['tid']], $flags);
+
+        return 'window.dataLayer=window.dataLayer||[];(function(){var n=' . $name . ',p=' . $p . ';var o={event:n};for(var k in p){o[k]=p[k];}window.dataLayer.push(o);if(typeof window.gtag===\'function\'){window.gtag(\'event\',n,p);}})();';
+    }
+
+    /** Event data for a confirmed paid booking, or null when it was already reported (fires once per booking). */
+    private function gaPayload(object $row, array $ctx): ?array
+    {
+        if ($this->kvGet('ga:' . (int) $row->id) !== null) {
+            return null;
+        }
+        $this->kvSet('ga:' . (int) $row->id, '1');
+        $name = (string) ($ctx['analytics'] ?? '');
+        if (!preg_match('/^[A-Za-z0-9_\-]{1,40}$/', $name)) {
+            $name = 'wgb_booking_completed';
+        }
+
+        return ['ev' => $name, 'value' => round(((int) $row->amount_cents) / 100, 2), 'cur' => strtoupper((string) $row->currency), 'tid' => (string) $row->stripe_session_id, 't' => time()];
+    }
+
+    /** What the admin screens need to know about the Stripe setup (no secret ever leaves this class). */
+    public function stripeStatus(): array
+    {
+        $sk    = $this->stripeSecretOpt('stripe_sk');
+        $whsec = $this->stripeSecretOpt('stripe_whsec');
+
+        return [
+            'configured' => $sk !== '',
+            'live'       => $this->stripeLive(),
+            'secret_ok'  => empty($this->secretFail['stripe_sk']),
+            'whsec_ok'   => empty($this->secretFail['stripe_whsec']),
+            'whsec_set'  => trim((string) $this->params->get('stripe_whsec', '')) !== '',
+        ];
+    }
+
+    /**
+     * A signed config is honoured only for the CURRENT epoch and while younger than the plugin's lifetime.
+     * Epoch: bump it (plugin options, "Invalidate cached configurations") and every page rendered before - including
+     * copies cached by Cloudflare - stops booking until it is re-rendered; use it whenever an element changes price.
+     * Lifetime (default 30 days, 0 = unlimited) is the backstop: long enough to survive even a monthly Cloudflare
+     * "cache everything" rule, short enough that a stale paid/free configuration cannot live forever.
+     * Tokens made before 0.33.0 carry no epoch and count as epoch 1.
+     */
+    private function tokenFresh(array $cfg): bool
+    {
+        if ((int) ($cfg['v'] ?? 1) !== $this->configEpoch()) {
+            return false;
+        }
+        $ttl = (int) $this->params->get('config_ttl_days', 30);
+        if ($ttl > 0 && isset($cfg['iat']) && time() - (int) $cfg['iat'] > $ttl * 86400) {
+            return false;
+        }
+
+        return true;
+    }
+
+    public function configEpoch(): int
+    {
+        return max(1, (int) $this->params->get('config_epoch', 1));
     }
 
     /** Verify the HMAC-signed per-element actions config from the form token. Returns the array or []. */
@@ -1256,7 +1907,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             }
             $cfg = json_decode((string) base64_decode($payload), true);
 
-            return \is_array($cfg) ? $cfg : [];
+            return (\is_array($cfg) && $this->tokenFresh($cfg)) ? $cfg : [];
         } catch (\Throwable $e) {
             return [];
         }
@@ -1318,13 +1969,27 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
         return $out ? (string) json_encode($out) : '';
     }
 
-    /** Forward the full booking to a webhook (per-element override → plugin global), POST or GET. */
-    private function postBookingWebhook(object $row, string $overrideUrl = '', string $method = ''): void
+    /** http(s) URLs only (FILTER_VALIDATE_URL alone also lets ftp:, file:, gopher: through). */
+    private static function httpUrlOk(string $url): bool
+    {
+        return (bool) preg_match('#^https?://[^\s]+$#i', $url) && filter_var($url, FILTER_VALIDATE_URL) !== false;
+    }
+
+    /**
+     * Forward the full booking to a webhook (per-element override → plugin global), POST or GET.
+     * True when delivered or when there is nothing to deliver; false on a transport error or a 5xx (worth a retry).
+     */
+    private function postBookingWebhook(object $row, string $overrideUrl = '', string $method = ''): bool
     {
         try {
             $url = $overrideUrl !== '' ? $overrideUrl : trim((string) $this->params->get('booking_webhook', ''));
-            if ($url === '' || !filter_var($url, FILTER_VALIDATE_URL)) {
-                return;
+            if ($url === '') {
+                return true;
+            }
+            if (!self::httpUrlOk($url)) {
+                $this->wlog('booking webhook URL ignored: not an http(s) URL');
+
+                return true;
             }
 
             $method = strtoupper($method !== '' ? $method : (string) $this->params->get('booking_webhook_method', 'POST'));
@@ -1342,23 +2007,29 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                 'status'      => $row->status,
                 'location'    => $this->rowLocation($row),
                 'duration'    => $this->rowDuration($row),
-                'event'       => (string) ($row->event_name ?? ''),
+                'event_name'  => (string) ($row->event_name ?? ''),
+                'payment_status' => (string) ($row->payment_status ?? ''),
+                'amount'      => isset($row->amount_cents) && $row->amount_cents !== null ? round(((int) $row->amount_cents) / 100, 2) : null,
+                'currency'    => (string) ($row->currency ?? ''),
                 'custom'      => $this->customMap($row),
             ];
 
             $http = (new HttpFactory())->getHttp();
             if ($method === 'GET') {
-                $sep = strpos($url, '?') === false ? '?' : '&';
-                $http->get($url . $sep . http_build_query($data), [], 8);
+                $sep  = strpos($url, '?') === false ? '?' : '&';
+                $resp = $http->get($url . $sep . http_build_query($data), [], 8);
             } else {
-                $http->post($url, json_encode($data), ['Content-Type' => 'application/json'], 8);
+                $resp = $http->post($url, json_encode($data), ['Content-Type' => 'application/json'], 8);
             }
+
+            return self::httpCode($resp) < 500;
         } catch (\Throwable $e) {
+            return false;
         }
     }
 
-    /** Append the booking as a row to a configured Google Sheet (live spreadsheet write). */
-    private function appendToSheet(object $row): void
+    /** Append the booking as a row to a configured Google Sheet. True when written or when no Sheet is configured. */
+    private function appendToSheet(object $row): bool
     {
         try {
             $db = Factory::getContainer()->get(DatabaseInterface::class);
@@ -1367,18 +2038,18 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             )->loadObject();
 
             if (!$g || empty($g->refresh_token)) {
-                return;
+                return true;
             }
 
             // Sheet chosen in the component (Google page) → fallback to the plugin param.
             $sheetId = trim((string) ($g->sheet_id ?? '')) ?: trim((string) $this->params->get('google_sheet_id', ''));
             if ($sheetId === '') {
-                return;
+                return true;
             }
 
             $token = $this->googleAccessToken((string) $g->refresh_token);
             if ($token === '') {
-                return;
+                return false;
             }
 
             $tab   = trim((string) ($g->sheet_tab ?? ''));
@@ -1404,26 +2075,29 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                 $this->rowLocation($row), (string) $this->rowDuration($row), (string) ($row->event_name ?? ''),
             ])];
 
-            (new HttpFactory())->getHttp()->post(
+            $resp = (new HttpFactory())->getHttp()->post(
                 'https://sheets.googleapis.com/v4/spreadsheets/' . rawurlencode($sheetId) . '/values/' . $range . ':append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS',
                 json_encode(['values' => $values]),
                 ['Authorization' => 'Bearer ' . $token, 'Content-Type' => 'application/json'],
                 8
             );
+
+            return self::httpCode($resp) < 400;
         } catch (\Throwable $e) {
+            return false;
         }
     }
 
-    /** Forward a consented subscriber to the configured newsletter webhook (admin-set URL). */
-    private function newsletterSignup(object $row): void
+    /** Forward a consented subscriber to the configured newsletter webhook (admin-set URL). True when sent or not configured. */
+    private function newsletterSignup(object $row): bool
     {
         try {
             $url = trim((string) $this->params->get('newsletter_webhook', ''));
-            if ($url === '' || !filter_var($url, FILTER_VALIDATE_URL)) {
-                return;
+            if ($url === '' || !self::httpUrlOk($url)) {
+                return true;
             }
 
-            (new HttpFactory())->getHttp()->post(
+            $resp = (new HttpFactory())->getHttp()->post(
                 $url,
                 json_encode([
                     'email'  => $row->customer_email,
@@ -1435,19 +2109,26 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                 ['Content-Type' => 'application/json'],
                 8
             );
+
+            return self::httpCode($resp) < 500;
         } catch (\Throwable $e) {
+            return false;
         }
     }
 
-    private function notify(object $row, bool $reschedule = false): void
+    /**
+     * Confirmation emails. $parts: all | customer | staff. Each part is independent so a retry can redo only the
+     * one that failed. Returns true when every requested part went out (or had nothing to send).
+     */
+    private function notify(object $row, bool $reschedule = false, string $parts = 'all'): bool
     {
+        $ok = true;
+
         try {
-            $app    = $this->getApplication();
-            $config = $app->getConfig();
+            $config = $this->getApplication()->getConfig();
             $admin  = trim((string) $this->params->get('notify_email', '')) ?: (string) $config->get('mailfrom');
             $mf     = Factory::getContainer()->get(MailerFactoryInterface::class);
             $manageUrl = $this->manageUrl($row);
-            $ics    = $this->buildIcs($row, $reschedule ? 'REQUEST' : 'PUBLISH');
 
             $dateFmt = $row->booking_date;
             try {
@@ -1455,61 +2136,91 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             } catch (\Throwable $e) {
             }
 
-            // ---- Customer email action (and invited guest). Skipped if the action is off. ----
-            if ($reschedule || ($row->_custOn ?? true)) {
-                if ($reschedule) {
-                    $subject = strtr(Text::_('PLG_SYSTEM_WEBGBOOKING_RESCHEDULE_EMAIL_SUBJECT'), ['{name}' => $row->customer_name, '{date}' => $dateFmt, '{time}' => $row->booking_time]);
-                    $bodyTpl = $this->bodyTemplate('PLG_SYSTEM_WEBGBOOKING_EMAIL_RESCHEDULED');
-                } else {
-                    $elSub      = (string) ($row->emailSubjectTpl ?? '');
-                    $elBody     = (string) ($row->emailBodyTpl ?? '');
-                    $subjectTpl = $elSub !== '' ? $elSub : (trim((string) $this->params->get('email_subject', '')) ?: Text::_('PLG_SYSTEM_WEBGBOOKING_EMAIL_CUSTOMER_SUBJECT'));
-                    $subject    = strtr($subjectTpl, ['{name}' => $row->customer_name, '{date}' => $dateFmt, '{time}' => $row->booking_time]);
-                    $bodyTpl    = $elBody !== '' ? $elBody : (trim((string) $this->params->get('email_body', '')) ?: $this->defaultEmailBody());
-                }
-                $this->sendHtmlMail($mf, $row->customer_email, $subject, $this->wrapEmail($this->renderTpl($bodyTpl, $row, $manageUrl, $dateFmt, !$reschedule)), $ics);
-
-                // Guest invite: distinct email WITHOUT the cancel link/token.
-                if (!empty($row->guest_email)) {
-                    $gSubject = strtr(Text::_('PLG_SYSTEM_WEBGBOOKING_EMAIL_GUEST_SUBJECT'), ['{name}' => $row->customer_name, '{date}' => $dateFmt, '{time}' => $row->booking_time]);
-                    $this->sendHtmlMail($mf, $row->guest_email, $gSubject, $this->wrapEmail($this->guestEmailBody($row, $dateFmt)), $ics);
+            if ($parts === 'all' || $parts === 'customer') {
+                try {
+                    $this->notifyCustomer($row, $reschedule, $mf, $manageUrl, $dateFmt);
+                } catch (\Throwable $e) {
+                    $ok = false;
+                    $this->wlog('customer email failed for booking ' . (int) $row->id);
                 }
             }
-
-            // ---- Staff email action: per-element HTML template, or the plain default. ----
-            if ($row->_staffOn ?? true) {
-                $tos = array_values(array_filter(array_map('trim', explode(',', (string) ($row->_staffTo ?? '')))));
-                if (!$tos && $admin !== '') {
-                    $tos = [$admin];
-                }
-                if ($tos) {
-                    $sSubTpl = (string) ($row->_staffSubject ?? '');
-                    $sSub    = $sSubTpl !== '' ? strtr($sSubTpl, ['{name}' => $row->customer_name, '{date}' => $dateFmt, '{time}' => $row->booking_time]) : Text::sprintf('PLG_SYSTEM_WEBGBOOKING_EMAIL_ADMIN_SUBJECT', $row->booking_date, $row->booking_time);
-                    $sBody   = (string) ($row->_staffBody ?? '');
-                    if ($sBody !== '') {
-                        $this->sendHtmlMail($mf, $tos, $sSub, $this->wrapEmail($this->renderTpl($sBody, $row, $manageUrl, $dateFmt)), '');
-                    } else {
-                        $meetLine  = $this->rowLocation($row) === 'phone'
-                            ? ' ' . Text::sprintf('PLG_SYSTEM_WEBGBOOKING_STAFF_PHONE_LINE', (string) $row->customer_phone, $this->rowDuration($row))
-                            : (!empty($row->meeting_url) ? ' ' . Text::sprintf('PLG_SYSTEM_WEBGBOOKING_MEET_LINE', $row->meeting_url) : '');
-                        $guestLine = !empty($row->guest_email) ? "\n" . Text::sprintf('PLG_SYSTEM_WEBGBOOKING_EMAIL_GUEST_LINE', $row->guest_email) : '';
-                        if (($row->payment_status ?? '') === 'paid') {
-                            $guestLine .= "\n" . Text::sprintf('PLG_SYSTEM_WEBGBOOKING_STAFF_PAID_LINE', self::formatAmount((int) $row->amount_cents, (string) $row->currency, $this->langTag()), (string) ($row->stripe_payment_intent ?? ''));
-                        }
-                        $custLines = '';
-                        foreach ($this->customAnswers($row) as $it) {
-                            $custLines .= "\n" . $it['l'] . ': ' . $it['v'];
-                        }
-                        $m = $mf->createMailer();
-                        $m->addRecipient($tos);
-                        $m->setSubject($sSub);
-                        $m->setBody(Text::sprintf('PLG_SYSTEM_WEBGBOOKING_EMAIL_ADMIN_BODY', $row->booking_date, $row->booking_time, $row->customer_name, $row->customer_email, $row->customer_phone ?: '-', $row->notes ?: '-') . $meetLine . $guestLine . $custLines);
-                        $m->Send();
-                    }
+            if ($parts === 'all' || $parts === 'staff') {
+                try {
+                    $this->notifyStaff($row, $mf, $manageUrl, $dateFmt, $admin);
+                } catch (\Throwable $e) {
+                    $ok = false;
+                    $this->wlog('staff email failed for booking ' . (int) $row->id);
                 }
             }
         } catch (\Throwable $e) {
-            // Email is best-effort: the booking is already stored.
+            return false;
+        }
+
+        return $ok;
+    }
+
+    /** Customer email (+ the invited guest, without the cancel link and without the customer's phone). */
+    private function notifyCustomer(object $row, bool $reschedule, $mf, string $manageUrl, string $dateFmt): void
+    {
+        $ics      = $this->buildIcs($row, $reschedule ? 'REQUEST' : 'PUBLISH');
+        $icsGuest = $this->buildIcs($row, $reschedule ? 'REQUEST' : 'PUBLISH', true);
+
+        // ---- Customer email action (and invited guest). Skipped if the action is off. ----
+        if ($reschedule || ($row->_custOn ?? true)) {
+            if ($reschedule) {
+                $subject = strtr(Text::_('PLG_SYSTEM_WEBGBOOKING_RESCHEDULE_EMAIL_SUBJECT'), ['{name}' => $row->customer_name, '{date}' => $dateFmt, '{time}' => $row->booking_time]);
+                $bodyTpl = $this->bodyTemplate('PLG_SYSTEM_WEBGBOOKING_EMAIL_RESCHEDULED');
+            } else {
+                $elSub      = (string) ($row->emailSubjectTpl ?? '');
+                $elBody     = (string) ($row->emailBodyTpl ?? '');
+                $subjectTpl = $elSub !== '' ? $elSub : (trim((string) $this->params->get('email_subject', '')) ?: Text::_('PLG_SYSTEM_WEBGBOOKING_EMAIL_CUSTOMER_SUBJECT'));
+                $subject    = strtr($subjectTpl, ['{name}' => $row->customer_name, '{date}' => $dateFmt, '{time}' => $row->booking_time]);
+                $bodyTpl    = $elBody !== '' ? $elBody : (trim((string) $this->params->get('email_body', '')) ?: $this->defaultEmailBody());
+            }
+            $this->sendHtmlMail($mf, $row->customer_email, $subject, $this->wrapEmail($this->renderTpl($bodyTpl, $row, $manageUrl, $dateFmt, !$reschedule)), $ics);
+
+            // Guest invite: distinct email WITHOUT the cancel link/token.
+            if (!empty($row->guest_email)) {
+                $gSubject = strtr(Text::_('PLG_SYSTEM_WEBGBOOKING_EMAIL_GUEST_SUBJECT'), ['{name}' => $row->customer_name, '{date}' => $dateFmt, '{time}' => $row->booking_time]);
+                $this->sendHtmlMail($mf, $row->guest_email, $gSubject, $this->wrapEmail($this->guestEmailBody($row, $dateFmt)), $icsGuest);
+            }
+        }
+    }
+
+    /** Staff email: per-element HTML template, or the plain default. */
+    private function notifyStaff(object $row, $mf, string $manageUrl, string $dateFmt, string $admin): void
+    {
+        // ---- Staff email action: per-element HTML template, or the plain default. ----
+        if ($row->_staffOn ?? true) {
+            $tos = array_values(array_filter(array_map('trim', explode(',', (string) ($row->_staffTo ?? '')))));
+            if (!$tos && $admin !== '') {
+                $tos = [$admin];
+            }
+            if ($tos) {
+                $sSubTpl = (string) ($row->_staffSubject ?? '');
+                $sSub    = $sSubTpl !== '' ? strtr($sSubTpl, ['{name}' => $row->customer_name, '{date}' => $dateFmt, '{time}' => $row->booking_time]) : Text::sprintf('PLG_SYSTEM_WEBGBOOKING_EMAIL_ADMIN_SUBJECT', $row->booking_date, $row->booking_time);
+                $sBody   = (string) ($row->_staffBody ?? '');
+                if ($sBody !== '') {
+                    $this->sendHtmlMail($mf, $tos, $sSub, $this->wrapEmail($this->renderTpl($sBody, $row, $manageUrl, $dateFmt)), '');
+                } else {
+                    $meetLine  = $this->rowLocation($row) === 'phone'
+                        ? ' ' . Text::sprintf('PLG_SYSTEM_WEBGBOOKING_STAFF_PHONE_LINE', (string) $row->customer_phone, $this->rowDuration($row))
+                        : (!empty($row->meeting_url) ? ' ' . Text::sprintf('PLG_SYSTEM_WEBGBOOKING_MEET_LINE', $row->meeting_url) : '');
+                    $guestLine = !empty($row->guest_email) ? "\n" . Text::sprintf('PLG_SYSTEM_WEBGBOOKING_EMAIL_GUEST_LINE', $row->guest_email) : '';
+                    if (($row->payment_status ?? '') === 'paid') {
+                        $guestLine .= "\n" . Text::sprintf('PLG_SYSTEM_WEBGBOOKING_STAFF_PAID_LINE', self::formatAmount((int) $row->amount_cents, (string) $row->currency, $this->langTag()), (string) ($row->stripe_payment_intent ?? ''));
+                    }
+                    $custLines = '';
+                    foreach ($this->customAnswers($row) as $it) {
+                        $custLines .= "\n" . $it['l'] . ': ' . $it['v'];
+                    }
+                    $m = $mf->createMailer();
+                    $m->addRecipient($tos);
+                    $m->setSubject($sSub);
+                    $m->setBody(Text::sprintf('PLG_SYSTEM_WEBGBOOKING_EMAIL_ADMIN_BODY', $row->booking_date, $row->booking_time, $row->customer_name, $row->customer_email, $row->customer_phone ?: '-', $row->notes ?: '-') . $meetLine . $guestLine . $custLines);
+                    $m->Send();
+                }
+            }
         }
     }
 
@@ -1545,7 +2256,11 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
 
         $isPhone   = $this->rowLocation($row) === 'phone';
         $meetBlock = '';
-        if ($isPhone) {
+        if (!$isPhone && empty($row->meeting_url) && !empty($row->_meetPending)) {
+            // The Google event is still being created: promise the link instead of showing an empty one.
+            $meetBlock = '<p style="margin:20px 0;padding:12px 16px;background:#f6f8fa;border:1px solid #e6e9ee;border-radius:8px;font-weight:600;">'
+                . $e(Text::_('PLG_SYSTEM_WEBGBOOKING_EMAIL_MEET_PENDING')) . '</p>';
+        } elseif ($isPhone) {
             // Phone appointment: no link, we say we will call the customer at the number they gave.
             $meetBlock = '<p style="margin:20px 0;padding:12px 16px;background:#f6f8fa;border:1px solid #e6e9ee;border-radius:8px;font-weight:600;">'
                 . $e(Text::sprintf('PLG_SYSTEM_WEBGBOOKING_EMAIL_PHONE_CALL', (string) $row->customer_phone)) . '</p>';
@@ -1670,7 +2385,9 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
         if ($ics !== '') {
             $m->addStringAttachment($ics, 'appuntamento.ics', 'base64', 'text/calendar; charset=utf-8; method=' . $icsMethod);
         }
-        $m->Send();
+        if ($m->Send() !== true) {
+            throw new \RuntimeException('mail not sent');
+        }
     }
 
     /** Guest-facing email body: an invitation, without any management/cancel link. */
@@ -1699,10 +2416,24 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
     }
 
     /**
+     * Calendar UID of the appointment. 0.33.0+: an HMAC of the booking id (the .ics travels by email and into other
+     * people's calendars: it must not contain the manage_token, which is a credential). Bookings made before 0.33.0
+     * (no fx_state) keep their old UID so their moved/cancelled updates still match the entry already in the calendar.
+     */
+    private function icsUid(object $row, string $host): string
+    {
+        if (($row->fx_state ?? null) === null && ($row->payment_status ?? null) === null) {
+            return 'wgb-' . $row->id . '-' . $row->manage_token . '@' . $host;
+        }
+
+        return 'wgb-' . $row->id . '-' . substr(hash_hmac('sha256', 'uid|' . $row->id, (string) $this->getApplication()->get('secret')), 0, 20) . '@' . $host;
+    }
+
+    /**
      * Build an .ics (iCalendar) for the appointment. $method: PUBLISH (new), REQUEST (moved), CANCEL (cancelled).
      * Uses the booking's own duration; a phone appointment says "we call you at X" instead of a link.
      */
-    private function buildIcs(object $row, string $method = 'PUBLISH'): string
+    private function buildIcs(object $row, string $method = 'PUBLISH', bool $forGuest = false): string
     {
         try {
             $tz     = new \DateTimeZone($this->siteTz());
@@ -1718,7 +2449,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             $lines = [
                 'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//WebG Booking//IT', 'CALSCALE:GREGORIAN', 'METHOD:' . $method,
                 'BEGIN:VEVENT',
-                'UID:wgb-' . $row->id . '-' . $row->manage_token . '@' . $host,
+                'UID:' . $this->icsUid($row, (string) $host),
                 'DTSTAMP:' . $fmt(new \DateTime('now', $utc)),
                 'DTSTART:' . $fmt($start),
                 'DTEND:' . $fmt($end),
@@ -1726,7 +2457,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             ];
 
             if ($this->rowLocation($row) === 'phone') {
-                $call = Text::sprintf('PLG_SYSTEM_WEBGBOOKING_ICS_PHONE', (string) ($row->customer_phone ?? ''));
+                $call = $forGuest ? Text::_('PLG_SYSTEM_WEBGBOOKING_ICS_PHONE_GUEST') : Text::sprintf('PLG_SYSTEM_WEBGBOOKING_ICS_PHONE', (string) ($row->customer_phone ?? ''));
                 $lines[] = 'DESCRIPTION:' . $esc($call);
                 $lines[] = 'LOCATION:' . $esc($call);
             } elseif (!empty($row->meeting_url)) {
@@ -1809,7 +2540,8 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
 
             $app->redirect($admin . '&wgbconnected=1');
         } catch (\Throwable $e) {
-            $app->redirect($admin . '&wgberror=' . rawurlencode('exchange: ' . $e->getMessage()));
+            $this->wlog('Google OAuth code exchange failed');
+            $app->redirect($admin . '&wgberror=exchange');
         }
     }
 
@@ -1983,13 +2715,13 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
         $wd = array_values(array_map('intval', \is_array($wd) ? $wd : explode(',', (string) $wd)));
 
         return [
-            'start'  => ((int) ($ws[0] ?? 9)) * 60 + (int) ($ws[1] ?? 0),
-            'end'    => ((int) ($we[0] ?? 18)) * 60 + (int) ($we[1] ?? 0),
+            'start'  => !empty($ev['ws']) ? ((int) explode(':', $ev['ws'])[0]) * 60 + (int) explode(':', $ev['ws'])[1] : ((int) ($ws[0] ?? 9)) * 60 + (int) ($ws[1] ?? 0),
+            'end'    => !empty($ev['we']) ? ((int) explode(':', $ev['we'])[0]) * 60 + (int) explode(':', $ev['we'])[1] : ((int) ($we[0] ?? 18)) * 60 + (int) ($we[1] ?? 0),
             'iv'     => max(5, (int) $this->params->get('slot_interval', 30)),
             'dur'    => isset($ev['dur']) ? max(5, (int) $ev['dur']) : max(5, (int) $this->params->get('slot_duration', 30)),
-            'notice' => (int) $this->params->get('min_notice', 2) * 3600,
-            'window' => max(1, (int) $this->params->get('window_days', 30)),
-            'days'   => $wd ?: [1, 2, 3, 4, 5],
+            'notice' => (isset($ev['nt']) && $ev['nt'] !== null ? (int) $ev['nt'] : (int) $this->params->get('min_notice', 2)) * 3600,
+            'window' => isset($ev['wn']) && $ev['wn'] !== null ? (int) $ev['wn'] : max(1, (int) $this->params->get('window_days', 30)),
+            'days'   => !empty($ev['wd']) ? array_values($ev['wd']) : ($wd ?: [1, 2, 3, 4, 5]),
             'bufBefore' => (isset($ev['bb']) ? max(0, (int) $ev['bb']) : max(0, (int) $this->params->get('buffer_before', 0))) * 60,
             'bufAfter'  => (isset($ev['ba']) ? max(0, (int) $ev['ba']) : max(0, (int) $this->params->get('buffer_after', 0))) * 60,
         ];
@@ -1999,6 +2731,14 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
     private function computeDay(string $dayStr, \DateTimeZone $tz, array $busy, int $now, array $c, array $local = []): array
     {
         $slots = [];
+
+        // Working day and booking window are enforced HERE too, so they bind book/reschedule/slots and not only the
+        // month view (a hand-made request for a Sunday or for next year used to pass).
+        $dayStart = (new \DateTime($dayStr . ' 00:00:00', $tz))->getTimestamp();
+        $maxTs    = (new \DateTime('today', $tz))->modify('+' . (int) $c['window'] . ' days')->getTimestamp();
+        if ($dayStart > $maxTs || !\in_array((int) (new \DateTime($dayStr . ' 00:00:00', $tz))->format('w'), $c['days'], true)) {
+            return [];
+        }
 
         for ($m = $c['start']; $m + $c['dur'] <= $c['end']; $m += $c['iv']) {
             $hh = intdiv($m, 60);
@@ -2052,6 +2792,9 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             $now  = (new \DateTime('now', $tz))->getTimestamp();
             $next = (new \DateTime($date . ' 00:00:00', $tz))->modify('+1 day')->format('Y-m-d');
             $busy = $this->googleBusy($date, $next, $tz);
+            if ($busy === null) {
+                $this->respond(['slots' => [], 'unavailable' => true, 'message' => Text::_('PLG_SYSTEM_WEBGBOOKING_CAL_UNAVAILABLE')]);
+            }
 
             $this->respond(['slots' => $this->computeDay($date, $tz, $busy, $now, $this->slotConfig($ev), $this->localBookings($date, $next, $tz))]);
         } catch (\Throwable $e) {
@@ -2086,6 +2829,9 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
 
             $busyTo = (clone $last)->modify('+1 day')->format('Y-m-d');
             $busy   = $this->googleBusy($cur->format('Y-m-d'), $busyTo, $tz);
+            if ($busy === null) {
+                $this->respond(['days' => (object) [], 'unavailable' => true, 'message' => Text::_('PLG_SYSTEM_WEBGBOOKING_CAL_UNAVAILABLE')]);
+            }
             $local  = $this->localBookings($cur->format('Y-m-d'), $busyTo, $tz);
 
             $days = [];
@@ -2110,8 +2856,104 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
         }
     }
 
-    /** Google busy intervals over [from, toExclusive) as [startTs, endTs] pairs (empty if not connected). */
-    private function googleBusy(string $from, string $toExclusive, \DateTimeZone $tz): array
+    // ------------------------------------------------------------------------------------------------
+    // Small key/value store (throttles, freeBusy cache, one-time outcome tokens)
+    // ------------------------------------------------------------------------------------------------
+
+    private function kvGet(string $k): ?string
+    {
+        try {
+            $db = Factory::getContainer()->get(DatabaseInterface::class);
+            $v  = $db->setQuery(
+                $db->getQuery(true)->select($db->quoteName('v'))->from($db->quoteName('#__webgbooking_kv'))->where($db->quoteName('k') . ' = ' . $db->quote($k))
+            )->loadResult();
+
+            return $v === null ? null : (string) $v;
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+
+    private function kvSet(string $k, string $v): void
+    {
+        try {
+            $db = Factory::getContainer()->get(DatabaseInterface::class);
+            $db->setQuery(
+                'INSERT INTO ' . $db->quoteName('#__webgbooking_kv') . ' (' . $db->quoteName('k') . ',' . $db->quoteName('v') . ',' . $db->quoteName('updated') . ') VALUES ('
+                . $db->quote($k) . ',' . $db->quote($v) . ',' . $db->quote(Factory::getDate()->toSql()) . ') ON DUPLICATE KEY UPDATE '
+                . $db->quoteName('v') . ' = VALUES(' . $db->quoteName('v') . '), ' . $db->quoteName('updated') . ' = VALUES(' . $db->quoteName('updated') . ')'
+            )->execute();
+        } catch (\Throwable $e) {
+        }
+    }
+
+    private function kvDelete(string $k, bool $prefix = false): void
+    {
+        try {
+            $db = Factory::getContainer()->get(DatabaseInterface::class);
+            $db->setQuery(
+                $db->getQuery(true)->delete($db->quoteName('#__webgbooking_kv'))
+                    ->where($prefix ? $db->quoteName('k') . ' LIKE ' . $db->quote($db->escape($k, true) . '%', false) : $db->quoteName('k') . ' = ' . $db->quote($k))
+            )->execute();
+        } catch (\Throwable $e) {
+        }
+    }
+
+    /** Log without values: category webgbooking (administrator/logs when Joomla logging is on). */
+    private function wlog(string $msg): void
+    {
+        static $ready = false;
+        try {
+            if (!$ready) {
+                \Joomla\CMS\Log\Log::addLogger(['text_file' => 'webgbooking.php'], \Joomla\CMS\Log\Log::ALL, ['webgbooking']);
+                $ready = true;
+            }
+            \Joomla\CMS\Log\Log::add($msg, \Joomla\CMS\Log\Log::WARNING, 'webgbooking');
+        } catch (\Throwable $e) {
+        }
+    }
+
+    /** Plain email to the staff, at most once every $hours for the same $key (so a failing calendar is one mail, not one per visitor). */
+    private function alertStaff(string $key, string $subject, string $body, int $hours = 6): void
+    {
+        try {
+            $last = (int) $this->kvGet('alert:' . $key);
+            if ($last > 0 && time() - $last < $hours * 3600) {
+                return;
+            }
+            $this->kvSet('alert:' . $key, (string) time());
+            $admin = trim((string) $this->params->get('notify_email', '')) ?: (string) $this->getApplication()->getConfig()->get('mailfrom');
+            if ($admin === '') {
+                return;
+            }
+            $m = Factory::getContainer()->get(MailerFactoryInterface::class)->createMailer();
+            $m->addRecipient($admin);
+            $m->setSubject($subject);
+            $m->setBody($body);
+            $m->Send();
+        } catch (\Throwable $e) {
+        }
+    }
+
+    private function googleConnected(): bool
+    {
+        try {
+            $db = Factory::getContainer()->get(DatabaseInterface::class);
+            $g  = $db->setQuery($db->getQuery(true)->select('*')->from($db->quoteName('#__webgbooking_google')))->loadObject();
+
+            return $g && !empty($g->refresh_token);
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+
+    /**
+     * Google busy intervals over [from, toExclusive) as [startTs, endTs] pairs.
+     * [] when Google is not connected. NULL when it IS connected but the answer cannot be trusted (revoked token,
+     * timeout, API error): callers must then fail CLOSED (offer nothing) instead of treating the calendar as empty.
+     * A short cache (90 s per range) spares the Google quota; $cache=false forces a fresh read (used to confirm a booking).
+     */
+    private function googleBusy(string $from, string $toExclusive, \DateTimeZone $tz, bool $cache = true): ?array
     {
         try {
             $db = Factory::getContainer()->get(DatabaseInterface::class);
@@ -2123,16 +2965,24 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                 return [];
             }
 
-            $token = $this->googleAccessToken((string) $g->refresh_token);
-
-            if ($token === '') {
-                return [];
-            }
-
             $reads = json_decode((string) ($g->read_calendars ?? ''), true);
             $reads = \is_array($reads) && $reads ? $reads : [$g->calendar_id ?: 'primary'];
-            $min   = (new \DateTime($from . ' 00:00:00', $tz))->format(\DateTime::RFC3339);
-            $max   = (new \DateTime($toExclusive . ' 00:00:00', $tz))->format(\DateTime::RFC3339);
+            $ckey  = 'fb:' . md5($from . '|' . $toExclusive . '|' . $tz->getName() . '|' . implode(',', $reads));
+
+            if ($cache) {
+                $hit = json_decode((string) $this->kvGet($ckey), true);
+                if (\is_array($hit) && isset($hit['t'], $hit['busy']) && time() - (int) $hit['t'] < 90) {
+                    return (array) $hit['busy'];
+                }
+            }
+
+            $token = $this->googleAccessToken((string) $g->refresh_token);
+            if ($token === '') {
+                return $this->googleBusyFailed('token');
+            }
+
+            $min = (new \DateTime($from . ' 00:00:00', $tz))->format(\DateTime::RFC3339);
+            $max = (new \DateTime($toExclusive . ' 00:00:00', $tz))->format(\DateTime::RFC3339);
 
             $resp = (new HttpFactory())->getHttp()->post(
                 'https://www.googleapis.com/calendar/v3/freeBusy',
@@ -2141,13 +2991,21 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                     'timeMax' => $max,
                     'items'   => array_map(fn($id) => ['id' => $id], $reads),
                 ]),
-                ['Authorization' => 'Bearer ' . $token, 'Content-Type' => 'application/json']
+                ['Authorization' => 'Bearer ' . $token, 'Content-Type' => 'application/json'],
+                15
             );
 
+            $code = self::httpCode($resp);
             $data = (array) json_decode(self::httpBody($resp), true);
-            $busy = [];
+            if ($code < 200 || $code >= 300 || isset($data['error']) || !isset($data['calendars'])) {
+                return $this->googleBusyFailed('http' . $code);
+            }
 
-            foreach (($data['calendars'] ?? []) as $c) {
+            $busy = [];
+            foreach ($data['calendars'] as $c) {
+                if (!empty($c['errors'])) {
+                    return $this->googleBusyFailed('calendar');
+                }
                 foreach (($c['busy'] ?? []) as $b) {
                     if (isset($b['start'], $b['end'])) {
                         $busy[] = [strtotime($b['start']), strtotime($b['end'])];
@@ -2155,10 +3013,26 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                 }
             }
 
+            $this->kvSet($ckey, (string) json_encode(['t' => time(), 'busy' => $busy]));
+
             return $busy;
         } catch (\Throwable $e) {
-            return [];
+            return $this->googleBusyFailed('exception');
         }
+    }
+
+    private function googleBusyFailed(string $why): ?array
+    {
+        $this->wlog('Google freeBusy unavailable (' . $why . '): offering no slots');
+        $this->alertStaff('gcal-busy', Text::_('PLG_SYSTEM_WEBGBOOKING_ALERT_GCAL_SUBJECT'), Text::sprintf('PLG_SYSTEM_WEBGBOOKING_ALERT_GCAL_BODY', $why), 6);
+
+        return null;
+    }
+
+    /** The freeBusy cache must not outlive a change we made to the calendar. */
+    private function purgeBusyCache(): void
+    {
+        $this->kvDelete('fb:', true);
     }
 
     /** Load a non-cancelled booking by its management token. */
@@ -2347,12 +3221,13 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
 
         // updateObject() takes the object BY REFERENCE: it must be a variable, not an inline (object) cast.
         $changes = (object) [
-            'id'      => $row->id,
-            'status'  => 'cancelled',
-            'updated' => Factory::getDate()->toSql(),
-            'seq'     => $seq,
+            'id'          => $row->id,
+            'status'      => 'cancelled',
+            'updated'     => Factory::getDate()->toSql(),
+            'seq'         => $seq,
+            'pending_ctx' => null,
         ];
-        $db->updateObject('#__webgbooking_bookings', $changes, 'id');
+        $db->updateObject('#__webgbooking_bookings', $changes, 'id', true); // true: pending_ctx NULL is written
         $row->prev_status = $row->status;
         $row->status      = 'cancelled';
         $row->seq         = $seq;
@@ -2471,7 +3346,10 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             $tz   = new \DateTimeZone($this->siteTz());
             $now  = (new \DateTime('now', $tz))->getTimestamp();
             $next = (new \DateTime($date . ' 00:00:00', $tz))->modify('+1 day')->format('Y-m-d');
-            $busy = $this->googleBusy($date, $next, $tz);
+            $busy = $this->googleBusy($date, $next, $tz, false);
+            if ($busy === null) {
+                $this->respond(['ok' => false, 'message' => Text::_('PLG_SYSTEM_WEBGBOOKING_CAL_UNAVAILABLE')]);
+            }
             $ev   = $this->eventFromRow($row);
 
             // The booking's own existing event must not block its new slot.
@@ -2800,11 +3678,30 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             . '.btn-danger{background:#c0392b;color:#fff}.btn-ghost{background:#eef1f4;color:#1f2937}.ok{color:#1d6b3f}a{color:#1f2937}'
             . 'hr{border:0;border-top:1px solid #eef1f4;margin:22px 0}';
 
-        echo '<!DOCTYPE html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
+        if (!headers_sent()) {
+            header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+            header('Pragma: no-cache');
+            header('Referrer-Policy: no-referrer');
+            header('X-Robots-Tag: noindex, nofollow');
+            header('X-Content-Type-Options: nosniff');
+        }
+
+        echo '<!DOCTYPE html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><meta name="referrer" content="no-referrer">'
             . '<title>' . htmlspecialchars($title, ENT_QUOTES, 'UTF-8') . '</title><style>' . $css . '</style>' . $head . '</head>'
             . '<body><div class="wrap"><div class="card">' . $body . '</div></div></body></html>';
 
         $this->getApplication()->close();
+    }
+
+    /** No caching, no referrer leak, no indexing: for answers and pages that carry booking tokens. */
+    private function privacyHeaders($app = null): void
+    {
+        $app = $app ?: $this->getApplication();
+        $app->setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0', true);
+        $app->setHeader('Pragma', 'no-cache', true);
+        $app->setHeader('Referrer-Policy', 'no-referrer', true);
+        $app->setHeader('X-Robots-Tag', 'noindex, nofollow', true);
+        $app->setHeader('X-Content-Type-Options', 'nosniff', true);
     }
 
     private function respond(array $data): void

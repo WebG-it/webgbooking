@@ -94,6 +94,11 @@ $manageLink = Uri::root() . 'index.php?option=com_ajax&group=system&plugin=webgb
                         $row(Text::_('COM_WEBGBOOKING_DETAIL_STRIPE_SESSION'), $e($i->stripe_session_id), true);
                     }
                 }
+                if (!empty($i->fx_state)) {
+                    $steps = json_decode((string) ($i->fx_steps ?? ''), true);
+                    $fxLbl = Text::_('COM_WEBGBOOKING_FX_' . strtoupper((string) $i->fx_state));
+                    $row(Text::_('COM_WEBGBOOKING_DETAIL_FX'), $fxLbl . (\is_array($steps) && $steps ? ' (' . implode(', ', array_keys(array_filter($steps))) . ')' : '') . ((int) ($i->fx_tries ?? 0) > 0 ? ' · ' . (int) $i->fx_tries . 'x' : ''));
+                }
                 $rs = json_decode((string) ($i->reminders_sent ?? ''), true);
                 $rc = json_decode((string) ($i->reminder_cfg ?? ''), true);
                 if (\is_array($rc) && !empty($rc['on']) && !empty($rc['times'])) {

@@ -7,7 +7,7 @@
     <creationDate>2026-06</creationDate>
     <copyright>(C) 2026 Marco Galassi / WebG</copyright>
     <license>GNU General Public License version 2 or later</license>
-    <version>0.27.0</version>
+    <version>0.33.0</version>
     <description>PLG_SYSTEM_WEBGBOOKING_XML_DESCRIPTION</description>
     <scriptfile>script.php</scriptfile>
     <namespace path="src">WebG\Plugin\System\Webgbooking</namespace>
@@ -154,6 +154,33 @@
                 <field name="stripe_hold_minutes" type="number" default="30" min="30" max="1440"
                     label="PLG_SYSTEM_WEBGBOOKING_PAY_HOLD_LABEL"
                     description="PLG_SYSTEM_WEBGBOOKING_PAY_HOLD_DESC" />
+                <field name="limit_ip_hour" type="number" default="15" min="1"
+                    label="PLG_SYSTEM_WEBGBOOKING_LIMIT_IP_LABEL"
+                    description="PLG_SYSTEM_WEBGBOOKING_LIMIT_IP_DESC" />
+                <field name="max_holds_ip" type="number" default="2" min="1"
+                    label="PLG_SYSTEM_WEBGBOOKING_HOLDS_IP_LABEL"
+                    description="PLG_SYSTEM_WEBGBOOKING_HOLDS_IP_DESC" />
+                <field name="max_open_holds" type="number" default="60" min="1"
+                    label="PLG_SYSTEM_WEBGBOOKING_HOLDS_MAX_LABEL"
+                    description="PLG_SYSTEM_WEBGBOOKING_HOLDS_MAX_DESC" />
+                <field name="gtm_id" type="text" default="" size="20" autocomplete="off"
+                    label="PLG_SYSTEM_WEBGBOOKING_GTM_LABEL"
+                    description="PLG_SYSTEM_WEBGBOOKING_GTM_DESC" />
+                <field name="ga4_id" type="text" default="" size="20" autocomplete="off"
+                    label="PLG_SYSTEM_WEBGBOOKING_GA4_LABEL"
+                    description="PLG_SYSTEM_WEBGBOOKING_GA4_DESC" />
+                <field name="config_epoch" type="number" default="1" min="1" readonly="true"
+                    label="PLG_SYSTEM_WEBGBOOKING_EPOCH_LABEL"
+                    description="PLG_SYSTEM_WEBGBOOKING_EPOCH_DESC" />
+                <field name="config_bump" type="radio" layout="joomla.form.field.radio.switcher" default="0"
+                    label="PLG_SYSTEM_WEBGBOOKING_BUMP_LABEL"
+                    description="PLG_SYSTEM_WEBGBOOKING_BUMP_DESC">
+                    <option value="0">JNO</option>
+                    <option value="1">JYES</option>
+                </field>
+                <field name="config_ttl_days" type="number" default="30" min="0"
+                    label="PLG_SYSTEM_WEBGBOOKING_TTL_LABEL"
+                    description="PLG_SYSTEM_WEBGBOOKING_TTL_DESC" />
                 <field name="paid_cancel_hours" type="number" default="24" min="0"
                     label="PLG_SYSTEM_WEBGBOOKING_PAY_CANCEL_LABEL"
                     description="PLG_SYSTEM_WEBGBOOKING_PAY_CANCEL_DESC" />

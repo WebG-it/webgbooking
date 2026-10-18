@@ -25,6 +25,8 @@ class HtmlView extends BaseHtmlView
     public $stats;
     public $canEditState = false;
     public $canDelete = false;
+    /** @var array<int, array{0:string,1:string}> banners shown above the list: [bootstrap class, text] */
+    public $alerts = [];
 
     public function display($tpl = null)
     {
@@ -39,9 +41,51 @@ class HtmlView extends BaseHtmlView
         $this->canEditState = $user->authorise('core.edit.state', 'com_webgbooking');
         $this->canDelete    = $user->authorise('core.delete', 'com_webgbooking');
 
+        $this->alerts = $this->collectAlerts();
+
         $this->addToolbar();
 
         parent::display($tpl);
+    }
+
+    /** Things the admin must not miss: test-mode Stripe, undecryptable keys, bookings whose effects did not complete. */
+    private function collectAlerts(): array
+    {
+        $out = [];
+
+        try {
+            if (\Joomla\CMS\Plugin\PluginHelper::isEnabled('system', 'webgbooking')) {
+                $engine = Factory::getApplication()->bootPlugin('webgbooking', 'system');
+                if (method_exists($engine, 'stripeStatus')) {
+                    $st = $engine->stripeStatus();
+                    if (!empty($st['configured']) && empty($st['live'])) {
+                        $out[] = ['warning', Text::_('COM_WEBGBOOKING_BANNER_TEST_MODE')];
+                    }
+                    if (empty($st['secret_ok'])) {
+                        $out[] = ['danger', Text::_('COM_WEBGBOOKING_BANNER_SECRET_BROKEN')];
+                    }
+                    if (empty($st['whsec_ok'])) {
+                        $out[] = ['danger', Text::_('COM_WEBGBOOKING_BANNER_WHSEC_BROKEN')];
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+        }
+
+        try {
+            $db = Factory::getContainer()->get(\Joomla\Database\DatabaseInterface::class);
+            $n  = (int) $db->setQuery(
+                $db->getQuery(true)->select('COUNT(*)')->from($db->quoteName('#__webgbooking_bookings'))
+                    ->where($db->quoteName('fx_state') . ' IN (' . $db->quote('retry') . ',' . $db->quote('failed') . ')')
+                    ->where($db->quoteName('status') . ' IN (' . $db->quote('pending') . ',' . $db->quote('confirmed') . ')')
+            )->loadResult();
+            if ($n > 0) {
+                $out[] = ['danger', Text::sprintf('COM_WEBGBOOKING_BANNER_FX', $n)];
+            }
+        } catch (\Throwable $e) {
+        }
+
+        return $out;
     }
 
     private function addToolbar(): void

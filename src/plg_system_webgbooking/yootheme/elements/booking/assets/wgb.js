@@ -12,12 +12,13 @@
     var L=cfg.labels||{},loc=cfg.locale||'en',cols=cfg.cols||3;
     var slotBtn='uk-button uk-button-'+(cfg.slotStyle||'default')+(cfg.slotSize?' '+cfg.slotSize:'');
     var mount=root.querySelector('.wgb-mount')||root;
+    if(cfg.priceInvalid){mount.innerHTML='<div class="uk-alert uk-alert-danger" role="alert" uk-alert>'+esc(L.priceInvalid||'')+'</div>';return;}
     mount.setAttribute('role','region');mount.setAttribute('aria-live','polite');mount.setAttribute('aria-atomic','false');
     var st={view:startToday(),date:null,time:null,form:{name:'',email:'',phone:'',notes:'',privacy:false,loc:'meet'},err:false,step:'cal'};
     function avail(d){return !!(st.monthDays&&st.monthDays[isoDate(d)]);}
     function genTimes(d){var ws=(cfg.workStart||'09:00').split(':'),we=(cfg.workEnd||'18:00').split(':');var s=(+ws[0])*60+(+ws[1]),e=(+we[0])*60+(+we[1]),iv=cfg.interval||30,dur=cfg.duration||iv;var out=[],now=new Date(),notice=(cfg.minNotice||0)*3600000;for(var m=s;m+dur<=e;m+=iv){var hh=Math.floor(m/60),mm=m%60;var dt=new Date(d);dt.setHours(hh,mm,0,0);if(dt-now<notice)continue;out.push((hh<10?'0':'')+hh+':'+(mm<10?'0':'')+mm);}return out;}
     function clientMonth(y,m){var o={},t=startToday(),max=new Date(t);max.setDate(max.getDate()+(cfg.window||30));var wd=(cfg.workDays&&cfg.workDays.length)?cfg.workDays:[1,2,3,4,5];var dim=new Date(y,m+1,0).getDate();for(var dd=1;dd<=dim;dd++){var dt=new Date(y,m,dd);if(dt<t||dt>max||wd.indexOf(dt.getDay())===-1)continue;var s=genTimes(dt);if(s.length)o[isoDate(dt)]=s;}return o;}
-    function ensureMonth(){var key=st.view.getFullYear()+'-'+st.view.getMonth();if(st.monthKey===key||st.monthLoading===key)return;st.monthLoading=key;st.monthDays={};var y=st.view.getFullYear(),m=st.view.getMonth(),url=cfg.ajaxUrl||'';var from=isoDate(new Date(y,m,1)),to=isoDate(new Date(y,m+1,0));if(!url){st.monthDays=clientMonth(y,m);st.monthKey=key;st.monthLoading=null;return;}fetch(url+'&action=month&from='+from+'&to='+to+(cfg.ev?'&ev='+encodeURIComponent(cfg.ev):''),{headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin'}).then(function(r){return r.json();}).then(function(res){st.monthDays=(res&&res.days&&typeof res.days==='object')?res.days:{};st.monthKey=key;st.monthLoading=null;draw();}).catch(function(){st.monthDays=clientMonth(y,m);st.monthKey=key;st.monthLoading=null;draw();});}
+    function ensureMonth(){var key=st.view.getFullYear()+'-'+st.view.getMonth();if(st.monthKey===key||st.monthLoading===key||st.monthErr===key)return;st.calErr=null;st.monthLoading=key;st.monthDays={};var y=st.view.getFullYear(),m=st.view.getMonth(),url=cfg.ajaxUrl||'';var from=isoDate(new Date(y,m,1)),to=isoDate(new Date(y,m+1,0));if(!url){st.monthDays=clientMonth(y,m);st.monthKey=key;st.monthLoading=null;return;}fetch(url+'&action=month&from='+from+'&to='+to+(cfg.ev?'&ev='+encodeURIComponent(cfg.ev):''),{headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin'}).then(function(r){return r.json();}).then(function(res){if(res&&res.unavailable){st.monthDays={};st.calErr=res.message||L.calUnavailable||'';st.monthErr=key;st.monthLoading=null;draw();return;}st.monthDays=(res&&res.days&&typeof res.days==='object')?res.days:{};st.monthKey=key;st.monthLoading=null;draw();}).catch(function(){st.monthDays=clientMonth(y,m);st.monthKey=key;st.monthLoading=null;draw();});}
     function effLoc(){return cfg.location==='phone'?'phone':(cfg.location==='choice'?(st.form.loc==='phone'?'phone':'meet'):'meet');}
     function phoneOk(v){return /^[+()\d\s.\-\/]{6,60}$/.test(v)&&((v.match(/\d/g)||[]).length>=6);}
     function locLabel(){var l=effLoc();return l==='phone'?(L.locPhone||''):(L.locMeet||'');}
@@ -82,6 +83,9 @@
         ensureMonth();
         h.push('<div class="wgb-cal-nav"><button class="uk-icon-button" uk-icon="chevron-left" type="button" data-act="prev" aria-label="'+esc(L.prevMonth)+'"></button><strong>'+esc(monthLabel(st.view,loc))+'</strong><button class="uk-icon-button" uk-icon="chevron-right" type="button" data-act="next" aria-label="'+esc(L.nextMonth)+'"></button></div>');
         if(st.monthLoading){h.push('<div class="uk-text-center uk-padding" role="status"><span uk-spinner></span> <span class="wgb-sr">'+esc(L.loading||'')+'</span></div>');}
+        else if(st.calErr){
+          h.push('<div class="uk-alert uk-alert-warning" role="alert" uk-alert>'+esc(st.calErr)+'</div><button type="button" class="uk-button uk-button-default uk-button-small" data-act="retrycal">'+esc(L.back||'')+'</button>');
+        }
         else{
           h.push('<div class="wgb-cal-head">'+weekdays(loc).map(function(w){return '<span>'+esc(w)+'</span>';}).join('')+'</div>');
           var cells=monthGrid(st.view).map(function(d){
@@ -153,6 +157,7 @@
         else if(a==='book'){readForm();if(!st.form.name||!emailOk(st.form.email)||!st.form.privacy||cfMissing()||(effLoc()==='phone'&&!phoneOk(st.form.phone))){st.err=true;st.focus='form';}else{submit();return;}}
         else if(a==='rebook'){submitReschedule();return;}
         else if(a==='retry'){st.err=false;st.step='form';st.focus='form';}
+        else if(a==='retrycal'){st.monthErr=null;st.calErr=null;st.monthKey=null;}
       }
       draw();
     });

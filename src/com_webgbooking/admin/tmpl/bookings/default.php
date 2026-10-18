@@ -48,6 +48,9 @@ $payInfo = static function ($i): string {
     return $amt . ' · ' . $lbl;
 };
 ?>
+<?php foreach ((array) $this->alerts as $al) : ?>
+    <div class="alert alert-<?php echo htmlspecialchars((string) $al[0], ENT_QUOTES, 'UTF-8'); ?>" role="alert"><?php echo htmlspecialchars((string) $al[1], ENT_QUOTES, 'UTF-8'); ?></div>
+<?php endforeach; ?>
 <div class="row mb-3 g-2">
     <?php
     $cards = [

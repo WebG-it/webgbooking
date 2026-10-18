@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.33.0 (pacchetto, componente e plugin: da ora tutti con la stessa versione)
+
+Correzioni dalla controprova di sicurezza e revisione sulla 0.32.0.
+
+### Pagamenti e Stripe
+- **Test e produzione non si mescolano**: se `livemode` della sessione non coincide con la modalita' del plugin il pagamento NON conferma (webhook e pagina di ritorno) e lo staff e' avvisato; un evento a pagamento si rifiuta se il prefisso della chiave (`sk_`/`rk_` live o test) non coincide con la modalita'; al salvataggio delle opzioni l'incoerenza e' un errore e chiave e modalita' non vengono salvate. Finche' la modalita' e' test l'elenco prenotazioni mostra un avviso ben visibile.
+- **Incassato e effetti separati**: il pagamento si registra subito, gli effetti (evento Google, email cliente, email staff, newsletter, webhook, Sheet) sono passi riprovabili (`fx_state`, `fx_steps`, `fx_tries`): un errore in un passo non ferma gli altri, l'attivita' pianificata riprova solo quelli mancanti (mai una mail gia' partita), dopo 10 tentativi si ferma e avvisa. Una sessione pagata che non combacia con una prenotazione in attesa (admin che annulla o elimina l'hold mentre il cliente paga) viene registrata sulla riga e lo staff e' avvisato per il rimborso. La risposta di Stripe ai webhook con il giorno bloccato e' 503 (Stripe riprova), non una conferma persa.
+- **Evento di prenotazione completata (GA4/GTM) anche per i pagamenti**: dopo il pagamento confermato, il redirect alla pagina grazie porta `wgb_done=<token casuale monouso>` (nessun dato personale) e il plugin ci inietta `dataLayer.push` (+ `gtag`) con nome configurabile, `value`, `currency`, `transaction_id`; senza pagina grazie la pagina di ritorno carica il contenitore GTM/GA4 indicato nelle opzioni e invia l'evento. Parte una volta sola per prenotazione.
+- **Chiavi**: se una chiave Stripe si trova in chiaro viene cifrata alla prima lettura; "non decifrabile" (secret Joomla cambiato) e' distinto da "non configurato": log senza valori e avviso nell'admin. Le chiavi limitate (`rk_`) si verificano con una lettura delle sessioni di Checkout se la lettura dell'account e' vietata; se neanche quella e' possibile si salva e si segnala "non verificabile".
+- **Importi**: valute ammesse EUR, USD, GBP, CHF (2 decimali); parser rigoroso: "49", "49,00", "1.234,50", "1,234.50" ok; "49.999", "1,234", "4,9,9", oltre 999999,99 sono rifiutati. Un prezzo o una valuta non leggibili bloccano le prenotazioni dell'elemento (e il widget lo dice) invece di renderlo gratis.
+
+### Google
+- **Fail closed**: se Google e' collegato ma `freeBusy` fallisce (token revocato, timeout, errore) il sito NON offre slot ("calendario momentaneamente non disponibile, riprova") e rifiuta le prenotazioni; avviso allo staff al massimo ogni 6 ore. Cache di `freeBusy` di 90 secondi per intervallo (la conferma di una prenotazione legge sempre fresco; creare/spostare/cancellare un evento svuota la cache).
+- **Evento Google non creato dopo una prenotazione confermata**: la prenotazione resta, il cliente riceve subito la conferma con "ti mando il link a breve" (mai un link vuoto), lo staff e' avvisato, il task riprova e al successo manda una email "ecco il link".
+
+### Disponibilita' e configurazione
+- **Orari, giorni, preavviso e finestra per elemento** (scheda Event; vuoti = valori del plugin), firmati; salvati con la prenotazione cosi' il riprogramma li rispetta. Giorno lavorativo e finestra ora sono verificati anche nella prenotazione e nel riprogramma (prima solo la vista mensile li applicava).
+- **Epoca e scadenza dei token di configurazione**: opzione "Invalida le configurazioni in cache al salvataggio" (epoca +1) e vita massima 30 giorni (configurabile, 0 = nessun limite). Motivo: un elemento passato da gratis a pagamento non deve prenotare col token vecchio rimasto in cache. L'epoca e' l'arma principale, la scadenza e' la rete di sicurezza lunga abbastanza da non rompere pagine in cache Cloudflare.
+
+### Altro
+- **.ics**: l'UID e' un HMAC dell'id (non contiene piu' il manage_token; le prenotazioni precedenti mantengono il vecchio UID per combaciare col calendario); l'.ics dell'ospite non ha il telefono del cliente.
+- **Anti abuso**: limite per IP (impronta, non l'indirizzo) sulle prenotazioni e sugli hold aperti, tetto globale di hold con avviso; il limite per email non conta righe scadute o hold lapsed. Promemoria solo a prenotazioni confermate (verificato).
+- `pending_ctx` azzerato a effetti completati / hold scaduto / annullato.
+- Pagine con token (manage, return, cancel) e risposte JSON: `Cache-Control: no-store`, `Referrer-Policy: no-referrer`, `X-Robots-Tag: noindex`.
+- Piccoli: payload del webhook con la chiave `event` duplicata (il nome evento sovrascriveva `booking.created`: ora `event_name`); redirect `/\host` rifiutato; lock del giorno non ottenuto in conferma gestito; URL webhook per elemento solo http/https; il callback OAuth non mette piu' il testo dell'eccezione nell'URL; gli ALTER che falliscono in `script.php` sono registrati e segnalati all'installazione.
+
 ## 0.32.0 (pacchetto) · componente 0.5.0 · plugin di sistema 0.27.0 · plugin task 0.2.0
 
 Fase 2: pagamento con Stripe Checkout, piu' due chiusure della fase 1.

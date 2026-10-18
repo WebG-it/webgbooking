@@ -37,4 +37,5 @@ nohup php /tmp/mock/smtpsink.php > /tmp/smtpsink.log 2>&1 &
 # Joomla mail -> sink
 cd /var/www/html
 sed -i "s/public \$mailer = '[a-z]*';/public \$mailer = 'smtp';/; s/public \$smtphost = '[^']*';/public \$smtphost = '127.0.0.1';/; s/public \$smtpport = [0-9]*;/public \$smtpport = 2525;/; s/public \$smtpsecure = '[a-z]*';/public \$smtpsecure = 'none';/; s/public \$smtpauth = [a-z0-9]*;/public \$smtpauth = false;/; s/public \$mailfrom = '[^']*';/public \$mailfrom = 'noreply@wgbtest.invalid';/; s/public \$mailonline = [a-z0-9]*;/public \$mailonline = true;/" configuration.php
+chmod 777 /var/www/html/administrator/logs 2>/dev/null || true
 echo setup-done

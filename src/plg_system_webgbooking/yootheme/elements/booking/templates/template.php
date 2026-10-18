@@ -98,7 +98,21 @@ $numOrNull = static function ($v) {
 
     return ($v !== '' && is_numeric($v) && (int) $v >= 0) ? (int) $v : null;
 };
+// Availability of THIS element (empty = the plugin-wide hours/days/notice/window), signed with the rest.
+$hhmm = static fn($v) => preg_match('/^([01]?\d|2[0-3]):[0-5]\d$/', trim((string) $v)) ? trim((string) $v) : null;
+$availWs = $hhmm($props['avail_start'] ?? '');
+$availWe = $hhmm($props['avail_end'] ?? '');
+$availDays = null;
+if (trim((string) ($props['avail_days'] ?? '')) !== '') {
+    $availDays = array_values(array_unique(array_filter(array_map('intval', preg_split('/[,\s;]+/', trim((string) $props['avail_days']))), static fn($d) => $d >= 0 && $d <= 6)));
+    $availDays = $availDays ?: null;
+}
 $evCfg = [
+    'ws'   => ($availWs && $availWe) ? $availWs : null,
+    'we'   => ($availWs && $availWe) ? $availWe : null,
+    'wd'   => $availDays,
+    'nt'   => $numOrNull($props['avail_notice'] ?? ''),
+    'wn'   => $numOrNull($props['avail_window'] ?? ''),
     'dur'  => $numOrNull($props['event_duration'] ?? ''),
     'bb'   => $numOrNull($props['event_buffer_before'] ?? ''),
     'ba'   => $numOrNull($props['event_buffer_after'] ?? ''),
@@ -110,20 +124,24 @@ $shownDur = max(5, min(480, $shownDur));
 
 // Thank-you page: absolute http(s) URL or a site path. Anything else is ignored.
 $redir = trim((string) ($props['redirect_url'] ?? ''));
-if ($redir !== '' && !preg_match('#^(https?://[^\s]+|/(?!/)[^\s]*)$#i', $redir)) {
+// (a backslash is refused everywhere: browsers read "/\host" as "//host", an open redirect)
+if ($redir !== '' && !preg_match('#^(https?://[^\s\\\\]+|/(?![/\\\\])[^\s\\\\]*)$#i', $redir)) {
     $redir = '';
 }
 
 // PRICE of this element (empty / 0 = free event, nothing changes). Signed with the rest of the config, so the
 // visitor can neither lower nor remove the price.
-$priceAmt = Webgbooking::parseAmount((string) ($props['price_amount'] ?? ''));
-$priceCur = strtoupper(trim((string) ($props['price_currency'] ?? '')));
-if (!preg_match('/^[A-Z]{3}$/', $priceCur)) {
-    $priceCur = 'EUR';
-}
-$priceCfg = $priceAmt > 0
-    ? ['amt' => $priceAmt, 'cur' => $priceCur, 'label' => mb_substr(trim(strip_tags((string) ($props['price_label'] ?? ''))), 0, 120)]
-    : [];
+// An amount that cannot be read unambiguously ("49.999", "4,9,9") or a currency outside EUR/USD/GBP/CHF marks the
+// price INVALID: the element then refuses bookings (and says so) instead of silently becoming a free event.
+$priceRaw   = trim((string) ($props['price_amount'] ?? ''));
+$priceAmt   = $priceRaw === '' ? 0 : Webgbooking::parseAmountStrict($priceRaw);
+$priceCur   = strtoupper(trim((string) ($props['price_currency'] ?? '')));
+$priceCur   = $priceCur === '' ? 'EUR' : $priceCur;
+$priceBad   = ($priceRaw !== '' && ($priceAmt === null || !\in_array($priceCur, Webgbooking::CURRENCIES, true)));
+$priceAmt   = (int) $priceAmt;
+$priceCfg   = $priceBad
+    ? ['invalid' => true]
+    : ($priceAmt > 0 ? ['amt' => $priceAmt, 'cur' => $priceCur, 'label' => mb_substr(trim(strip_tags((string) ($props['price_label'] ?? ''))), 0, 120)] : []);
 
 // Reminders: element override (on/off, times, text); empty times/text fall back to the plugin options.
 $remCfg = [
@@ -137,9 +155,12 @@ $remCfg = [
 // so the client cannot tamper it (no spam-relay / no SSRF — the server only trusts what it signed).
 $actionsCfg = [
     'fields' => $customDefs,
+    'v'     => (int) max(1, (int) $pp->get('config_epoch', 1)),
+    'iat'   => time(),
     'event' => $evCfg,
     'price' => $priceCfg,
     'redirect' => $redir,
+    'analytics' => preg_match('/^[A-Za-z0-9_\-]{1,40}$/', trim((string) ($props['analytics_event'] ?? ''))) ? trim((string) $props['analytics_event']) : 'wgb_booking_completed',
     'reminder' => $remCfg,
     'customer' => [
         'on'      => !isset($props['act_customer_on']) || !empty($props['act_customer_on']),
@@ -154,14 +175,14 @@ $actionsCfg = [
     ],
     'webhook' => [
         'on'     => !empty($props['act_webhook_on']),
-        'url'    => (string) ($props['webhook_url'] ?? ''),
+        'url'    => preg_match('#^https?://[^\s]+$#i', trim((string) ($props['webhook_url'] ?? ''))) ? trim((string) $props['webhook_url']) : '',
         'method' => (string) ($props['webhook_method'] ?? 'POST'),
     ],
 ];
 $secret    = (string) Factory::getApplication()->get('secret');
 $payload   = base64_encode((string) json_encode($actionsCfg));
 $formToken = $payload . '.' . hash_hmac('sha256', $payload, $secret);
-$evToken   = Webgbooking::signEv($evCfg, $secret); // small signed token for the GET availability calls
+$evToken   = Webgbooking::signEv($evCfg, $secret, (int) max(1, (int) $pp->get('config_epoch', 1))); // small signed token for the GET availability calls
 
 $cfg = [
     'locale'    => $locale,
@@ -169,7 +190,8 @@ $cfg = [
     'ev'        => $evToken,
     'location'  => $evCfg['loc'],
     'redirectUrl' => $redir,
-    'price'     => $priceCfg ? ['text' => Webgbooking::formatAmount($priceCfg['amt'], $priceCfg['cur'], $locale), 'hold' => max(30, min(1440, (int) $pp->get('stripe_hold_minutes', 30)))] : null,
+    'priceInvalid' => $priceBad,
+    'price'     => ($priceCfg && empty($priceCfg['invalid'])) ? ['text' => Webgbooking::formatAmount($priceCfg['amt'], $priceCfg['cur'], $locale), 'hold' => max(30, min(1440, (int) $pp->get('stripe_hold_minutes', 30)))] : null,
     'cols'      => $slotCols,
     'slotStyle' => $slotStyle,
     'slotSize'  => $slotSize ? 'uk-button-' . $slotSize : '',
@@ -179,13 +201,13 @@ $cfg = [
     'showNewsletter' => !empty($props['show_newsletter']),
     'analyticsEvent' => trim((string) ($props['analytics_event'] ?? '')),
     'accent'    => $accent,
-    'workStart' => $timeOk($pp->get('work_start', '09:00'), '09:00'),
-    'workEnd'   => $timeOk($pp->get('work_end', '18:00'), '18:00'),
+    'workStart' => $timeOk($evCfg['ws'] ?? $pp->get('work_start', '09:00'), '09:00'),
+    'workEnd'   => $timeOk($evCfg['we'] ?? $pp->get('work_end', '18:00'), '18:00'),
     'interval'  => (int) $pp->get('slot_interval', 30),
     'duration'  => $shownDur,
-    'workDays'  => $workDays,
-    'minNotice' => (int) $pp->get('min_notice', 2),
-    'window'    => (int) $pp->get('window_days', 30),
+    'workDays'  => $evCfg['wd'] ?? $workDays,
+    'minNotice' => $evCfg['nt'] ?? (int) $pp->get('min_notice', 2),
+    'window'    => $evCfg['wn'] ?? (int) $pp->get('window_days', 30),
     'ajaxUrl'   => Uri::root(true) . '/index.php?option=com_ajax&group=system&plugin=webgbooking&format=json',
     'labels'    => [
         'stepDay'     => Text::_('PLG_SYSTEM_WEBGBOOKING_STEP_DAY'),
@@ -210,6 +232,8 @@ $cfg = [
         'payNow'      => Text::_('PLG_SYSTEM_WEBGBOOKING_PAY_NOW'),
         'payNote'     => Text::_('PLG_SYSTEM_WEBGBOOKING_PAY_NOTE'),
         'payRedirecting' => Text::_('PLG_SYSTEM_WEBGBOOKING_PAY_REDIRECTING'),
+        'priceInvalid' => Text::_('PLG_SYSTEM_WEBGBOOKING_PRICE_INVALID'),
+        'calUnavailable' => Text::_('PLG_SYSTEM_WEBGBOOKING_CAL_UNAVAILABLE'),
         'privacy'     => Text::_('PLG_SYSTEM_WEBGBOOKING_PRIVACY'),
         'bookNow'     => Text::_('PLG_SYSTEM_WEBGBOOKING_BOOK_NOW'),
         'required'    => Text::_('PLG_SYSTEM_WEBGBOOKING_REQUIRED'),

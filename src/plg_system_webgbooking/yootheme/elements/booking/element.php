@@ -82,14 +82,39 @@ return [
             'type' => 'select',
             'options' => ['Google Meet' => 'meet', 'Phone call (I call the visitor)' => 'phone', 'Visitor choice' => 'choice'],
         ],
+        'avail_start' => [
+            'label' => 'Available from (HH:MM)',
+            'description' => 'Optional, for this appointment type only (e.g. 15:00). Empty = the plugin working hours. Needs both from and to.',
+            'type' => 'text',
+        ],
+        'avail_end' => [
+            'label' => 'Available until (HH:MM)',
+            'description' => 'Optional, e.g. 19:00. The last slot ends by this time.',
+            'type' => 'text',
+        ],
+        'avail_days' => [
+            'label' => 'Days of the week',
+            'description' => 'Optional: numbers separated by commas, Sunday = 0, Monday = 1 ... Saturday = 6 (e.g. <code>2,4</code> = Tuesday and Thursday). Empty = the plugin working days.',
+            'type' => 'text',
+        ],
+        'avail_notice' => [
+            'label' => 'Minimum notice (hours)',
+            'description' => 'Optional. Empty = the plugin option.',
+            'type' => 'text',
+        ],
+        'avail_window' => [
+            'label' => 'Booking window (days ahead)',
+            'description' => 'Optional. Empty = the plugin option.',
+            'type' => 'text',
+        ],
         'price_amount' => [
             'label' => 'Price',
-            'description' => 'Paid event: the amount to charge with Stripe Checkout at booking, e.g. <code>49</code> or <code>29,00</code>. Empty or 0 = free event (nothing changes). Needs the Stripe keys in the plugin options (Payments tab).',
+            'description' => 'Paid event: the amount to charge with Stripe Checkout at booking, e.g. <code>49</code> or <code>29,00</code> (max two decimals; an ambiguous value such as 49.999 blocks bookings until fixed). Empty or 0 = free event. Needs the Stripe keys in the plugin options (Payments tab). Changing a price? Use "Invalidate cached configurations" in the plugin options so cached copies of the page stop using the old one.',
             'type' => 'text',
         ],
         'price_currency' => [
             'label' => 'Currency',
-            'description' => 'Three-letter code. Empty = EUR.',
+            'description' => 'EUR, USD, GBP or CHF. Empty = EUR. Any other code blocks bookings of this element.',
             'type' => 'text',
         ],
         'price_label' => [
@@ -175,7 +200,7 @@ return [
         ],
         'analytics_event' => [
             'label' => 'Analytics event',
-            'description' => 'Event pushed to dataLayer / gtag on a completed booking (GA4 / GTM). Empty = "wgb_booking_completed".',
+            'description' => 'Event pushed to dataLayer / gtag on a completed booking (GA4 / GTM), with value and currency for paid events. Empty = "wgb_booking_completed". Use the name your GTM trigger listens for.',
             'type' => 'text',
         ],
 
@@ -304,7 +329,7 @@ return [
                 ],
                 [
                     'title' => 'Event',
-                    'fields' => ['event_duration', 'event_buffer_before', 'event_buffer_after', 'event_location', 'price_amount', 'price_currency', 'price_label', 'redirect_url'],
+                    'fields' => ['event_duration', 'event_buffer_before', 'event_buffer_after', 'event_location', 'avail_start', 'avail_end', 'avail_days', 'avail_notice', 'avail_window', 'price_amount', 'price_currency', 'price_label', 'redirect_url'],
                 ],
                 [
                     'title' => 'Form',

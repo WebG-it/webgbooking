@@ -108,7 +108,7 @@ st, loc, page = noredirect_get(BASE + '/index.php?option=com_ajax&group=system&p
 check('P8c return page with another session id -> not found', dbrow(b2)['status'] == 'awaiting_payment' and ('non trovato' in page.lower() or 'not found' in page.lower()), page[-160:])
 pay_in_mock(rw2['stripe_session_id'])           # customer really paid, webhook has NOT arrived
 st, loc, page = noredirect_get(ret)
-check('P8d paid session at Stripe -> return page confirms the booking and redirects to the thank-you page', st in (301, 302, 303) and loc.endswith('/wgbtest/thanks.html') and dbrow(b2)['status'] == 'confirmed' and dbrow(b2)['payment_status'] == 'paid', (st, loc, dbrow(b2)))
+check('P8d paid session at Stripe -> return page confirms the booking and redirects to the thank-you page', st in (301, 302, 303) and loc.split('?')[0].endswith('/wgbtest/thanks.html') and dbrow(b2)['status'] == 'confirmed' and dbrow(b2)['payment_status'] == 'paid', (st, loc, dbrow(b2)))
 check('P8e the Stripe GET used the secret key as Bearer', stripe_calls('GET', '/v1/checkout/sessions/cs_test_mock'))
 n = len(mails())
 st, loc, page = noredirect_get(ret)

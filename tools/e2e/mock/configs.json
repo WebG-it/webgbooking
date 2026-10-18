@@ -72,5 +72,43 @@
   "redirect_url": "/wgbtest/thanks.html",
   "analytics_event": "paid_booking_done",
   "allow_guest": true
+ },
+ "avail": {
+  "title": "Avail",
+  "event_duration": "30",
+  "avail_start": "15:00",
+  "avail_end": "19:00",
+  "avail_days": "2,4",
+  "avail_notice": "48",
+  "avail_window": "14"
+ },
+ "badprice": {
+  "title": "Bad",
+  "price_amount": "49.999"
+ },
+ "badcur": {
+  "title": "Bad cur",
+  "price_amount": "20",
+  "price_currency": "JPY"
+ },
+ "chf": {
+  "title": "CHF",
+  "price_amount": "1.234,50",
+  "price_currency": "chf"
+ },
+ "ga30": {
+  "title": "GA paid",
+  "service": "GA paid",
+  "event_duration": "30",
+  "event_location": "meet",
+  "price_amount": "29",
+  "redirect_url": "/index.php",
+  "analytics_event": "meeting_booked"
+ },
+ "evil": {
+  "title": "Evil",
+  "redirect_url": "/\\evil.example",
+  "act_webhook_on": true,
+  "webhook_url": "ftp://x.example/h"
  }
 }
