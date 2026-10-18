@@ -112,9 +112,45 @@ def decode_mail(raw):
     return {'subject': str(msg['Subject']), 'html': html_part, 'ics': ics, 'rcpt': rcpt.group(1) if rcpt else '', 'to': str(msg['To'])}
 
 
+RENDER = 'php /tmp/mock/render_el.php /tmp/mock/configs.json >/dev/null; chmod -R a+rX /var/www/html/wgbtest'
+
+
+def reset_env(render=True):
+    """Back to a known state, whatever ran before: no bookings (not even a seeded row), empty kv/events/mock state,
+    default plugin options + fake Google connection, SMTP sink alive, test pages re-rendered with the current config
+    epoch. Every suite starts with it, so suites pass in any order and twice in a row on the same container."""
+    if 'smtpsink' not in jx('ps aux | grep "[s]mtpsink"'):
+        jx('nohup php /tmp/mock/smtpsink.php > /tmp/smtpsink.log 2>&1 &')
+        time.sleep(1)
+    jx('rm -f /tmp/mail/*.eml; rm -f /tmp/gmock/*')
+    for t in ('webgbooking_bookings', 'webgbooking_kv', 'webgbooking_stripe_events', 'scheduler_logs'):
+        sql('DELETE FROM joom_%s' % t)
+    sql("UPDATE joom_scheduler_tasks SET locked=NULL, next_execution=DATE_SUB(NOW(), INTERVAL 1 MINUTE) WHERE type LIKE '%webg%'")
+    jx('php /tmp/mock/init.php >/dev/null')
+    if render:
+        jx(RENDER)
+
+
 def clear_state():
-    jx('rm -f /tmp/mail/*.eml; rm -f /tmp/gmock/log.jsonl /tmp/gmock/events.json /tmp/gmock/busy.json')
-    sql('DELETE FROM joom_webgbooking_bookings WHERE id > 1')
+    reset_env()
+
+
+def soon_slot():
+    """A bookable slot always between ~0 and 24 h ahead, whatever the time of day (no dependence on the clock):
+    today's first slot if it is early, the next free half hour of today if the day is running, else tomorrow 09:00."""
+    out = jx("php -r 'echo (new DateTime(\"now\", new DateTimeZone(\"Europe/Rome\")))->modify(\"+3 hours\")->format(\"Y-m-d H:i\");' ; php -r 'echo \" \".(new DateTime(\"now\", new DateTimeZone(\"Europe/Rome\")))->format(\"Y-m-d\");'").strip().split()
+    d, t, today = out[0], out[1], out[2]
+    hh, mm = int(t[:2]), int(t[3:])
+    if d != today:
+        tomorrow = (datetime.date.fromisoformat(today) + datetime.timedelta(days=1)).isoformat()
+        return tomorrow, '09:00'
+    mins = hh * 60 + mm
+    if mins < 9 * 60:
+        return today, '09:00'
+    if mins > 17 * 60 + 30:
+        return (datetime.date.fromisoformat(today) + datetime.timedelta(days=1)).isoformat(), '09:00'
+    mins = ((mins + 29) // 30) * 30
+    return today, '%02d:%02d' % (mins // 60, mins % 60)
 
 
 def gm_log():

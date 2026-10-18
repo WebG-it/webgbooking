@@ -33,7 +33,7 @@ use Joomla\Event\SubscriberInterface;
 final class Webgbooking extends CMSPlugin implements SubscriberInterface
 {
     /** Cache-buster for the bundled front-end assets (wgb.css/js, UIkit). Bump when those change. */
-    public const ASSET_VER = '0.33.0';
+    public const ASSET_VER = '0.33.1';
 
     protected $autoloadLanguage = true;
 
@@ -254,7 +254,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                 }
                 // The key must belong to the configured mode (a live key with "test" selected, or the opposite, is a misconfiguration).
                 $keyMode = preg_match('/^(sk|rk)_live_/', $sk) ? 'live' : (preg_match('/^(sk|rk)_test_/', $sk) ? 'test' : '');
-                if ($keyMode !== '' && $keyMode !== ($this->stripeLive() ? 'live' : 'test')) {
+                if ($keyMode === '' || $keyMode !== ($this->stripeLive() ? 'live' : 'test')) {
                     $this->wlog('paid booking refused: the Stripe key is a ' . $keyMode . ' key but the plugin mode is ' . ($this->stripeLive() ? 'live' : 'test'));
                     $this->alertStaff('key-mode', Text::_('PLG_SYSTEM_WEBGBOOKING_ALERT_KEYMODE_SUBJECT'), Text::_('PLG_SYSTEM_WEBGBOOKING_ALERT_KEYMODE_BODY'), 12);
                     $this->respond(['ok' => false, 'message' => Text::_('PLG_SYSTEM_WEBGBOOKING_PAY_UNAVAILABLE')]);
@@ -1050,6 +1050,15 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             }
         }
 
+        // 2b. invited guest (its own step: a refused guest address never re-sends the customer's mail)
+        if (!empty($row->guest_email) && empty($steps['mail_guest'])) {
+            if ($this->notify($row, false, 'guest')) {
+                $steps['mail_guest'] = true;
+            } else {
+                $failed[] = 'mail_guest';
+            }
+        }
+
         // 3. staff email
         if (empty($steps['mail_staff'])) {
             if ($this->notify($row, false, 'staff')) {
@@ -1159,11 +1168,17 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
         try {
             $db   = Factory::getContainer()->get(DatabaseInterface::class);
             $cut  = Factory::getDate('-2 minutes')->toSql();
+            $cut5 = Factory::getDate('-5 minutes')->toSql();
+            // 'retry' = a step failed and was recorded. 'pending' older than a few minutes = the PHP process died (or
+            // was killed) between the confirmation and the final UPDATE: nobody will ever finish it unless we do.
+            // Young 'pending' rows are left alone: their own request may still be running.
             $rows = $db->setQuery(
                 $db->getQuery(true)->select('*')->from($db->quoteName('#__webgbooking_bookings'))
-                    ->where($db->quoteName('fx_state') . ' = ' . $db->quote('retry'))
+                    ->where('(('
+                        . $db->quoteName('fx_state') . ' = ' . $db->quote('retry') . ' AND (' . $db->quoteName('fx_last') . ' IS NULL OR ' . $db->quoteName('fx_last') . ' < ' . $db->quote($cut) . '))'
+                        . ' OR ('
+                        . $db->quoteName('fx_state') . ' = ' . $db->quote('pending') . ' AND COALESCE(' . $db->quoteName('fx_last') . ', ' . $db->quoteName('paid_at') . ', ' . $db->quoteName('created') . ') < ' . $db->quote($cut5) . '))')
                     ->where($db->quoteName('status') . ' IN (' . $db->quote('pending') . ',' . $db->quote('confirmed') . ')')
-                    ->where('(' . $db->quoteName('fx_last') . ' IS NULL OR ' . $db->quoteName('fx_last') . ' < ' . $db->quote($cut) . ')')
                     ->order($db->quoteName('id') . ' ASC'),
                 0,
                 $limit
@@ -1176,7 +1191,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                     $db->getQuery(true)->update($db->quoteName('#__webgbooking_bookings'))
                         ->set($db->quoteName('fx_last') . ' = ' . $db->quote($now))
                         ->where($db->quoteName('id') . ' = ' . (int) $row->id)
-                        ->where($db->quoteName('fx_state') . ' = ' . $db->quote('retry'))
+                        ->where($db->quoteName('fx_state') . ' IN (' . $db->quote('retry') . ',' . $db->quote('pending') . ')')
                         ->where('COALESCE(' . $db->quoteName('fx_last') . ", '') = " . $db->quote($old))
                 )->execute();
                 if ((int) $db->getAffectedRows() !== 1) {
@@ -1257,7 +1272,8 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
         $nowT = (new \DateTime('now', $tz))->getTimestamp();
 
         // Test money must not confirm a live booking (and the opposite).
-        if (isset($session['livemode']) && (bool) $session['livemode'] !== $this->stripeLive()) {
+        // A session that does not even say which mode it belongs to is treated as a mismatch, not skipped.
+        if (!isset($session['livemode']) || (bool) $session['livemode'] !== $this->stripeLive()) {
             $this->wlog('payment for booking ' . (int) $row->id . ' ignored: Stripe livemode differs from the plugin mode');
             $this->notifyPaymentReview($row, 'mode');
 
@@ -1496,7 +1512,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
         }
 
         // A test-mode event sent to a live endpoint (or the opposite) is acknowledged and ignored.
-        if (isset($ev['livemode']) && (bool) $ev['livemode'] !== $this->stripeLive()) {
+        if (!isset($ev['livemode']) || (bool) $ev['livemode'] !== $this->stripeLive()) {
             $this->respond(['received' => true, 'ignored' => 'mode']);
         }
 
@@ -1755,7 +1771,11 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             $mode = (string) ($new['stripe_mode'] ?? 'test') === 'live' ? 'live' : 'test';
             $eff  = $freshSk !== '' ? $freshSk : (strncmp((string) ($new['stripe_sk'] ?? ''), 'g:', 2) === 0 ? $this->dec((string) $new['stripe_sk']) : '');
             $keyMode = preg_match('/^(sk|rk)_live_/', $eff) ? 'live' : (preg_match('/^(sk|rk)_test_/', $eff) ? 'test' : '');
-            if ($keyMode !== '' && $keyMode !== $mode) {
+            if ($freshSk !== '' && $keyMode === '') {
+                $app->enqueueMessage(Text::_('PLG_SYSTEM_WEBGBOOKING_PAY_KEY_PREFIX_ERROR'), 'error');
+                $new['stripe_sk'] = (string) ($old['stripe_sk'] ?? '');
+                $freshSk = '';
+            } elseif ($keyMode !== '' && $keyMode !== $mode) {
                 $app->enqueueMessage(Text::sprintf('PLG_SYSTEM_WEBGBOOKING_PAY_KEY_MODE_ERROR', $keyMode, $mode), 'error');
                 $new['stripe_sk']   = (string) ($old['stripe_sk'] ?? '');
                 $new['stripe_mode'] = (string) ($old['stripe_mode'] ?? 'test');
@@ -2144,6 +2164,14 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                     $this->wlog('customer email failed for booking ' . (int) $row->id);
                 }
             }
+            if ($parts === 'all' || $parts === 'guest') {
+                try {
+                    $this->notifyGuest($row, $reschedule, $mf, $dateFmt);
+                } catch (\Throwable $e) {
+                    $ok = false;
+                    $this->wlog('guest email failed for booking ' . (int) $row->id);
+                }
+            }
             if ($parts === 'all' || $parts === 'staff') {
                 try {
                     $this->notifyStaff($row, $mf, $manageUrl, $dateFmt, $admin);
@@ -2159,11 +2187,10 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
         return $ok;
     }
 
-    /** Customer email (+ the invited guest, without the cancel link and without the customer's phone). */
+    /** Customer email. */
     private function notifyCustomer(object $row, bool $reschedule, $mf, string $manageUrl, string $dateFmt): void
     {
         $ics      = $this->buildIcs($row, $reschedule ? 'REQUEST' : 'PUBLISH');
-        $icsGuest = $this->buildIcs($row, $reschedule ? 'REQUEST' : 'PUBLISH', true);
 
         // ---- Customer email action (and invited guest). Skipped if the action is off. ----
         if ($reschedule || ($row->_custOn ?? true)) {
@@ -2179,12 +2206,18 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             }
             $this->sendHtmlMail($mf, $row->customer_email, $subject, $this->wrapEmail($this->renderTpl($bodyTpl, $row, $manageUrl, $dateFmt, !$reschedule)), $ics);
 
-            // Guest invite: distinct email WITHOUT the cancel link/token.
-            if (!empty($row->guest_email)) {
-                $gSubject = strtr(Text::_('PLG_SYSTEM_WEBGBOOKING_EMAIL_GUEST_SUBJECT'), ['{name}' => $row->customer_name, '{date}' => $dateFmt, '{time}' => $row->booking_time]);
-                $this->sendHtmlMail($mf, $row->guest_email, $gSubject, $this->wrapEmail($this->guestEmailBody($row, $dateFmt)), $icsGuest);
-            }
         }
+    }
+
+    /** Invited guest: a distinct email WITHOUT the cancel link/token and without the customer's phone. */
+    private function notifyGuest(object $row, bool $reschedule, $mf, string $dateFmt): void
+    {
+        if (empty($row->guest_email) || !($reschedule || ($row->_custOn ?? true))) {
+            return;
+        }
+        $icsGuest = $this->buildIcs($row, $reschedule ? 'REQUEST' : 'PUBLISH', true);
+        $gSubject = strtr(Text::_('PLG_SYSTEM_WEBGBOOKING_EMAIL_GUEST_SUBJECT'), ['{name}' => $row->customer_name, '{date}' => $dateFmt, '{time}' => $row->booking_time]);
+        $this->sendHtmlMail($mf, $row->guest_email, $gSubject, $this->wrapEmail($this->guestEmailBody($row, $dateFmt)), $icsGuest);
     }
 
     /** Staff email: per-element HTML template, or the plain default. */
@@ -2587,10 +2620,11 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                 'refresh_token' => $this->dec($refreshEnc),
                 'grant_type'    => 'refresh_token',
             ],
-            ['Content-Type' => 'application/x-www-form-urlencoded']
+            ['Content-Type' => 'application/x-www-form-urlencoded'],
+            15
         );
 
-        return json_decode(self::httpBody($resp), true)['access_token'] ?? '';
+        return (json_decode(self::httpBody($resp), true) ?: [])['access_token'] ?? '';
     }
 
     /**
@@ -2650,22 +2684,35 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                 $payload['location'] = Text::sprintf('PLG_SYSTEM_WEBGBOOKING_GCAL_PHONE_TITLE', $row->customer_phone);
             } else {
                 $payload['conferenceData'] = ['createRequest' => [
-                    'requestId'             => 'wgb-' . bin2hex(random_bytes(6)),
+                    'requestId'             => 'wgb-' . substr(hash_hmac('sha256', 'meet|' . $row->id, (string) $this->getApplication()->get('secret')), 0, 16),
                     'conferenceSolutionKey' => ['type' => 'hangoutsMeet'],
                 ]];
             }
 
-            // sendUpdates=all => Google emails the calendar invite to the customer and the guest.
-            $resp = (new HttpFactory())->getHttp()->post(
-                'https://www.googleapis.com/calendar/v3/calendars/' . rawurlencode($cal) . '/events?' . ($phone ? '' : 'conferenceDataVersion=1&') . 'sendUpdates=all',
-                json_encode($payload),
-                ['Authorization' => 'Bearer ' . $token, 'Content-Type' => 'application/json']
-            );
+            // The event id is chosen by us (base32hex: only 0-9 and a-v, so no "w"; derived from the booking id): inserting it twice answers 409
+            // instead of creating a second event, so a retry after a lost answer finds the event that already exists.
+            $gid = 'bk' . substr(hash_hmac('sha256', 'gevt|' . $row->id, (string) $this->getApplication()->get('secret')), 0, 40);
+            $payload['id'] = $gid;
+            $hdr  = ['Authorization' => 'Bearer ' . $token, 'Content-Type' => 'application/json'];
+            $http = (new HttpFactory())->getHttp();
+            $base = 'https://www.googleapis.com/calendar/v3/calendars/' . rawurlencode($cal) . '/events';
+
+            // sendUpdates=all => Google emails the calendar invite to the customer and the guest (only on the real insert).
+            $resp = $http->post($base . '?' . ($phone ? '' : 'conferenceDataVersion=1&') . 'sendUpdates=all', json_encode($payload), $hdr, 15);
+            $code = self::httpCode($resp);
+
+            if ($code === 409) {
+                // already created by an earlier attempt whose answer we never saw: fetch it
+                $resp = $http->get($base . '/' . rawurlencode($gid), ['Authorization' => 'Bearer ' . $token], 15);
+                $code = self::httpCode($resp);
+            }
 
             $data = json_decode(self::httpBody($resp), true) ?: [];
 
-            if (!empty($data['id'])) {
+            if ($code >= 200 && $code < 300 && !empty($data['id']) && ($data['status'] ?? '') !== 'cancelled') {
                 $row->google_event_id = (string) $data['id'];
+            } else {
+                return '';
             }
 
             if ($phone) {
@@ -3276,7 +3323,8 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             $cal  = $g->calendar_id ?: 'primary';
             $resp = (new HttpFactory())->getHttp()->delete(
                 'https://www.googleapis.com/calendar/v3/calendars/' . rawurlencode($cal) . '/events/' . rawurlencode($eventId) . '?sendUpdates=all',
-                ['Authorization' => 'Bearer ' . $token]
+                ['Authorization' => 'Bearer ' . $token],
+                15
             );
 
             $code = self::httpCode($resp);
@@ -3436,7 +3484,8 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             (new HttpFactory())->getHttp()->patch(
                 'https://www.googleapis.com/calendar/v3/calendars/' . rawurlencode($cal) . '/events/' . rawurlencode((string) $row->google_event_id) . '?sendUpdates=all',
                 json_encode(['start' => ['dateTime' => $start, 'timeZone' => $tz], 'end' => ['dateTime' => $end, 'timeZone' => $tz]]),
-                ['Authorization' => 'Bearer ' . $token, 'Content-Type' => 'application/json']
+                ['Authorization' => 'Bearer ' . $token, 'Content-Type' => 'application/json'],
+                15
             );
         } catch (\Throwable $e) {
         }

@@ -5,6 +5,7 @@ import t_pay_lib as tp
 from t_pay_lib import SK, WHSEC, R
 from t_admin_lib import make_admin, post_pairs
 
+reset_env()
 tp.fresh()
 adm, EDIT, save_options, opts = make_admin()
 D = 3

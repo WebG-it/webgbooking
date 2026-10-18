@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.33.1 (pacchetto, componente e plugin)
+
+Ultimo giro prima del live. Ogni punto ha un test che fallisce sulla 0.33.0 e passa sulla 0.33.1 (`tools/e2e/t_v331.py`).
+
+- **Effetti fermi in `pending`**: se il processo PHP moriva fra la conferma/pagamento e l'ultimo UPDATE, la riga restava `fx_state='pending'` per sempre. Ora il task schedulato riprende anche i `pending` piu' vecchi di 5 minuti (rispetto a `fx_last`, o alla data del pagamento, o di creazione), con claim atomico (compare-and-set su `fx_last`) per non correre con un processo ancora vivo (una riga di pochi secondi non viene toccata). Vale per le prenotazioni gratuite e a pagamento; gli effetti partono una volta sola.
+- **Evento Google doppio**: l'evento ha un id scelto da noi (base32hex, `bk` + HMAC dell'id prenotazione: nessun token dentro) e il `requestId` del Meet e' deterministico; un retry dopo una risposta persa riceve 409, recupera l'evento esistente con una GET e ne salva id e link Meet, senza creare un secondo evento ne' un secondo invito. Timeout esplicito di 15 secondi su tutte le chiamate Google (token, freeBusy, eventi).
+- **Mail cliente e mail ospite in passi separati** (`mail_customer`, `mail_guest`): un indirizzo ospite rifiutato non rimanda piu' la mail al cliente.
+- **Livemode**: una sessione (o un evento) senza `livemode` e' trattata come incoerente, non saltata. Una chiave con prefisso Stripe sconosciuto (non `sk_`/`rk_` test/live) viene rifiutata al salvataggio (errore, non salvata) e non apre pagamenti.
+- **Kit e2e isolato** (`tools/e2e`): ogni suite parte da `reset_env()` (nessuna prenotazione residua, tabelle di servizio e stato del mock azzerati, opzioni di default, SMTP sink vivo, pagine di prova rigenerate), gli id di sessione e di evento del mock sono casuali, e il test del promemoria "prenotazione a meno di 24 ore" sceglie lo slot dall'orologio invece di dipendere dall'ora in cui gira. Le suite passano in qualsiasi ordine e due volte di fila sullo stesso container.
+
 ## 0.33.0 (pacchetto, componente e plugin: da ora tutti con la stessa versione)
 
 Correzioni dalla controprova di sicurezza e revisione sulla 0.32.0.

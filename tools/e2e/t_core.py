@@ -2,7 +2,7 @@ import sys, json, threading, time
 sys.argv = [sys.argv[0]] + sys.argv[1:]
 from wgbtest import *
 
-clear_state()
+reset_env()
 D = day(6)
 D2 = day(7)
 

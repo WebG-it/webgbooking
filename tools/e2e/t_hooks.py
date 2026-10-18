@@ -1,5 +1,5 @@
 from wgbtest import *
-clear_state()
+reset_env()
 jx('php /tmp/mock/init.php booking_webhook=https://www.googleapis.com/hook booking_webhook_method=POST >/dev/null')
 sql("UPDATE joom_webgbooking_google SET sheet_id='SHEET123', sheet_tab='Prenotazioni'")
 r = book('hour', day(13), '10:00', phone='+39 333 555 6666', location='phone', email='hook@example.invalid', name='Hook')

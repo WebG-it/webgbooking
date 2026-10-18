@@ -77,9 +77,7 @@ def stripe_calls(method=None, path=None):
 
 
 def fresh():
-    clear_state()
-    sql("DELETE FROM joom_webgbooking_stripe_events")
-    jx('rm -f /tmp/gmock/stripe.json')
+    reset_env(render=False)
     set_mock_key(SK)
     init(stripe_sk=SK, stripe_whsec=WHSEC, stripe_mode='test')
 

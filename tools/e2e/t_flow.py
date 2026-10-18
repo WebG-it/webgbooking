@@ -1,7 +1,7 @@
 import sys, os, json, time, base64
 from wgbtest import *
 
-clear_state()
+reset_env()
 sql("DELETE FROM joom_scheduler_logs WHERE 1=1")
 D, D2 = day(10), day(11)
 
@@ -123,10 +123,12 @@ tokd = re.findall(r'<input type="hidden" name="([0-9a-f]{32})" value="1"', dh)[0
 check('C10 detail page has a Cancel button', 'booking.cancel' in dh, '')
 out = post_multi(adm, BASE + '/administrator/index.php?option=com_webgbooking&view=booking&id=%d' % ids[2], [('task', 'booking.cancel'), ('id', str(ids[2])), ('boxchecked', '0'), ('option', 'com_webgbooking'), (tokd, '1')])
 check('C11 single cancel from the detail page works (DB, Google, email)', row(ids[2])['status'] == 'cancelled' and len([l for l in gm_log() if l['method'] == 'DELETE']) == 1 and len(mails()) == mcount_before + 1, (row(ids[2])['status'], len(mails()) - mcount_before))
-# upgrade-era row (id 1: old columns, no google event, no phone)
+# upgrade-era row (only the old 0.30.0 columns, no google event, no phone), seeded here so the suite needs nothing left over
+sql("INSERT INTO joom_webgbooking_bookings (created,booking_date,booking_time,customer_name,customer_email,status,manage_token) VALUES (NOW(),'%s','10:00','Vecchio Cliente','old@example.invalid','confirmed','oldtoken0000000000000000000000aa')" % day(14))
+OLD = last_id()
 mcount_before = len(mails())
-out = post_multi(adm, BASE + '/administrator/index.php?option=com_webgbooking&view=bookings', [('task', 'booking.cancel'), ('boxchecked', '1'), ('option', 'com_webgbooking'), (tokf, '1'), ('cid[]', '1')])
-check('C12 row created by 0.30.0 (NULL new columns) cancels fine, customer mailed, no Google call', row(1)['status'] == 'cancelled' and len(mails()) == mcount_before + 1, (row(1)['status'], len(mails()) - mcount_before))
+out = post_multi(adm, BASE + '/administrator/index.php?option=com_webgbooking&view=bookings', [('task', 'booking.cancel'), ('boxchecked', '1'), ('option', 'com_webgbooking'), (tokf, '1'), ('cid[]', str(OLD))])
+check('C12 row created by 0.30.0 (NULL new columns) cancels fine, customer mailed, no Google call', row(OLD)['status'] == 'cancelled' and len(mails()) == mcount_before + 1, (row(OLD)['status'], len(mails()) - mcount_before))
 csv = adm.get(BASE + '/administrator/index.php?option=com_webgbooking&task=exportcsv&' + tokf + '=1')
 check('C13 CSV export has Location/Duration/Event columns appended', csv.splitlines()[0].endswith('Custom,Location,Duration,Event') or 'Location,Duration,Event' in csv.splitlines()[0], csv[:200])
 

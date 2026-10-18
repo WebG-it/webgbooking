@@ -8,6 +8,7 @@ sys.argv = sys.argv[:3]
 import importlib
 tp = importlib.import_module('t_pay_lib')
 SK, WHSEC, R = tp.SK, tp.WHSEC, tp.R
+reset_env()
 tp.fresh()
 
 

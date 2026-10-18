@@ -24,7 +24,10 @@ while (true) {
         $cmd = strtoupper(substr($line, 0, 4));
         if ($cmd === 'EHLO' || $cmd === 'HELO') { fwrite($c, "250-sink\r\n250 8BITMIME\r\n"); }
         elseif ($cmd === 'MAIL') { $from = trim(substr($line, 10)); fwrite($c, "250 OK\r\n"); }
-        elseif ($cmd === 'RCPT') { $rcpt[] = trim(substr($line, 8)); fwrite($c, "250 OK\r\n"); }
+        elseif ($cmd === 'RCPT') {
+            if (stripos($line, 'reject') !== false) { fwrite($c, "550 mailbox refused\r\n"); }   // test hook: any address containing "reject"
+            else { $rcpt[] = trim(substr($line, 8)); fwrite($c, "250 OK\r\n"); }
+        }
         elseif ($cmd === 'DATA') { $data = true; fwrite($c, "354 go\r\n"); }
         elseif ($cmd === 'RSET') { $rcpt = []; fwrite($c, "250 OK\r\n"); }
         elseif ($cmd === 'NOOP') { fwrite($c, "250 OK\r\n"); }

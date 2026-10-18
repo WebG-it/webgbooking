@@ -1,9 +1,8 @@
 import sys, json, time
 from wgbtest import *
 
-clear_state()
+reset_env()
 sql("DELETE FROM joom_scheduler_logs WHERE 1=1")
-sql("UPDATE joom_webgbooking_bookings SET status='cancelled' WHERE id=1")
 
 
 def rome(plus_min=0):
@@ -46,15 +45,10 @@ check('R0 plan snapshot: element override 2h vs default 24h,1h', cfgs[b1]['times
 check('R0b plan keeps element subject/body', cfgs[b1]['subject'].startswith('Tra poco') and '{location}' in cfgs[b1]['body'])
 
 # a booking made 3h ahead today must not fire the 24h reminder right away
-dtoday, ttoday = rome(180)
-hh = int(ttoday[:2]) + (1 if int(ttoday[3:]) > 0 else 0)
-slot = '%02d:00' % hh if hh < 17 else None
-if slot:
-    r = book('def', dtoday, slot, email='r8@example.invalid', name='Soon')
-    sid = last_id()
-    check('R1 booking 3h ahead pre-marks the 24h reminder as already behind us', r.get('ok') is True and json.loads(row(sid)['reminders_sent']) in ([1440], [1440, 60]) and (row(sid)['reminders_sent'] != '[]'), row(sid))
-else:
-    print('SKIP R1 (too late in the day)')
+dtoday, slot = soon_slot()
+r = book('def', dtoday, slot, email='r8@example.invalid', name='Soon')
+sid = last_id()
+check('R1 booking less than 24h ahead pre-marks the 24h reminder as already behind us (slot chosen from the clock)', r.get('ok') is True and json.loads(row(sid)['reminders_sent']) in ([1440], [1440, 60]), (r, row(sid), dtoday, slot))
 
 # --- arrange the scenarios in the DB
 set_when(b1, 110)                    # 2h reminder due (element override)
@@ -64,8 +58,7 @@ set_when(b4, 50); sql("UPDATE joom_webgbooking_bookings SET status='cancelled' W
 set_when(b5, -10)                    # already started
 d7, t7 = set_when(b7, 50)
 sql("UPDATE joom_webgbooking_bookings SET reminder_cfg=NULL WHERE id=%d" % b5)   # (b5 is past anyway)
-if slot:
-    sql("DELETE FROM joom_webgbooking_bookings WHERE id=%d" % sid)
+sql("DELETE FROM joom_webgbooking_bookings WHERE id=%d" % sid)
 # an old-style row (no plan) 50 minutes ahead must stay silent
 sql("INSERT INTO joom_webgbooking_bookings (created,booking_date,booking_time,customer_name,customer_email,status,manage_token) SELECT NOW(), '%s', '%s', 'Vecchio', 'old2@example.invalid', 'confirmed', 'oldtoken2000000000000000000000bb'" % rome(50))
 # keep b7 for the race test: park it out of the way for the first run

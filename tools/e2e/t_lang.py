@@ -1,5 +1,5 @@
 from wgbtest import *
-clear_state()
+reset_env()
 def rome(plus_min=0):
     out = jx("php -r 'echo (new DateTime(\"now\", new DateTimeZone(\"Europe/Rome\")))->modify(\"%+d minutes\")->format(\"Y-m-d H:i\");'" % plus_min)
     return out.strip().split(' ')

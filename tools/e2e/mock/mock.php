@@ -43,6 +43,7 @@ if ($host === 'api.stripe.com') {
             $sess[$id]['payment_intent'] = 'pi_mock_' . substr($id, -6);
             if (isset($q['amount'])) { $sess[$id]['amount_total'] = (int) $q['amount']; }
             if (isset($q['live'])) { $sess[$id]['livemode'] = true; }
+            if (isset($q['nolive'])) { unset($sess[$id]['livemode']); }
             $save(); echo json_encode($sess[$id]); exit;
         }
         $err(404, 'mock control: unknown');
@@ -66,8 +67,7 @@ if ($host === 'api.stripe.com') {
         if (($f['mode'] ?? '') !== 'payment' || empty($li['unit_amount']) || empty($li['currency']) || empty($f['success_url'])) { $err(400, 'Missing required param'); }
         $exp = (int) ($f['expires_at'] ?? 0);
         if ($exp < time() + 30 * 60 || $exp > time() + 86400) { $err(400, 'The `expires_at` timestamp must be between 30 minutes and 24 hours from now.'); }
-        $n = count($sess) + 1;
-        $id = 'cs_test_mock' . str_pad((string) $n, 6, '0', STR_PAD_LEFT);
+        $id = 'cs_test_mock' . bin2hex(random_bytes(6));          // random: ids are never reused between runs
         $sess[$id] = ['id' => $id, 'object' => 'checkout.session', 'amount_total' => (int) $li['unit_amount'], 'currency' => $li['currency'],
             'payment_status' => 'unpaid', 'status' => 'open', 'livemode' => false, 'url' => 'https://checkout.stripe.test/c/pay/' . $id,
             'client_reference_id' => $f['client_reference_id'] ?? null, 'customer_email' => $f['customer_email'] ?? null,
@@ -96,11 +96,20 @@ if ($path === '/calendar/v3/freeBusy') {
 }
 if (preg_match('#^/calendar/v3/calendars/([^/]+)/events(?:/([^/]+))?$#', $path, $m)) {
     $id = $m[2] ?? '';
+    if ($method === 'GET' && $id !== '') {
+        if (!isset($events[$id])) { http_response_code(404); echo '{"error":"notFound"}'; exit; }
+        echo json_encode($events[$id]);
+        exit;
+    }
     if ($method === 'POST') {
-        $n = (int) @file_get_contents($seqf) + 1;
-        file_put_contents($seqf, (string) $n);
-        $id = 'mockevt' . $n;
         $ev = (array) $json;
+        if (!empty($ev['id'])) {                                   // client-chosen id: insert is idempotent
+            if (!preg_match('/^[a-v0-9]{5,1024}$/', (string) $ev['id'])) { http_response_code(400); echo '{"error":"invalid id"}'; exit; }
+            if (isset($events[$ev['id']])) { http_response_code(409); echo '{"error":{"code":409,"message":"The requested identifier already exists."}}'; exit; }
+            $id = (string) $ev['id'];
+        } else {
+            $id = 'mockevt' . bin2hex(random_bytes(5));
+        }
         $ev['id'] = $id;
         $resp = ['id' => $id];
         if (!empty($json['conferenceData']['createRequest'])) {
@@ -109,6 +118,7 @@ if (preg_match('#^/calendar/v3/calendars/([^/]+)/events(?:/([^/]+))?$#', $path, 
         }
         $events[$id] = $ev;
         file_put_contents("$dir/events.json", json_encode($events));
+        if ($gfail === 'events_lost') { http_response_code(504); exit; }   // created, but the answer never reaches the caller
         echo json_encode($resp);
         exit;
     }

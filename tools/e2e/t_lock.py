@@ -1,6 +1,6 @@
 import hashlib
 from wgbtest import *
-clear_state()
+reset_env()
 D = day(20)
 name = 'wgb:' + hashlib.md5(('joomla|joom_|' + D).encode()).hexdigest()[:24]
 holder = subprocess.Popen(['docker', 'exec', DB, 'mariadb', '-ujoomla', '-pjoomlapw', 'joomla', '-e', "SELECT GET_LOCK('%s',60); SELECT SLEEP(14);" % name], env=ENV, stdout=subprocess.PIPE, stderr=subprocess.PIPE)

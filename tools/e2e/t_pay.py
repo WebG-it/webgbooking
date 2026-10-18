@@ -5,6 +5,7 @@ from t_pay_lib import *
 import t_pay_lib
 SK, WHSEC = t_pay_lib.SK, t_pay_lib.WHSEC
 
+reset_env()
 fresh()
 D = 12
 # ------------------------------------------------------------------ setup checks

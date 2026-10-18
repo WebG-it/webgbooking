@@ -13,7 +13,7 @@ export WGB_E2E_ADMIN_PASS='una-password-qualsiasi-di-prova'
 bash tools/e2e/up.sh 6 8086            # Joomla 6 su http://localhost:8086 (oppure: up.sh 5 8085)
 bash tools/e2e/redeploy.sh wgbtest-6-j # costruisce e installa il pacchetto, opzioni di prova, pagine di prova
 export WGB_E2E_ADMIN_PASS                # le prove admin la leggono
-for t in t_core t_flow t_rem t_lazy t_hooks t_admin t_lang t_lock t_pay t_pay_admin t_fix; do python tools/e2e/$t.py 8086 wgbtest-6; done
+for t in t_core t_flow t_rem t_lazy t_hooks t_admin t_lang t_lock t_pay t_pay_admin t_fix t_v331; do python tools/e2e/$t.py 8086 wgbtest-6; done
 ```
 Ogni prova stampa `PASS`/`FAIL` e chiude con `RESULT pass=N fail=M`. Alla fine: `docker rm -f wgbtest-6-j wgbtest-6-db; docker network rm wgbtest-6-net`.
 
@@ -29,4 +29,7 @@ Ogni prova stampa `PASS`/`FAIL` e chiude con `RESULT pass=N fail=M`. Alla fine: 
 | `t_pay.py` | pagamenti: sessione e hold, config firmata (prezzo falsificato rifiutato), webhook (firme false, replay, doppioni, evento nuovo stesso pagamento), pagina di ritorno, scadenza, pagamento tardivo con slot libero/preso, importo diverso, politica di annullo |
 | `t_pay_admin.py` | opzioni Stripe (cifrate, mai rimandate al form, verifica chiave), lista/filtro/dettaglio/export, annullo e eliminazione con Google e Stripe, promemoria all'ospite |
 | `t_fix.py` | le correzioni 0.33.0 punto per punto: test/live, Google fail closed + cache + retry, effetti dopo il pagamento e pagamenti orfani, eventi GA4, disponibilita' per elemento, epoca/scadenza dei token, UID .ics, anti abuso, `pending_ctx`, segreti, importi, header, piccole correzioni |
+| `t_v331.py` | gli ultimi cinque punti: effetti rimasti `pending`, evento Google creato ma risposta persa (un solo evento), mail ospite separata, livemode mancante, prefisso chiave sconosciuto |
 | `t_lock.py` | il lock per giorno e' vero: chi lo trova occupato aspetta e viene rifiutato |
+
+Ogni suite comincia con `reset_env()` (in `wgbtest.py`): le suite si possono lanciare in qualsiasi ordine e piu' volte sullo stesso container.
