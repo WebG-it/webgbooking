@@ -16,8 +16,10 @@ namespace WebG\Plugin\System\Webgbooking\Extension;
 
 \defined('_JEXEC') or die;
 
+use Joomla\CMS\Component\ComponentHelper;
 use Joomla\CMS\Factory;
 use Joomla\CMS\Http\HttpFactory;
+use Joomla\CMS\Language\LanguageFactoryInterface;
 use Joomla\CMS\Language\Text;
 use Joomla\CMS\Mail\MailerFactoryInterface;
 use Joomla\CMS\Plugin\CMSPlugin;
@@ -31,7 +33,7 @@ use Joomla\Event\SubscriberInterface;
 final class Webgbooking extends CMSPlugin implements SubscriberInterface
 {
     /** Cache-buster for the bundled front-end assets (wgb.css/js, UIkit). Bump when those change. */
-    public const ASSET_VER = '0.30.0';
+    public const ASSET_VER = '0.31.0';
 
     protected $autoloadLanguage = true;
 
@@ -98,14 +100,18 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             $this->respond(['token' => Session::getFormToken()]);
         }
 
+        // Event config of the element (duration / buffers), signed at render time. Missing or tampered
+        // tokens (old cached pages) fall back to the plugin-wide defaults.
+        $ev = $this->evFromToken((string) $input->get('ev', '', 'RAW'));
+
         // Whole-month availability: the single source for selectable days + their slots.
         if ($action === 'month') {
-            $this->monthSlots($input->getCmd('from', ''), $input->getCmd('to', ''));
+            $this->monthSlots($input->getCmd('from', ''), $input->getCmd('to', ''), $ev);
         }
 
         // Single-day slots (widget fallback), computed server-side in the site timezone.
         if ($action === 'slots') {
-            $this->availableSlots($input->getCmd('date', ''));
+            $this->availableSlots($input->getCmd('date', ''), $ev);
         }
 
         // Self-service reschedule: authorised by the booking's manage token (not the Joomla CSRF).
@@ -117,6 +123,12 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             $this->respond(['ok' => false, 'message' => Text::_('PLG_SYSTEM_WEBGBOOKING_INVALID_TOKEN')]);
         }
 
+        $this->handleBook($input);
+    }
+
+    /** Create a booking (POST, CSRF-protected). Always answers with JSON and stops. */
+    private function handleBook($input): void
+    {
         $date    = $input->post->getString('date', '');
         $time    = $input->post->getString('time', '');
         $name    = mb_substr(trim($input->post->getString('name', '')), 0, 190);
@@ -139,6 +151,20 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             $this->respond(['ok' => false, 'message' => Text::_('PLG_SYSTEM_WEBGBOOKING_BOOK_ERR')]);
         }
 
+        // Per-element ACTIONS + custom-field DEFINITIONS + EVENT TYPE (HMAC-verified: signed by the server
+        // at render time, so the client cannot inject fields, turn "required" off or pick another duration).
+        $actions = $this->verifyForm($input->post->get('form', '', 'RAW'));
+        $ev      = $this->resolveEvent((array) ($actions['event'] ?? []));
+
+        // Where the meeting happens: fixed by the element, or chosen by the customer.
+        $loc = $this->resolveLocation($ev['loc'], $input->post->getCmd('location', ''));
+        if ($loc === '') {
+            $this->respond(['ok' => false, 'message' => Text::_('PLG_SYSTEM_WEBGBOOKING_BOOK_ERR')]);
+        }
+        if ($loc === 'phone' && !self::phoneOk($phone)) {
+            $this->respond(['ok' => false, 'message' => Text::_('PLG_SYSTEM_WEBGBOOKING_PHONE_REQUIRED')]);
+        }
+
         try {
             $db = Factory::getContainer()->get(DatabaseInterface::class);
 
@@ -155,52 +181,73 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                 $this->respond(['ok' => false, 'message' => Text::_('PLG_SYSTEM_WEBGBOOKING_BOOK_ERR')]);
             }
 
-            // Re-validate the slot server-side: working rules + Google busy + not already taken
-            // (anti double-booking — the client availability could be stale).
-            $vtz   = new \DateTimeZone($this->siteTz());
-            $vnow  = (new \DateTime('now', $vtz))->getTimestamp();
-            $vnext = (new \DateTime($date . ' 00:00:00', $vtz))->modify('+1 day')->format('Y-m-d');
-            $vslots = $this->computeDay($date, $vtz, $this->googleBusy($date, $vnext, $vtz), $vnow, $this->slotConfig());
-            $taken = (int) $db->setQuery(
-                $db->getQuery(true)
-                    ->select('COUNT(*)')
-                    ->from($db->quoteName('#__webgbooking_bookings'))
-                    ->where($db->quoteName('booking_date') . ' = ' . $db->quote($date))
-                    ->where($db->quoteName('booking_time') . ' = ' . $db->quote($time))
-                    ->where($db->quoteName('status') . ' != ' . $db->quote('cancelled'))
-            )->loadResult();
-
-            if (!\in_array($time, $vslots, true) || $taken > 0) {
-                $this->respond(['ok' => false, 'message' => Text::_('PLG_SYSTEM_WEBGBOOKING_SLOT_TAKEN')]);
-            }
-
-            // Per-element ACTIONS + custom-field DEFINITIONS (HMAC-verified: signed by the server at
-            // render time, so the client cannot inject fields or turn "required" off).
-            $actions    = $this->verifyForm($input->post->get('form', '', 'RAW'));
             $customData = $this->collectCustomFields($actions['fields'] ?? [], $input);
             if ($customData === false) {
                 $this->respond(['ok' => false, 'message' => Text::_('PLG_SYSTEM_WEBGBOOKING_BOOK_ERR')]);
             }
 
-            $row = (object) [
-                'created'        => Factory::getDate()->toSql(),
-                'booking_date'   => $date,
-                'booking_time'   => $time,
-                'customer_name'  => $name,
-                'customer_email' => $email,
-                'customer_phone' => $phone,
-                'notes'          => $notes,
-                'status'          => 'pending',
-                'source_url'      => substr((string) $input->server->getString('HTTP_REFERER', ''), 0, 255),
-                'meeting_url'     => trim((string) $this->params->get('meeting_url', '')),
-                'guest_email'     => $guest,
-                'manage_token'    => bin2hex(random_bytes(16)),
-                'google_event_id' => '',
-                'custom_data'     => $customData,
-            ];
-            $db->insertObject('#__webgbooking_bookings', $row, 'id');
+            $vtz   = new \DateTimeZone($this->siteTz());
+            $vnow  = (new \DateTime('now', $vtz))->getTimestamp();
+            $vnext = (new \DateTime($date . ' 00:00:00', $vtz))->modify('+1 day')->format('Y-m-d');
+            $cfg   = $this->slotConfig($ev);
+            $busy  = $this->googleBusy($date, $vnext, $vtz); // network call BEFORE taking the lock
 
-            // Auto Google Meet + calendar event (sets $row->google_event_id; overrides a fixed link).
+            $rem         = $this->reminderPlan((array) ($actions['reminder'] ?? []));
+            // The scheduler can run from a CLI cron where Joomla does not know the public URL: keep the site
+            // root with the plan so the "manage / cancel" link in a reminder is always the real one.
+            $rem['root'] = Uri::root();
+            $startTs = (new \DateTime($date . ' ' . $time . ':00', $vtz))->getTimestamp();
+
+            // Re-validate the slot server-side and insert it under a per-day lock: working rules + Google busy
+            // + every existing booking (with ITS duration and buffers) + insert are one atomic step, so two
+            // visitors can never get the same (or an overlapping) slot (TOCTOU / double booking).
+            $lockName = $this->lockName($db, $date);
+            if (!$this->acquireLock($db, $lockName)) {
+                $this->respond(['ok' => false, 'message' => Text::_('PLG_SYSTEM_WEBGBOOKING_SLOT_TAKEN')]);
+            }
+
+            $row   = null;
+            $taken = false;
+            try {
+                $vslots = $this->computeDay($date, $vtz, $busy, $vnow, $cfg, $this->localBookings($date, $vnext, $vtz));
+
+                if (!\in_array($time, $vslots, true)) {
+                    $taken = true;
+                } else {
+                    $row = (object) [
+                        'created'         => Factory::getDate()->toSql(),
+                        'booking_date'    => $date,
+                        'booking_time'    => $time,
+                        'customer_name'   => $name,
+                        'customer_email'  => $email,
+                        'customer_phone'  => $phone,
+                        'notes'           => $notes,
+                        'status'          => 'pending',
+                        'source_url'      => substr((string) $input->server->getString('HTTP_REFERER', ''), 0, 255),
+                        'meeting_url'     => $loc === 'phone' ? '' : trim((string) $this->params->get('meeting_url', '')),
+                        'guest_email'     => $guest,
+                        'manage_token'    => bin2hex(random_bytes(16)),
+                        'google_event_id' => '',
+                        'custom_data'     => $customData,
+                        'duration_min'    => $ev['dur'],
+                        'buffer_before'   => $ev['bb'],
+                        'buffer_after'    => $ev['ba'],
+                        'location'        => $loc,
+                        'event_name'      => $ev['name'],
+                        'reminder_cfg'    => (string) json_encode($rem),
+                        'reminders_sent'  => (string) json_encode($this->pastOffsets($rem, $startTs, $vnow)),
+                    ];
+                    $db->insertObject('#__webgbooking_bookings', $row, 'id');
+                }
+            } finally {
+                $this->releaseLock($db, $lockName);
+            }
+
+            if ($taken || $row === null) {
+                $this->respond(['ok' => false, 'message' => Text::_('PLG_SYSTEM_WEBGBOOKING_SLOT_TAKEN')]);
+            }
+
+            // Auto Google event (+ Meet link unless it is a phone call). Sets $row->google_event_id.
             $meet = $this->createGoogleEvent($row);
             if ($meet !== '') {
                 $row->meeting_url = $meet;
@@ -212,9 +259,9 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             ];
             $db->updateObject('#__webgbooking_bookings', $upd, 'id');
 
-            // Per-element ACTIONS (already HMAC-verified above when reading the custom fields).
-            $cust    = $actions['customer'] ?? [];
-            $staff   = $actions['staff'] ?? [];
+            // Per-element ACTIONS (already HMAC-verified above).
+            $cust  = $actions['customer'] ?? [];
+            $staff = $actions['staff'] ?? [];
             $row->_custOn         = !isset($cust['on']) || (bool) $cust['on'];
             $row->emailSubjectTpl = (string) ($cust['subject'] ?? '');
             $row->emailBodyTpl    = (string) ($cust['body'] ?? '');
@@ -239,9 +286,245 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             // Native Google Sheets live write (if a dedicated sheet is configured).
             $this->appendToSheet($row);
 
-            $this->respond(['ok' => true, 'message' => Text::_('PLG_SYSTEM_WEBGBOOKING_BOOK_OK')]);
+            $this->respond([
+                'ok'      => true,
+                'message' => Text::_($loc === 'phone' ? 'PLG_SYSTEM_WEBGBOOKING_BOOK_OK_PHONE' : 'PLG_SYSTEM_WEBGBOOKING_BOOK_OK'),
+            ]);
         } catch (\Throwable $e) {
             $this->respond(['ok' => false, 'message' => Text::_('PLG_SYSTEM_WEBGBOOKING_BOOK_ERR')]);
+        }
+    }
+
+    // ------------------------------------------------------------------------------------------------
+    // Event type (duration / buffers / location), per element
+    // ------------------------------------------------------------------------------------------------
+
+    /** Sign the (small) event config so GET endpoints (month/slots) can trust it without the full form token. */
+    public static function signEv(array $ev, string $secret): string
+    {
+        $payload = base64_encode((string) json_encode($ev));
+
+        return $payload . '.' . hash_hmac('sha256', 'ev.' . $payload, $secret);
+    }
+
+    /** Verify a token made by signEv(). Returns the resolved event config (plugin defaults when invalid/missing). */
+    private function evFromToken(string $token): array
+    {
+        try {
+            if ($token !== '' && preg_match('/^[A-Za-z0-9+\/=]+\.[a-f0-9]{64}$/', $token)) {
+                [$payload, $sig] = explode('.', $token, 2);
+                $calc = hash_hmac('sha256', 'ev.' . $payload, (string) $this->getApplication()->get('secret'));
+                if (hash_equals($calc, $sig)) {
+                    $cfg = json_decode((string) base64_decode($payload), true);
+                    if (\is_array($cfg)) {
+                        return $this->resolveEvent($cfg);
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+        }
+
+        return $this->resolveEvent([]);
+    }
+
+    /**
+     * Normalise an event config: element values win, empty/missing values fall back to the plugin options.
+     * Returns ['dur' => minutes, 'bb' => buffer before, 'ba' => buffer after, 'loc' => meet|phone|choice, 'name' => string].
+     */
+    private function resolveEvent(array $e): array
+    {
+        $has = static fn($k) => isset($e[$k]) && $e[$k] !== '' && $e[$k] !== null && is_numeric($e[$k]);
+
+        $dur = $has('dur') && (int) $e['dur'] > 0 ? (int) $e['dur'] : (int) $this->params->get('slot_duration', 30);
+        $bb  = $has('bb') ? (int) $e['bb'] : (int) $this->params->get('buffer_before', 0);
+        $ba  = $has('ba') ? (int) $e['ba'] : (int) $this->params->get('buffer_after', 0);
+        $loc = (string) ($e['loc'] ?? 'meet');
+
+        return [
+            'dur'  => max(5, min(480, $dur)),
+            'bb'   => max(0, min(240, $bb)),
+            'ba'   => max(0, min(240, $ba)),
+            'loc'  => \in_array($loc, ['meet', 'phone', 'choice'], true) ? $loc : 'meet',
+            'name' => mb_substr(trim(strip_tags((string) ($e['name'] ?? ''))), 0, 120),
+        ];
+    }
+
+    /** The concrete location of a booking: 'meet' | 'phone' ('' when the customer choice is invalid). */
+    private function resolveLocation(string $cfgLoc, string $posted): string
+    {
+        if ($cfgLoc === 'phone') {
+            return 'phone';
+        }
+        if ($cfgLoc === 'choice') {
+            $posted = strtolower($posted);
+
+            return \in_array($posted, ['meet', 'phone'], true) ? $posted : 'meet';
+        }
+
+        return 'meet';
+    }
+
+    /** A usable phone number to be called: only phone characters, at least 6 digits. */
+    public static function phoneOk(string $phone): bool
+    {
+        return (bool) preg_match('/^[+()\d\s.\-\/]{6,60}$/', $phone) && preg_match_all('/\d/', $phone) >= 6;
+    }
+
+    /**
+     * Parse "24h, 1h, 30m, 2d" (bare number = hours) into a sorted list of minutes, largest first.
+     * At most 6 entries, each between 5 minutes and 14 days.
+     */
+    public static function parseTimes(string $text): array
+    {
+        $out = [];
+        foreach (preg_split('/[,;\s]+/', strtolower(trim($text))) ?: [] as $tok) {
+            if (!preg_match('/^(\d{1,4})\s*(d|h|m|min|g|o)?$/', $tok, $m)) {
+                continue;
+            }
+            $n    = (int) $m[1];
+            $unit = $m[2] ?? 'h';
+            $min  = $n * ($unit === 'd' || $unit === 'g' ? 1440 : ($unit === 'm' || $unit === 'min' ? 1 : 60));
+            if ($min >= 5 && $min <= 20160) {
+                $out[$min] = $min;
+            }
+        }
+        rsort($out);
+
+        return \array_slice(array_values($out), 0, 6);
+    }
+
+    /**
+     * Reminder plan stored with the booking (element override > plugin options > defaults).
+     * ['on' => bool, 'times' => [minutes...], 'subject' => string, 'body' => string]
+     */
+    private function reminderPlan(array $r): array
+    {
+        // The plugin master switch is checked when the reminders are SENT, so re-enabling it later also covers
+        // bookings made while it was off; here only the element's own on/off is stored.
+        $on     = !isset($r['on']) || (bool) $r['on'];
+        $times  = [];
+        foreach ((array) ($r['times'] ?? []) as $x) {
+            if (is_numeric($x) && (int) $x >= 5 && (int) $x <= 20160) {
+                $times[] = (int) $x;
+            }
+        }
+        if (!$times) {
+            $times = self::parseTimes((string) $this->params->get('reminder_times', '24h, 1h')) ?: [1440, 60];
+        }
+        $times = array_values(array_unique($times));
+        rsort($times);
+
+        return [
+            'on'      => $on,
+            'times'   => \array_slice(array_values($times), 0, 6),
+            'subject' => (string) ($r['subject'] ?? ''),
+            'body'    => (string) ($r['body'] ?? ''),
+        ];
+    }
+
+    /** Reminder offsets (minutes) whose send time is already behind us when the booking is made or moved. */
+    private function pastOffsets(array $plan, int $startTs, int $now): array
+    {
+        $out = [];
+        foreach ((array) ($plan['times'] ?? []) as $m) {
+            if ($startTs - ((int) $m) * 60 <= $now) {
+                $out[] = (int) $m;
+            }
+        }
+
+        return $out;
+    }
+
+    // ------------------------------------------------------------------------------------------------
+    // Per-day booking lock (closes the check-then-insert race) + existing-booking availability
+    // ------------------------------------------------------------------------------------------------
+
+    private function lockName($db, string $date): string
+    {
+        return 'wgb:' . substr(md5((string) $this->getApplication()->get('db') . '|' . $db->getPrefix() . '|' . $date), 0, 24);
+    }
+
+    /** Named lock (MySQL/MariaDB GET_LOCK). On other drivers there is no lock and we proceed (best effort). */
+    private function acquireLock($db, string $name): bool
+    {
+        try {
+            if (stripos((string) $db->getServerType(), 'mysql') === false) {
+                return true;
+            }
+
+            return (int) $db->setQuery('SELECT GET_LOCK(' . $db->quote($name) . ', 8)')->loadResult() === 1;
+        } catch (\Throwable $e) {
+            return true;
+        }
+    }
+
+    private function releaseLock($db, string $name): void
+    {
+        try {
+            if (stripos((string) $db->getServerType(), 'mysql') !== false) {
+                $db->setQuery('SELECT RELEASE_LOCK(' . $db->quote($name) . ')')->loadResult();
+            }
+        } catch (\Throwable $e) {
+        }
+    }
+
+    /** Duration (minutes) of a stored booking; older rows without the column use the plugin default. */
+    private function rowDuration(object $row): int
+    {
+        $d = (int) ($row->duration_min ?? 0);
+
+        return $d > 0 ? $d : max(5, (int) $this->params->get('slot_duration', 30));
+    }
+
+    /** 'meet' | 'phone' for a stored booking (older rows are Meet). */
+    private function rowLocation(object $row): string
+    {
+        return (($row->location ?? '') === 'phone') ? 'phone' : 'meet';
+    }
+
+    /** Event config (resolved) rebuilt from a stored booking, used for the reschedule widget. */
+    private function eventFromRow(object $row): array
+    {
+        return $this->resolveEvent([
+            'dur'  => $this->rowDuration($row),
+            'bb'   => (int) ($row->buffer_before ?? 0),
+            'ba'   => (int) ($row->buffer_after ?? 0),
+            'loc'  => $this->rowLocation($row),
+            'name' => (string) ($row->event_name ?? ''),
+        ]);
+    }
+
+    /**
+     * Existing, non-cancelled bookings around [from, toExclusive) as [startTs, endTs, bufferBeforeSec, bufferAfterSec].
+     * Each one blocks overlapping slots using ITS OWN duration and buffers, so events of different length coexist.
+     */
+    private function localBookings(string $from, string $toExclusive, \DateTimeZone $tz, int $excludeId = 0): array
+    {
+        try {
+            $db   = Factory::getContainer()->get(DatabaseInterface::class);
+            $lo   = (new \DateTime($from . ' 00:00:00', $tz))->modify('-1 day')->format('Y-m-d');
+            $hi   = (new \DateTime($toExclusive . ' 00:00:00', $tz))->modify('+1 day')->format('Y-m-d');
+            $rows = $db->setQuery(
+                $db->getQuery(true)
+                    ->select('*')
+                    ->from($db->quoteName('#__webgbooking_bookings'))
+                    ->where($db->quoteName('status') . ' != ' . $db->quote('cancelled'))
+                    ->where($db->quoteName('booking_date') . ' >= ' . $db->quote($lo))
+                    ->where($db->quoteName('booking_date') . ' <= ' . $db->quote($hi))
+            )->loadObjectList();
+
+            $out = [];
+            foreach ($rows ?: [] as $r) {
+                if ($excludeId > 0 && (int) $r->id === $excludeId) {
+                    continue;
+                }
+                $s = (new \DateTime($r->booking_date . ' ' . $r->booking_time . ':00', $tz))->getTimestamp();
+                $out[] = [$s, $s + $this->rowDuration($r) * 60, max(0, (int) ($r->buffer_before ?? 0)) * 60, max(0, (int) ($r->buffer_after ?? 0)) * 60];
+            }
+
+            return $out;
+        } catch (\Throwable $e) {
+            return [];
         }
     }
 
@@ -343,6 +626,9 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                 'notes'       => $row->notes,
                 'meeting_url' => $row->meeting_url,
                 'status'      => $row->status,
+                'location'    => $this->rowLocation($row),
+                'duration'    => $this->rowDuration($row),
+                'event'       => (string) ($row->event_name ?? ''),
                 'custom'      => $this->customMap($row),
             ];
 
@@ -401,6 +687,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                 $row->customer_name, $row->customer_email, (string) $row->customer_phone,
                 (string) $row->guest_email, (string) $row->notes, $row->status, (string) $row->meeting_url,
                 implode(' | ', $customCol),
+                $this->rowLocation($row), (string) $this->rowDuration($row), (string) ($row->event_name ?? ''),
             ])];
 
             (new HttpFactory())->getHttp()->post(
@@ -488,7 +775,9 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                     if ($sBody !== '') {
                         $this->sendHtmlMail($mf, $tos, $sSub, $this->wrapEmail($this->renderTpl($sBody, $row, $manageUrl, $dateFmt)), '');
                     } else {
-                        $meetLine  = !empty($row->meeting_url) ? ' ' . Text::sprintf('PLG_SYSTEM_WEBGBOOKING_MEET_LINE', $row->meeting_url) : '';
+                        $meetLine  = $this->rowLocation($row) === 'phone'
+                            ? ' ' . Text::sprintf('PLG_SYSTEM_WEBGBOOKING_STAFF_PHONE_LINE', (string) $row->customer_phone, $this->rowDuration($row))
+                            : (!empty($row->meeting_url) ? ' ' . Text::sprintf('PLG_SYSTEM_WEBGBOOKING_MEET_LINE', $row->meeting_url) : '');
                         $guestLine = !empty($row->guest_email) ? "\n" . Text::sprintf('PLG_SYSTEM_WEBGBOOKING_EMAIL_GUEST_LINE', $row->guest_email) : '';
                         $custLines = '';
                         foreach ($this->customAnswers($row) as $it) {
@@ -508,9 +797,17 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
     }
 
     /** Self-service management URL (cancel / future reschedule), authorised by the per-booking token. */
-    private function manageUrl(object $row): string
+    private function manageUrl(object $row, string $root = ''): string
     {
-        return Uri::root() . 'index.php?option=com_ajax&group=system&plugin=webgbooking&format=html&action=manage&token=' . rawurlencode((string) $row->manage_token);
+        if ($root === '') {
+            try {
+                $root = Uri::root();
+            } catch (\Throwable $e) {
+                $root = '';
+            }
+        }
+
+        return $root . 'index.php?option=com_ajax&group=system&plugin=webgbooking&format=html&action=manage&token=' . rawurlencode((string) $row->manage_token);
     }
 
     /** Replace placeholders in a (default or admin-edited) HTML email template. */
@@ -518,11 +815,19 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
     {
         $e = fn($s) => htmlspecialchars((string) $s, ENT_QUOTES, 'UTF-8');
 
+        $isPhone   = $this->rowLocation($row) === 'phone';
         $meetBlock = '';
-        if (!empty($row->meeting_url)) {
+        if ($isPhone) {
+            // Phone appointment: no link, we say we will call the customer at the number they gave.
+            $meetBlock = '<p style="margin:20px 0;padding:12px 16px;background:#f6f8fa;border:1px solid #e6e9ee;border-radius:8px;font-weight:600;">'
+                . $e(Text::sprintf('PLG_SYSTEM_WEBGBOOKING_EMAIL_PHONE_CALL', (string) $row->customer_phone)) . '</p>';
+        } elseif (!empty($row->meeting_url)) {
             $meetBlock = '<p style="margin:20px 0;"><a href="' . $e($row->meeting_url) . '" style="display:inline-block;background:#1f2937;color:#ffffff;text-decoration:none;padding:11px 22px;border-radius:8px;font-weight:600;">'
                 . $e(Text::_('PLG_SYSTEM_WEBGBOOKING_EMAIL_MEET_BTN')) . '</a></p>';
         }
+        $locLabel = $isPhone
+            ? Text::sprintf('PLG_SYSTEM_WEBGBOOKING_LOC_PHONE_AT', (string) $row->customer_phone)
+            : Text::_('PLG_SYSTEM_WEBGBOOKING_LOC_MEET');
         $cancelBlock = '<p style="margin:18px 0 0;font-size:13px;color:#6a6a6a;"><a href="' . $e($manageUrl) . '" style="color:#1f2937;">'
             . $e(Text::_('PLG_SYSTEM_WEBGBOOKING_EMAIL_MANAGE_LINK')) . '</a></p>';
 
@@ -546,8 +851,12 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             '{meet_url}'     => $e($row->meeting_url),
             '{cancel_url}'   => $e($manageUrl),
             '{meet_block}'   => $meetBlock,
+            '{location_block}' => $meetBlock,
             '{cancel_block}' => $cancelBlock,
             '{custom}'       => $customBlock,
+            '{location}'     => $e($locLabel),
+            '{duration}'     => $e((string) $this->rowDuration($row)),
+            '{event}'        => $e((string) ($row->event_name ?? '')),
         ]);
     }
 
@@ -620,7 +929,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
     }
 
     /** Send one HTML email with the optional .ics attachment. $to may be a string or an array. */
-    private function sendHtmlMail($mf, $to, string $subject, string $html, string $ics): void
+    private function sendHtmlMail($mf, $to, string $subject, string $html, string $ics, string $icsMethod = 'PUBLISH'): void
     {
         $m = $mf->createMailer();
         $m->isHtml(true);
@@ -628,7 +937,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
         $m->setSubject($subject);
         $m->setBody($html);
         if ($ics !== '') {
-            $m->addStringAttachment($ics, 'appuntamento.ics', 'base64', 'text/calendar; charset=utf-8; method=PUBLISH');
+            $m->addStringAttachment($ics, 'appuntamento.ics', 'base64', 'text/calendar; charset=utf-8; method=' . $icsMethod);
         }
         $m->Send();
     }
@@ -641,7 +950,9 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
         $cell = 'padding:6px 0;font-size:14px;';
 
         $meetBlock = '';
-        if (!empty($row->meeting_url)) {
+        if ($this->rowLocation($row) === 'phone') {
+            $meetBlock = '<p style="margin:20px 0;font-weight:600;">' . $t('PLG_SYSTEM_WEBGBOOKING_EMAIL_PHONE_GUEST') . '</p>';
+        } elseif (!empty($row->meeting_url)) {
             $meetBlock = '<p style="margin:20px 0;"><a href="' . $e($row->meeting_url) . '" style="display:inline-block;background:#1f2937;color:#ffffff;text-decoration:none;padding:11px 22px;border-radius:8px;font-weight:600;">'
                 . $t('PLG_SYSTEM_WEBGBOOKING_EMAIL_MEET_BTN') . '</a></p>';
         }
@@ -656,18 +967,22 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             . '<p style="margin:18px 0 0;font-size:13px;color:#6a6a6a;">' . $t('PLG_SYSTEM_WEBGBOOKING_EMAIL_ICS_HINT') . '</p>';
     }
 
-    /** Build an .ics (iCalendar) attachment for the appointment. $method PUBLISH (new) or REQUEST (update). */
+    /**
+     * Build an .ics (iCalendar) for the appointment. $method: PUBLISH (new), REQUEST (moved), CANCEL (cancelled).
+     * Uses the booking's own duration; a phone appointment says "we call you at X" instead of a link.
+     */
     private function buildIcs(object $row, string $method = 'PUBLISH'): string
     {
         try {
-            $tz    = new \DateTimeZone($this->siteTz());
-            $utc   = new \DateTimeZone('UTC');
-            $dur   = (int) $this->params->get('slot_duration', 30);
-            $start = new \DateTime($row->booking_date . ' ' . $row->booking_time . ':00', $tz);
-            $end   = (clone $start)->modify('+' . $dur . ' minutes');
-            $fmt   = fn(\DateTime $d) => (clone $d)->setTimezone($utc)->format('Ymd\THis\Z');
-            $host  = parse_url(Uri::root(), PHP_URL_HOST) ?: 'webg';
-            $esc   = fn($s) => str_replace(["\\", "\n", ',', ';'], ['\\\\', '\\n', '\\,', '\\;'], (string) $s);
+            $tz     = new \DateTimeZone($this->siteTz());
+            $utc    = new \DateTimeZone('UTC');
+            $dur    = $this->rowDuration($row);
+            $start  = new \DateTime($row->booking_date . ' ' . $row->booking_time . ':00', $tz);
+            $end    = (clone $start)->modify('+' . $dur . ' minutes');
+            $fmt    = fn(\DateTime $d) => (clone $d)->setTimezone($utc)->format('Ymd\THis\Z');
+            $host   = parse_url(Uri::root(), PHP_URL_HOST) ?: 'webg';
+            $esc    = fn($s) => str_replace(["\\", "\r", "\n", ',', ';'], ['\\\\', '', '\\n', '\\,', '\\;'], (string) $s);
+            $evName = trim((string) ($row->event_name ?? ''));
 
             $lines = [
                 'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//WebG Booking//IT', 'CALSCALE:GREGORIAN', 'METHOD:' . $method,
@@ -676,14 +991,19 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                 'DTSTAMP:' . $fmt(new \DateTime('now', $utc)),
                 'DTSTART:' . $fmt($start),
                 'DTEND:' . $fmt($end),
-                'SUMMARY:' . $esc(Text::_('PLG_SYSTEM_WEBGBOOKING_ICS_SUMMARY')),
+                'SUMMARY:' . $esc($evName !== '' ? $evName : Text::_('PLG_SYSTEM_WEBGBOOKING_ICS_SUMMARY')),
             ];
-            if (!empty($row->meeting_url)) {
+
+            if ($this->rowLocation($row) === 'phone') {
+                $call = Text::sprintf('PLG_SYSTEM_WEBGBOOKING_ICS_PHONE', (string) ($row->customer_phone ?? ''));
+                $lines[] = 'DESCRIPTION:' . $esc($call);
+                $lines[] = 'LOCATION:' . $esc($call);
+            } elseif (!empty($row->meeting_url)) {
                 $lines[] = 'DESCRIPTION:' . $esc($row->meeting_url);
                 $lines[] = 'LOCATION:' . $esc($row->meeting_url);
                 $lines[] = 'URL:' . $esc($row->meeting_url);
             }
-            $lines[] = 'STATUS:CONFIRMED';
+            $lines[] = 'STATUS:' . ($method === 'CANCEL' ? 'CANCELLED' : 'CONFIRMED');
             $lines[] = 'SEQUENCE:' . (int) ($row->seq ?? 0);
             $lines[] = 'END:VEVENT';
             $lines[] = 'END:VCALENDAR';
@@ -730,7 +1050,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                 ['Content-Type' => 'application/x-www-form-urlencoded']
             );
 
-            $data    = json_decode((string) $resp->body, true) ?: [];
+            $data    = json_decode(self::httpBody($resp), true) ?: [];
             $refresh = $data['refresh_token'] ?? '';
             $email   = '';
 
@@ -807,12 +1127,13 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             ['Content-Type' => 'application/x-www-form-urlencoded']
         );
 
-        return json_decode((string) $resp->body, true)['access_token'] ?? '';
+        return json_decode(self::httpBody($resp), true)['access_token'] ?? '';
     }
 
     /**
-     * Create a Google Calendar event with an auto-generated Google Meet link.
-     * Returns the Meet URL, or '' if Google is not connected / on any failure.
+     * Create a Google Calendar event. For a Meet appointment it carries an auto-generated Google Meet link;
+     * for a phone appointment it has NO conference, the number is in the title and the description.
+     * Returns the Meet URL, or '' if Google is not connected / phone / on any failure.
      */
     private function createGoogleEvent(object $row): string
     {
@@ -834,7 +1155,8 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
 
             $cal   = $g->calendar_id ?: 'primary';
             $tz    = $this->siteTz();
-            $dur   = (int) $this->params->get('slot_duration', 30);
+            $dur   = $this->rowDuration($row);
+            $phone = $this->rowLocation($row) === 'phone';
             $start = $row->booking_date . 'T' . $row->booking_time . ':00';
             $end   = (new \DateTime($start))->modify('+' . $dur . ' minutes')->format('Y-m-d\TH:i:s');
 
@@ -843,29 +1165,48 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                 $attendees[] = ['email' => $row->guest_email];
             }
 
+            $evName  = trim((string) ($row->event_name ?? ''));
+            $summary = ($evName !== '' ? $evName : 'WebG Booking') . ' - ' . $row->customer_name;
+            $desc    = (string) $row->notes;
+
+            if ($phone) {
+                $summary .= ' (' . Text::sprintf('PLG_SYSTEM_WEBGBOOKING_GCAL_PHONE_TITLE', $row->customer_phone) . ')';
+                $desc     = Text::sprintf('PLG_SYSTEM_WEBGBOOKING_GCAL_PHONE_DESC', $row->customer_name, $row->customer_phone)
+                    . ($desc !== '' ? "\n\n" . $desc : '');
+            }
+
             $payload = [
-                'summary'        => 'WebG Booking - ' . $row->customer_name,
-                'description'    => (string) $row->notes,
-                'start'          => ['dateTime' => $start, 'timeZone' => $tz],
-                'end'            => ['dateTime' => $end, 'timeZone' => $tz],
-                'attendees'      => $attendees,
-                'conferenceData' => ['createRequest' => [
+                'summary'     => $summary,
+                'description' => $desc,
+                'start'       => ['dateTime' => $start, 'timeZone' => $tz],
+                'end'         => ['dateTime' => $end, 'timeZone' => $tz],
+                'attendees'   => $attendees,
+            ];
+
+            if ($phone) {
+                $payload['location'] = Text::sprintf('PLG_SYSTEM_WEBGBOOKING_GCAL_PHONE_TITLE', $row->customer_phone);
+            } else {
+                $payload['conferenceData'] = ['createRequest' => [
                     'requestId'             => 'wgb-' . bin2hex(random_bytes(6)),
                     'conferenceSolutionKey' => ['type' => 'hangoutsMeet'],
-                ]],
-            ];
+                ]];
+            }
 
             // sendUpdates=all => Google emails the calendar invite to the customer and the guest.
             $resp = (new HttpFactory())->getHttp()->post(
-                'https://www.googleapis.com/calendar/v3/calendars/' . rawurlencode($cal) . '/events?conferenceDataVersion=1&sendUpdates=all',
+                'https://www.googleapis.com/calendar/v3/calendars/' . rawurlencode($cal) . '/events?' . ($phone ? '' : 'conferenceDataVersion=1&') . 'sendUpdates=all',
                 json_encode($payload),
                 ['Authorization' => 'Bearer ' . $token, 'Content-Type' => 'application/json']
             );
 
-            $data = json_decode((string) $resp->body, true) ?: [];
+            $data = json_decode(self::httpBody($resp), true) ?: [];
 
             if (!empty($data['id'])) {
                 $row->google_event_id = (string) $data['id'];
+            }
+
+            if ($phone) {
+                return '';
             }
 
             if (!empty($data['hangoutLink'])) {
@@ -903,7 +1244,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
      * working hours / interval / duration, minus min-notice and Google busy times.
      */
     /** Availability rules read once from the plugin params. */
-    private function slotConfig(): array
+    private function slotConfig(array $ev = []): array
     {
         $ws = explode(':', (string) $this->params->get('work_start', '09:00'));
         $we = explode(':', (string) $this->params->get('work_end', '18:00'));
@@ -914,17 +1255,17 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             'start'  => ((int) ($ws[0] ?? 9)) * 60 + (int) ($ws[1] ?? 0),
             'end'    => ((int) ($we[0] ?? 18)) * 60 + (int) ($we[1] ?? 0),
             'iv'     => max(5, (int) $this->params->get('slot_interval', 30)),
-            'dur'    => max(5, (int) $this->params->get('slot_duration', 30)),
+            'dur'    => isset($ev['dur']) ? max(5, (int) $ev['dur']) : max(5, (int) $this->params->get('slot_duration', 30)),
             'notice' => (int) $this->params->get('min_notice', 2) * 3600,
             'window' => max(1, (int) $this->params->get('window_days', 30)),
             'days'   => $wd ?: [1, 2, 3, 4, 5],
-            'bufBefore' => max(0, (int) $this->params->get('buffer_before', 0)) * 60,
-            'bufAfter'  => max(0, (int) $this->params->get('buffer_after', 0)) * 60,
+            'bufBefore' => (isset($ev['bb']) ? max(0, (int) $ev['bb']) : max(0, (int) $this->params->get('buffer_before', 0))) * 60,
+            'bufAfter'  => (isset($ev['ba']) ? max(0, (int) $ev['ba']) : max(0, (int) $this->params->get('buffer_after', 0))) * 60,
         ];
     }
 
     /** Available "HH:MM" slots for one day, given pre-fetched busy intervals. */
-    private function computeDay(string $dayStr, \DateTimeZone $tz, array $busy, int $now, array $c): array
+    private function computeDay(string $dayStr, \DateTimeZone $tz, array $busy, int $now, array $c, array $local = []): array
     {
         $slots = [];
 
@@ -949,6 +1290,17 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                 }
             }
 
+            // Existing bookings: the padded new slot must clear their raw time, and their own buffers must
+            // clear the raw new slot (the gap is the larger of the two buffers, not their sum).
+            if (!$conflict) {
+                foreach ($local as $b) {
+                    if (($winStart < $b[1] && $winEnd > $b[0]) || ($slotStart < $b[1] + $b[3] && $slotEnd > $b[0] - $b[2])) {
+                        $conflict = true;
+                        break;
+                    }
+                }
+            }
+
             if (!$conflict) {
                 $slots[] = sprintf('%02d:%02d', $hh, $mm);
             }
@@ -958,7 +1310,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
     }
 
     /** Slots for a single day (used as a fallback by the widget). */
-    private function availableSlots(string $date): void
+    private function availableSlots(string $date, array $ev = []): void
     {
         if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
             $this->respond(['slots' => []]);
@@ -970,7 +1322,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             $next = (new \DateTime($date . ' 00:00:00', $tz))->modify('+1 day')->format('Y-m-d');
             $busy = $this->googleBusy($date, $next, $tz);
 
-            $this->respond(['slots' => $this->computeDay($date, $tz, $busy, $now, $this->slotConfig())]);
+            $this->respond(['slots' => $this->computeDay($date, $tz, $busy, $now, $this->slotConfig($ev), $this->localBookings($date, $next, $tz))]);
         } catch (\Throwable $e) {
             $this->respond(['slots' => []]);
         }
@@ -981,7 +1333,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
      * decide which days are selectable AND which slots each day offers.
      * Returns { days: { "Y-m-d": ["HH:MM", ...] } } only for days with >=1 slot.
      */
-    private function monthSlots(string $from, string $to): void
+    private function monthSlots(string $from, string $to, array $ev = []): void
     {
         if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $from) || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $to)) {
             $this->respond(['days' => (object) []]);
@@ -990,7 +1342,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
         try {
             $tz    = new \DateTimeZone($this->siteTz());
             $now   = (new \DateTime('now', $tz))->getTimestamp();
-            $c     = $this->slotConfig();
+            $c     = $this->slotConfig($ev);
             $maxTs = (new \DateTime('today', $tz))->modify('+' . $c['window'] . ' days')->getTimestamp();
 
             $cur  = new \DateTime($from . ' 00:00:00', $tz);
@@ -1003,6 +1355,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
 
             $busyTo = (clone $last)->modify('+1 day')->format('Y-m-d');
             $busy   = $this->googleBusy($cur->format('Y-m-d'), $busyTo, $tz);
+            $local  = $this->localBookings($cur->format('Y-m-d'), $busyTo, $tz);
 
             $days = [];
 
@@ -1011,7 +1364,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                 $dayStr = $cur->format('Y-m-d');
 
                 if ($dts + 86400 > $now && $dts <= $maxTs && \in_array((int) $cur->format('w'), $c['days'], true)) {
-                    $slots = $this->computeDay($dayStr, $tz, $busy, $now, $c);
+                    $slots = $this->computeDay($dayStr, $tz, $busy, $now, $c, $local);
                     if ($slots) {
                         $days[$dayStr] = $slots;
                     }
@@ -1060,7 +1413,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                 ['Authorization' => 'Bearer ' . $token, 'Content-Type' => 'application/json']
             );
 
-            $data = (array) json_decode((string) $resp->body, true);
+            $data = (array) json_decode(self::httpBody($resp), true);
             $busy = [];
 
             foreach (($data['calendars'] ?? []) as $c) {
@@ -1120,9 +1473,13 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
         } catch (\Throwable $ex) {
         }
 
-        $meet = $row->meeting_url
-            ? '<tr><td>' . $e(Text::_('PLG_SYSTEM_WEBGBOOKING_EMAIL_MEET_BTN')) . '</td><td><a href="' . $e($row->meeting_url) . '">' . $e($row->meeting_url) . '</a></td></tr>'
-            : '';
+        if ($this->rowLocation($row) === 'phone') {
+            $meet = '<tr><td>' . $e(Text::_('PLG_SYSTEM_WEBGBOOKING_LOCATION')) . '</td><td>' . $e(Text::sprintf('PLG_SYSTEM_WEBGBOOKING_LOC_PHONE_AT', (string) $row->customer_phone)) . '</td></tr>';
+        } else {
+            $meet = $row->meeting_url
+                ? '<tr><td>' . $e(Text::_('PLG_SYSTEM_WEBGBOOKING_EMAIL_MEET_BTN')) . '</td><td><a href="' . $e($row->meeting_url) . '">' . $e($row->meeting_url) . '</a></td></tr>'
+                : '';
+        }
 
         // Reschedule widget: the booking calendar in calendar-only mode, authorised by the token.
         $asset = Uri::root(true) . '/plugins/system/webgbooking/yootheme/elements/booking/assets';
@@ -1140,6 +1497,8 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             'cols'    => 3,
             'mode'    => 'reschedule',
             'token'   => $row->manage_token,
+            'ev'      => self::signEv($this->eventFromRow($row), (string) $this->getApplication()->get('secret')),
+            'duration' => $this->rowDuration($row),
             'ajaxUrl' => Uri::root(true) . '/index.php?option=com_ajax&group=system&plugin=webgbooking&format=json',
             'labels'  => [
                 'stepTime'  => Text::_('PLG_SYSTEM_WEBGBOOKING_STEP_TIME'),
@@ -1197,14 +1556,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
         }
 
         try {
-            $db = Factory::getContainer()->get(DatabaseInterface::class);
-            $db->updateObject('#__webgbooking_bookings', (object) ['id' => $row->id, 'status' => 'cancelled'], 'id');
-
-            if (!empty($row->google_event_id)) {
-                $this->deleteGoogleEvent((string) $row->google_event_id);
-            }
-
-            $this->notifyCancellation($row);
+            $this->cancelRow($row, false);
         } catch (\Throwable $ex) {
         }
 
@@ -1215,12 +1567,70 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
         );
     }
 
-    /** Delete the Google Calendar event (and notify its attendees) on cancellation. */
-    private function deleteGoogleEvent(string $eventId): void
+    /**
+     * Cancel one booking from the admin (component list/detail, single or bulk). Does the same thing the
+     * customer's own "cancel" does: status, Google event removal, cancellation email to the customer (with an
+     * .ics CANCEL so it leaves their calendar). The staff notification is skipped: staff is the one cancelling.
+     *
+     * @return array{status:string, google:?bool, mail:bool}  status: ok | already | missing | error
+     */
+    public function adminCancelBooking(int $id): array
+    {
+        try {
+            $db  = Factory::getContainer()->get(DatabaseInterface::class);
+            $row = $db->setQuery(
+                $db->getQuery(true)
+                    ->select('*')
+                    ->from($db->quoteName('#__webgbooking_bookings'))
+                    ->where($db->quoteName('id') . ' = ' . (int) $id)
+            )->loadObject();
+
+            if (!$row) {
+                return ['status' => 'missing', 'google' => null, 'mail' => false];
+            }
+            if ($row->status === 'cancelled') {
+                return ['status' => 'already', 'google' => null, 'mail' => false];
+            }
+
+            return $this->cancelRow($row, true);
+        } catch (\Throwable $e) {
+            return ['status' => 'error', 'google' => null, 'mail' => false];
+        }
+    }
+
+    /** Shared cancellation: DB status, Google event, email. $byAdmin skips the staff notification. */
+    private function cancelRow(object $row, bool $byAdmin): array
+    {
+        $db  = Factory::getContainer()->get(DatabaseInterface::class);
+        $seq = (int) ($row->seq ?? 0) + 1;
+
+        // updateObject() takes the object BY REFERENCE: it must be a variable, not an inline (object) cast.
+        $changes = (object) [
+            'id'      => $row->id,
+            'status'  => 'cancelled',
+            'updated' => Factory::getDate()->toSql(),
+            'seq'     => $seq,
+        ];
+        $db->updateObject('#__webgbooking_bookings', $changes, 'id');
+        $row->status = 'cancelled';
+        $row->seq    = $seq;
+
+        $google = null;
+        if (!empty($row->google_event_id)) {
+            $google = $this->deleteGoogleEvent((string) $row->google_event_id);
+        }
+
+        $mail = $this->notifyCancellation($row, $byAdmin);
+
+        return ['status' => 'ok', 'google' => $google, 'mail' => $mail];
+    }
+
+    /** Delete the Google Calendar event (and notify its attendees) on cancellation. True when it is gone. */
+    private function deleteGoogleEvent(string $eventId): bool
     {
         try {
             if ($eventId === '') {
-                return;
+                return false;
             }
 
             $db = Factory::getContainer()->get(DatabaseInterface::class);
@@ -1229,21 +1639,47 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             )->loadObject();
 
             if (!$g || empty($g->refresh_token)) {
-                return;
+                return false;
             }
 
             $token = $this->googleAccessToken((string) $g->refresh_token);
             if ($token === '') {
-                return;
+                return false;
             }
 
-            $cal = $g->calendar_id ?: 'primary';
-            (new HttpFactory())->getHttp()->delete(
+            $cal  = $g->calendar_id ?: 'primary';
+            $resp = (new HttpFactory())->getHttp()->delete(
                 'https://www.googleapis.com/calendar/v3/calendars/' . rawurlencode($cal) . '/events/' . rawurlencode($eventId) . '?sendUpdates=all',
                 ['Authorization' => 'Bearer ' . $token]
             );
+
+            $code = self::httpCode($resp);
+
+            // 204/200 = deleted, 404/410 = already gone: both mean the calendar no longer holds it.
+            return ($code >= 200 && $code < 300) || $code === 404 || $code === 410;
         } catch (\Throwable $e) {
+            return false;
         }
+    }
+
+    /** HTTP status of a Joomla HTTP response (PSR-7 getStatusCode, or the legacy ->code property). */
+    private static function httpCode($resp): int
+    {
+        if (\is_object($resp) && method_exists($resp, 'getStatusCode')) {
+            return (int) $resp->getStatusCode();
+        }
+
+        return (int) ($resp->code ?? 0);
+    }
+
+    /** Body of a Joomla HTTP response (PSR-7 getBody, or the legacy ->body property). */
+    private static function httpBody($resp): string
+    {
+        if (\is_object($resp) && method_exists($resp, 'getBody')) {
+            return (string) $resp->getBody();
+        }
+
+        return (string) ($resp->body ?? '');
     }
 
     /** Self-service reschedule (JSON): validate the new slot, move the booking + the Google event. */
@@ -1271,31 +1707,62 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             $this->respond(['ok' => false, 'message' => Text::_('PLG_SYSTEM_WEBGBOOKING_RESCHEDULE_TOO_SOON')]);
         }
 
+        $db       = Factory::getContainer()->get(DatabaseInterface::class);
+        $lockName = $this->lockName($db, $date);
+        $locked   = false;
+        $slotOk   = false;
+
         try {
             $tz   = new \DateTimeZone($this->siteTz());
             $now  = (new \DateTime('now', $tz))->getTimestamp();
             $next = (new \DateTime($date . ' 00:00:00', $tz))->modify('+1 day')->format('Y-m-d');
             $busy = $this->googleBusy($date, $next, $tz);
+            $ev   = $this->eventFromRow($row);
 
             // The booking's own existing event must not block its new slot.
             if (!empty($row->google_event_id)) {
-                $dur      = (int) $this->params->get('slot_duration', 30);
+                $dur      = $this->rowDuration($row);
                 $oldStart = (new \DateTime($row->booking_date . ' ' . $row->booking_time . ':00', $tz))->getTimestamp();
                 $oldEnd   = $oldStart + $dur * 60;
                 $busy     = array_values(array_filter($busy, fn($b) => !($b[0] === $oldStart && $b[1] === $oldEnd)));
             }
 
-            $slots = $this->computeDay($date, $tz, $busy, $now, $this->slotConfig());
-            if (!\in_array($time, $slots, true)) {
+            $locked = $this->acquireLock($db, $lockName);
+            if (!$locked) {
                 $this->respond(['ok' => false, 'message' => Text::_('PLG_SYSTEM_WEBGBOOKING_RESCHEDULE_TAKEN')]);
             }
 
-            $seq = (int) ($row->seq ?? 0) + 1;
-            $db  = Factory::getContainer()->get(DatabaseInterface::class);
-            $db->updateObject('#__webgbooking_bookings', (object) ['id' => $row->id, 'booking_date' => $date, 'booking_time' => $time, 'updated' => Factory::getDate()->toSql(), 'seq' => $seq], 'id');
-            $row->booking_date = $date;
-            $row->booking_time = $time;
-            $row->seq          = $seq;
+            try {
+                $slots = $this->computeDay($date, $tz, $busy, $now, $this->slotConfig($ev), $this->localBookings($date, $next, $tz, (int) $row->id));
+                $slotOk = \in_array($time, $slots, true);
+
+                if ($slotOk) {
+                    $seq     = (int) ($row->seq ?? 0) + 1;
+                    $newTs   = (new \DateTime($date . ' ' . $time . ':00', $tz))->getTimestamp();
+                    $plan    = json_decode((string) ($row->reminder_cfg ?? ''), true);
+                    $changes = (object) [
+                        'id'           => $row->id,
+                        'booking_date' => $date,
+                        'booking_time' => $time,
+                        'updated'      => Factory::getDate()->toSql(),
+                        'seq'          => $seq,
+                    ];
+                    if (\is_array($plan)) {
+                        // The appointment moved: reminders start over for the new time.
+                        $changes->reminders_sent = (string) json_encode($this->pastOffsets($plan, $newTs, $now));
+                    }
+                    $db->updateObject('#__webgbooking_bookings', $changes, 'id');
+                    $row->booking_date = $date;
+                    $row->booking_time = $time;
+                    $row->seq          = $seq;
+                }
+            } finally {
+                $this->releaseLock($db, $lockName);
+            }
+
+            if (!$slotOk) {
+                $this->respond(['ok' => false, 'message' => Text::_('PLG_SYSTEM_WEBGBOOKING_RESCHEDULE_TAKEN')]);
+            }
 
             if (!empty($row->google_event_id)) {
                 $this->patchGoogleEvent($row);
@@ -1329,7 +1796,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
 
             $cal   = $g->calendar_id ?: 'primary';
             $tz    = $this->siteTz();
-            $dur   = (int) $this->params->get('slot_duration', 30);
+            $dur   = $this->rowDuration($row);
             $start = $row->booking_date . 'T' . $row->booking_time . ':00';
             $end   = (new \DateTime($start))->modify('+' . $dur . ' minutes')->format('Y-m-d\TH:i:s');
 
@@ -1342,27 +1809,209 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
         }
     }
 
-    /** Notify admin (and the customer) that a booking was cancelled. */
-    private function notifyCancellation(object $row): void
+    /**
+     * Cancellation emails. The customer always gets an HTML email with an .ics CANCEL (so it disappears from
+     * their calendar); staff gets a plain notice only when the customer cancelled by themselves.
+     * Returns true when the customer email was sent.
+     */
+    private function notifyCancellation(object $row, bool $byAdmin = false): bool
     {
+        $sent = false;
+
         try {
             $mf    = Factory::getContainer()->get(MailerFactoryInterface::class);
             $admin = trim((string) $this->params->get('notify_email', '')) ?: (string) $this->getApplication()->getConfig()->get('mailfrom');
 
-            if ($admin !== '') {
-                $m = $mf->createMailer();
-                $m->addRecipient($admin);
-                $m->setSubject(Text::sprintf('PLG_SYSTEM_WEBGBOOKING_CANCEL_ADMIN_SUBJECT', $row->booking_date, $row->booking_time));
-                $m->setBody(Text::sprintf('PLG_SYSTEM_WEBGBOOKING_CANCEL_ADMIN_BODY', $row->booking_date, $row->booking_time, $row->customer_name, $row->customer_email));
-                $m->Send();
+            if (!$byAdmin && $admin !== '') {
+                try {
+                    $m = $mf->createMailer();
+                    $m->addRecipient($admin);
+                    $m->setSubject(Text::sprintf('PLG_SYSTEM_WEBGBOOKING_CANCEL_ADMIN_SUBJECT', $row->booking_date, $row->booking_time));
+                    $m->setBody(Text::sprintf('PLG_SYSTEM_WEBGBOOKING_CANCEL_ADMIN_BODY', $row->booking_date, $row->booking_time, $row->customer_name, $row->customer_email));
+                    $m->Send();
+                } catch (\Throwable $e) {
+                }
             }
 
-            $c = $mf->createMailer();
-            $c->addRecipient($row->customer_email);
-            $c->setSubject(Text::_('PLG_SYSTEM_WEBGBOOKING_CANCEL_CUSTOMER_SUBJECT'));
-            $c->setBody(Text::sprintf('PLG_SYSTEM_WEBGBOOKING_CANCEL_CUSTOMER_BODY', $row->customer_name, $row->booking_date, $row->booking_time));
-            $c->Send();
+            $dateFmt = $row->booking_date;
+            try {
+                $dateFmt = (new \DateTime($row->booking_date))->format('d/m/Y');
+            } catch (\Throwable $e) {
+            }
+
+            $e    = fn($s) => htmlspecialchars((string) $s, ENT_QUOTES, 'UTF-8');
+            $body = '<p style="margin:0 0 14px;">' . $e(Text::_('PLG_SYSTEM_WEBGBOOKING_EMAIL_HELLO')) . ' ' . $e($row->customer_name) . ',</p>'
+                . '<p style="margin:0 0 14px;">' . $e(Text::sprintf($byAdmin ? 'PLG_SYSTEM_WEBGBOOKING_CANCEL_BY_STAFF_BODY' : 'PLG_SYSTEM_WEBGBOOKING_CANCEL_CUSTOMER_LINE', $dateFmt, $row->booking_time)) . '</p>'
+                . '<p style="margin:22px 0 0;">' . $e(Text::_('PLG_SYSTEM_WEBGBOOKING_EMAIL_SIGNOFF')) . '</p>';
+
+            $this->sendHtmlMail($mf, $row->customer_email, Text::_('PLG_SYSTEM_WEBGBOOKING_CANCEL_CUSTOMER_SUBJECT'), $this->wrapEmail($body), $this->buildIcs($row, 'CANCEL'), 'CANCEL');
+            $sent = true;
         } catch (\Throwable $e) {
+        }
+
+        return $sent;
+    }
+
+    // ------------------------------------------------------------------------------------------------
+    // Reminders (called by the Task Scheduler plugin plg_task_webgbookingreminders)
+    // ------------------------------------------------------------------------------------------------
+
+    /** Make the plugin strings follow the SITE default language (the scheduler may run in a CLI/other context). */
+    private function useSiteLanguage(): void
+    {
+        try {
+            $app = $this->getApplication();
+            $tag = (string) ComponentHelper::getParams('com_languages')->get('site', 'en-GB');
+            $cur = $app->getLanguage();
+
+            if ($cur->getTag() !== $tag) {
+                $cur = Factory::getContainer()->get(LanguageFactoryInterface::class)->createLanguage($tag, false);
+                if (method_exists($app, 'loadLanguage')) {
+                    $app->loadLanguage($cur);
+                } elseif (method_exists($app, 'setLanguage')) {
+                    $app->setLanguage($cur);
+                }
+                Factory::$language = $cur;
+            }
+
+            $cur->load('plg_system_webgbooking', JPATH_ADMINISTRATOR, null, true);
+            $cur->load('plg_system_webgbooking', JPATH_PLUGINS . '/system/webgbooking', null, true);
+        } catch (\Throwable $e) {
+        }
+    }
+
+    /**
+     * Send the due reminder emails. Idempotent and safe to call from several processes at once:
+     * each reminder is claimed with an atomic compare-and-set on `reminders_sent` BEFORE sending, so one
+     * booking never gets the same reminder twice; if sending fails the claim is released for the next run.
+     * Cancelled/completed/past bookings are never reminded.
+     *
+     * @return array{checked:int, sent:int, failed:int}
+     */
+    public function runReminders(int $limit = 300): array
+    {
+        $res = ['checked' => 0, 'sent' => 0, 'failed' => 0];
+
+        try {
+            if (!(bool) $this->params->get('reminders_enabled', 1)) {
+                return $res;
+            }
+
+            $this->useSiteLanguage();
+
+            $db  = Factory::getContainer()->get(DatabaseInterface::class);
+            $tz  = new \DateTimeZone($this->siteTz());
+            $now = (new \DateTime('now', $tz))->getTimestamp();
+            $lo  = (new \DateTime('today', $tz))->format('Y-m-d');
+            $hi  = (new \DateTime('today', $tz))->modify('+15 days')->format('Y-m-d');
+
+            $rows = $db->setQuery(
+                $db->getQuery(true)
+                    ->select('*')
+                    ->from($db->quoteName('#__webgbooking_bookings'))
+                    ->where($db->quoteName('status') . ' IN (' . $db->quote('pending') . ',' . $db->quote('confirmed') . ')')
+                    ->where($db->quoteName('booking_date') . ' >= ' . $db->quote($lo))
+                    ->where($db->quoteName('booking_date') . ' <= ' . $db->quote($hi))
+                    ->where($db->quoteName('reminder_cfg') . ' IS NOT NULL')
+                    ->where($db->quoteName('reminder_cfg') . ' != ' . $db->quote(''))
+                    ->order($db->quoteName('booking_date') . ' ASC')
+                    ->order($db->quoteName('booking_time') . ' ASC'),
+                0,
+                $limit
+            )->loadObjectList();
+
+            foreach ($rows ?: [] as $row) {
+                $res['checked']++;
+                $plan = json_decode((string) $row->reminder_cfg, true);
+                if (!\is_array($plan) || empty($plan['on']) || empty($plan['times'])) {
+                    continue;
+                }
+
+                $start = (new \DateTime($row->booking_date . ' ' . $row->booking_time . ':00', $tz))->getTimestamp();
+                if ($start <= $now) {
+                    continue; // already started or past
+                }
+
+                $sent = json_decode((string) ($row->reminders_sent ?? ''), true);
+                $sent = \is_array($sent) ? array_map('intval', $sent) : [];
+                $due  = [];
+                foreach ($plan['times'] as $m) {
+                    $m = (int) $m;
+                    if ($m > 0 && !\in_array($m, $sent, true) && $start - $m * 60 <= $now) {
+                        $due[] = $m;
+                    }
+                }
+                if (!$due) {
+                    continue;
+                }
+
+                // Several due at once (scheduler was off): one email, all of them are marked as done.
+                $oldJson = (string) ($row->reminders_sent ?? '');
+                $newJson = (string) json_encode(array_values(array_unique(array_merge($sent, $due))));
+
+                $db->setQuery(
+                    $db->getQuery(true)
+                        ->update($db->quoteName('#__webgbooking_bookings'))
+                        ->set($db->quoteName('reminders_sent') . ' = ' . $db->quote($newJson))
+                        ->where($db->quoteName('id') . ' = ' . (int) $row->id)
+                        ->where('COALESCE(' . $db->quoteName('reminders_sent') . ", '') = " . $db->quote($oldJson))
+                        ->where($db->quoteName('status') . ' IN (' . $db->quote('pending') . ',' . $db->quote('confirmed') . ')')
+                )->execute();
+
+                if ((int) $db->getAffectedRows() !== 1) {
+                    continue; // another process claimed it, or it was cancelled meanwhile
+                }
+
+                if ($this->sendReminder($row, $plan, min($due))) {
+                    $res['sent']++;
+                } else {
+                    $res['failed']++;
+                    // Release the claim so the next run retries (only while the appointment is still ahead).
+                    $db->setQuery(
+                        $db->getQuery(true)
+                            ->update($db->quoteName('#__webgbooking_bookings'))
+                            ->set($db->quoteName('reminders_sent') . ' = ' . $db->quote($oldJson))
+                            ->where($db->quoteName('id') . ' = ' . (int) $row->id)
+                            ->where($db->quoteName('reminders_sent') . ' = ' . $db->quote($newJson))
+                    )->execute();
+                }
+            }
+        } catch (\Throwable $e) {
+        }
+
+        return $res;
+    }
+
+    /** Build and send one reminder email to the customer. */
+    private function sendReminder(object $row, array $plan, int $offsetMin): bool
+    {
+        try {
+            $mf        = Factory::getContainer()->get(MailerFactoryInterface::class);
+            $manageUrl = $this->manageUrl($row, (string) ($plan['root'] ?? ''));
+            $dateFmt   = (new \DateTime($row->booking_date))->format('d/m/Y');
+            $tags      = ['{name}' => $row->customer_name, '{date}' => $dateFmt, '{time}' => $row->booking_time];
+
+            $subjectTpl = (string) ($plan['subject'] ?? '');
+            if ($subjectTpl === '') {
+                $subjectTpl = trim((string) $this->params->get('reminder_subject', '')) ?: Text::_('PLG_SYSTEM_WEBGBOOKING_REMINDER_SUBJECT');
+            }
+            $bodyTpl = (string) ($plan['body'] ?? '');
+            if ($bodyTpl === '') {
+                $bodyTpl = trim((string) $this->params->get('reminder_body', '')) ?: $this->bodyTemplate('PLG_SYSTEM_WEBGBOOKING_EMAIL_REMINDER');
+            }
+
+            // No .ics on a reminder: the appointment is already in their calendar from the confirmation.
+            $this->sendHtmlMail(
+                $mf,
+                $row->customer_email,
+                strtr($subjectTpl, $tags),
+                $this->wrapEmail($this->renderTpl($bodyTpl, $row, $manageUrl, $dateFmt)),
+                ''
+            );
+
+            return true;
+        } catch (\Throwable $e) {
+            return false;
         }
     }
 

@@ -35,6 +35,11 @@ class HtmlView extends BaseHtmlView
         }
 
         ToolbarHelper::title(Text::_('COM_WEBGBOOKING_BOOKING_DETAIL'), 'calendar');
+
+        // Cancel from the detail page too (same action as the list: Google event + customer email).
+        if ($this->item->status !== 'cancelled' && Factory::getApplication()->getIdentity()->authorise('core.edit.state', 'com_webgbooking')) {
+            ToolbarHelper::custom('booking.cancel', 'cancel', '', 'COM_WEBGBOOKING_TB_CANCEL', false);
+        }
         ToolbarHelper::back('JTOOLBAR_BACK', 'index.php?option=com_webgbooking&view=bookings');
 
         parent::display($tpl);

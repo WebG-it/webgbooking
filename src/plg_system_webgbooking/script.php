@@ -65,6 +65,13 @@ return new class () implements InstallerScriptInterface {
                 . $db->quoteName('updated') . ' DATETIME NULL,'
                 . $db->quoteName('seq') . ' INT NOT NULL DEFAULT 0,'
                 . $db->quoteName('custom_data') . ' TEXT NULL,'
+                . $db->quoteName('duration_min') . ' INT NULL,'
+                . $db->quoteName('buffer_before') . ' INT NULL,'
+                . $db->quoteName('buffer_after') . ' INT NULL,'
+                . $db->quoteName('location') . ' VARCHAR(20) NULL,'
+                . $db->quoteName('event_name') . ' VARCHAR(190) NULL,'
+                . $db->quoteName('reminder_cfg') . ' TEXT NULL,'
+                . $db->quoteName('reminders_sent') . ' TEXT NULL,'
                 . 'PRIMARY KEY (' . $db->quoteName('id') . '),'
                 . 'KEY ' . $db->quoteName('idx_date') . ' (' . $db->quoteName('booking_date') . ',' . $db->quoteName('booking_time') . '),'
                 . 'KEY ' . $db->quoteName('idx_token') . ' (' . $db->quoteName('manage_token') . ')'
@@ -80,6 +87,14 @@ return new class () implements InstallerScriptInterface {
                 'updated'         => 'DATETIME NULL',
                 'seq'             => 'INT NOT NULL DEFAULT 0',
                 'custom_data'     => 'TEXT NULL',
+                // 0.31.0: event type per element, where the meeting happens, reminders (idempotent ALTER)
+                'duration_min'    => 'INT NULL',
+                'buffer_before'   => 'INT NULL',
+                'buffer_after'    => 'INT NULL',
+                'location'        => 'VARCHAR(20) NULL',
+                'event_name'      => 'VARCHAR(190) NULL',
+                'reminder_cfg'    => 'TEXT NULL',
+                'reminders_sent'  => 'TEXT NULL',
             ];
             foreach ($newCols as $name => $def) {
                 try {

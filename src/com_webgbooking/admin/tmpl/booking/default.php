@@ -33,6 +33,12 @@ $row = static function (string $label, string $value, bool $raw = false) use ($e
 $custom = json_decode((string) ($i->custom_data ?? ''), true);
 $manageLink = Uri::root() . 'index.php?option=com_ajax&group=system&plugin=webgbooking&format=html&action=manage&token=' . rawurlencode((string) ($i->manage_token ?? ''));
 ?>
+<form action="<?php echo \Joomla\CMS\Router\Route::_('index.php?option=com_webgbooking&view=booking&id=' . (int) $i->id); ?>" method="post" name="adminForm" id="adminForm">
+    <input type="hidden" name="task" value="">
+    <input type="hidden" name="id" value="<?php echo (int) $i->id; ?>">
+    <input type="hidden" name="boxchecked" value="0">
+    <?php echo \Joomla\CMS\HTML\HTMLHelper::_('form.token'); ?>
+</form>
 <div class="p-3" style="max-width:820px">
     <div class="card">
         <div class="card-body">
@@ -60,6 +66,19 @@ $manageLink = Uri::root() . 'index.php?option=com_ajax&group=system&plugin=webgb
                     }
                 }
 
+                if (!empty($i->event_name)) {
+                    $row(Text::_('COM_WEBGBOOKING_DETAIL_EVENT'), (string) $i->event_name);
+                }
+                $isPhone = ($i->location ?? '') === 'phone';
+                $row(Text::_('COM_WEBGBOOKING_COL_LOCATION'), $isPhone ? Text::_('COM_WEBGBOOKING_LOC_PHONE') : Text::_('COM_WEBGBOOKING_LOC_MEET'));
+                if (!empty($i->duration_min)) {
+                    $row(Text::_('COM_WEBGBOOKING_DETAIL_DURATION'), (int) $i->duration_min . ' min');
+                }
+                $rs = json_decode((string) ($i->reminders_sent ?? ''), true);
+                $rc = json_decode((string) ($i->reminder_cfg ?? ''), true);
+                if (\is_array($rc) && !empty($rc['on']) && !empty($rc['times'])) {
+                    $row(Text::_('COM_WEBGBOOKING_DETAIL_REMINDERS'), Text::sprintf('COM_WEBGBOOKING_DETAIL_REMINDERS_VAL', implode(', ', array_map('intval', $rc['times'])), \is_array($rs) && $rs ? implode(', ', array_map('intval', $rs)) : '-'));
+                }
                 if (!empty($i->meeting_url)) {
                     $row(Text::_('COM_WEBGBOOKING_COL_MEETING'), '<a href="' . $e($i->meeting_url) . '" target="_blank" rel="noopener noreferrer">' . $e($i->meeting_url) . '</a>', true);
                 }

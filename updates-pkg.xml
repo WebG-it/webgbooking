@@ -3,17 +3,17 @@
 <updates>
     <update>
         <name>WebG Booking</name>
-        <description>WebG Booking package (component + system plugin).</description>
+        <description>WebG Booking package (component + system plugin + reminders task).</description>
         <element>pkg_webgbooking</element>
         <type>package</type>
-        <version>0.30.0</version>
+        <version>0.31.0</version>
         <maintainer>Marco Galassi (WebG)</maintainer>
         <maintainerurl>https://www.webg.it</maintainerurl>
         <infourl title="WebG Booking">https://github.com/WebG-it/webgbooking</infourl>
         <downloads>
-            <downloadurl type="full" format="zip">https://raw.githubusercontent.com/WebG-it/webgbooking/main/dist/pkg_webgbooking-0.30.0.zip</downloadurl>
+            <downloadurl type="full" format="zip">https://raw.githubusercontent.com/WebG-it/webgbooking/main/dist/pkg_webgbooking-0.31.0.zip</downloadurl>
         </downloads>
-        <sha256>2fa752f838b10bf5432c3169e59d7b7f6359dd71e233436bf2850ad7da24697f</sha256>
+        <sha256>c1b154ab0c9efb8c231772cc08f73e154b0b27ebce74515406392a2b74dd96d5</sha256>
         <tags>
             <tag>stable</tag>
         </tags>

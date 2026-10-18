@@ -26,6 +26,8 @@ return [
         'title' => '',
         'button_text' => '',
         'allow_guest' => true,
+        'event_location' => 'meet',
+        'act_reminder_on' => true,
         'layout' => 'inline',
         'card_style' => 'card',
         'slot_columns' => '3',
@@ -58,6 +60,34 @@ return [
             'type' => 'checkbox',
             'text' => 'Allow inviting a guest',
         ],
+        // --- Event type (per element, signed server-side via HMAC) ---
+        'event_duration' => [
+            'label' => 'Duration (minutes)',
+            'description' => 'Length of this appointment type, e.g. 30 or 60. Empty = the default duration in the plugin options. Availability and the Google event use this value.',
+            'type' => 'text',
+        ],
+        'event_buffer_before' => [
+            'label' => 'Buffer before (minutes)',
+            'description' => 'Free time kept before the appointment. Empty = the plugin option.',
+            'type' => 'text',
+        ],
+        'event_buffer_after' => [
+            'label' => 'Buffer after (minutes)',
+            'description' => 'Free time kept after the appointment. Empty = the plugin option.',
+            'type' => 'text',
+        ],
+        'event_location' => [
+            'label' => 'Where',
+            'description' => 'Google Meet: a Meet link is created. Phone call: the visitor must give a phone number and you call them (no link; the number goes in the event title, the emails and the .ics). Visitor choice: the widget lets them pick one of the two.',
+            'type' => 'select',
+            'options' => ['Google Meet' => 'meet', 'Phone call (I call the visitor)' => 'phone', 'Visitor choice' => 'choice'],
+        ],
+        'redirect_url' => [
+            'label' => 'Thank-you page URL',
+            'description' => 'Optional. After a completed booking the visitor is taken to this page (the analytics event is sent first). Empty = the confirmation stays in the widget. Absolute https:// URL or a path like /thanks.',
+            'type' => 'text',
+        ],
+
         // --- ACTIONS (per element, signed server-side via HMAC, not client-tamperable) ---
         'act_customer_on' => ['label' => 'Customer email', 'type' => 'checkbox', 'text' => 'Send the confirmation email to the customer', 'default' => true],
         'email_subject' => [
@@ -69,7 +99,7 @@ return [
         ],
         'email_body' => [
             'label' => 'Body (HTML)',
-            'description' => 'Placeholders: {name} {date} {time} {phone} {email} {notes} {custom} {meet_url} {cancel_url} {meet_block} {cancel_block}. Empty = styled default.',
+            'description' => 'Placeholders: {name} {date} {time} {phone} {email} {notes} {custom} {location} {duration} {event} {meet_url} {cancel_url} {meet_block} {cancel_block}. Empty = styled default.',
             'type' => 'editor',
             'mode' => 'text/html',
             'source' => true,
@@ -87,12 +117,32 @@ return [
         'staff_subject' => ['label' => 'Staff subject', 'type' => 'text', 'source' => true, 'enable' => 'act_staff_on'],
         'staff_body' => [
             'label' => 'Staff body (HTML)',
-            'description' => 'Placeholders: {name} {email} {phone} {date} {time} {notes} {custom}.',
+            'description' => 'Placeholders: {name} {email} {phone} {date} {time} {notes} {custom} {location} {duration} {event}.',
             'type' => 'editor',
             'mode' => 'text/html',
             'source' => true,
             'enable' => 'act_staff_on',
             'default' => "<p>Nuova prenotazione: <strong>{date}</strong> alle <strong>{time}</strong>.</p><p>Nome: {name}<br>Email: {email}<br>Telefono: {phone}</p><p>Note: {notes}</p>{custom}",
+        ],
+        'act_reminder_on' => ['label' => 'Reminders', 'type' => 'checkbox', 'text' => 'Send reminder emails to the customer before the appointment', 'default' => true],
+        'reminder_times' => [
+            'label' => 'Reminder times',
+            'description' => 'How long before the appointment, comma separated: <code>24h, 1h</code> (also 30m, 2d; a bare number = hours). Empty = the plugin options (default 24h, 1h).',
+            'type' => 'text',
+            'enable' => 'act_reminder_on',
+        ],
+        'reminder_subject' => [
+            'label' => 'Reminder subject',
+            'description' => 'Placeholders: {name} {date} {time}. Empty = default.',
+            'type' => 'text',
+            'enable' => 'act_reminder_on',
+        ],
+        'reminder_body' => [
+            'label' => 'Reminder body (HTML)',
+            'description' => 'Placeholders: {name} {date} {time} {phone} {email} {notes} {custom} {location} {duration} {event} {meet_url} {cancel_url} {meet_block} {cancel_block}. {meet_block} shows the Meet button or the "we call you" line. Empty = styled default.',
+            'type' => 'editor',
+            'mode' => 'text/html',
+            'enable' => 'act_reminder_on',
         ],
         'act_webhook_on' => ['label' => 'Webhook', 'type' => 'checkbox', 'text' => 'POST the booking to a webhook (Zapier / Make / Sheets)'],
         'webhook_url' => [
@@ -238,6 +288,10 @@ return [
                     'fields' => ['title', 'service', 'button_text', 'allow_guest', 'show_newsletter', 'analytics_event', 'layout'],
                 ],
                 [
+                    'title' => 'Event',
+                    'fields' => ['event_duration', 'event_buffer_before', 'event_buffer_after', 'event_location', 'redirect_url'],
+                ],
+                [
                     'title' => 'Form',
                     'fields' => ['custom_fields'],
                 ],
@@ -255,6 +309,12 @@ return [
                             'type' => 'group',
                             'divider' => true,
                             'fields' => ['act_staff_on', 'staff_to', 'staff_subject', 'staff_body'],
+                        ],
+                        [
+                            'label' => 'Reminders',
+                            'type' => 'group',
+                            'divider' => true,
+                            'fields' => ['act_reminder_on', 'reminder_times', 'reminder_subject', 'reminder_body'],
                         ],
                         [
                             'label' => 'Webhook',

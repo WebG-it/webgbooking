@@ -64,9 +64,15 @@ class BookingController extends BaseController
         $status = self::STATUS_TASKS[$task] ?? '';
 
         try {
-            $n = $ids ? $this->getModel('Booking')->setStatus($ids, $status) : 0;
+            $model = $this->getModel('Booking');
+            $n     = $ids ? $model->setStatus($ids, $status) : 0;
             if ($n > 0) {
                 $this->setMessage(Text::plural('COM_WEBGBOOKING_N_BOOKINGS_STATUS', $n, Text::_('COM_WEBGBOOKING_STATUS_' . strtoupper(str_replace('-', '', $status)))));
+                if ($status === 'cancelled') {
+                    $this->reportCancel($model->cancelReport);
+                }
+            } elseif ($status === 'cancelled' && $ids && ($model->cancelReport['already'] ?? 0) > 0) {
+                $this->setMessage(Text::_('COM_WEBGBOOKING_ALREADY_CANCELLED'), 'notice');
             } else {
                 $this->setMessage(Text::_('COM_WEBGBOOKING_NO_ROWS_SELECTED'), 'warning');
             }
@@ -75,6 +81,30 @@ class BookingController extends BaseController
         }
 
         $this->setRedirect(Route::_('index.php?option=com_webgbooking&view=bookings', false));
+    }
+
+    /** Tell the admin what the cancellation did besides changing the status. */
+    private function reportCancel(array $r): void
+    {
+        $app = Factory::getApplication();
+
+        if (empty($r['engine'])) {
+            $app->enqueueMessage(Text::_('COM_WEBGBOOKING_CANCEL_NO_ENGINE'), 'warning');
+
+            return;
+        }
+        if (($r['mail_ok'] ?? 0) > 0) {
+            $app->enqueueMessage(Text::plural('COM_WEBGBOOKING_CANCEL_MAIL_SENT', (int) $r['mail_ok']), 'message');
+        }
+        if (($r['google_ok'] ?? 0) > 0) {
+            $app->enqueueMessage(Text::plural('COM_WEBGBOOKING_CANCEL_GOOGLE_DELETED', (int) $r['google_ok']), 'message');
+        }
+        if (($r['mail_fail'] ?? 0) > 0) {
+            $app->enqueueMessage(Text::plural('COM_WEBGBOOKING_CANCEL_MAIL_FAILED', (int) $r['mail_fail']), 'warning');
+        }
+        if (($r['google_fail'] ?? 0) > 0) {
+            $app->enqueueMessage(Text::plural('COM_WEBGBOOKING_CANCEL_GOOGLE_FAILED', (int) $r['google_fail']), 'warning');
+        }
     }
 
     public function delete()

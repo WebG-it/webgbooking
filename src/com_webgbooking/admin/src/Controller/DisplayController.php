@@ -56,7 +56,7 @@ class DisplayController extends BaseController
         $out = fopen('php://output', 'w');
         // UTF-8 BOM so Excel opens accents correctly.
         fwrite($out, "\xEF\xBB\xBF");
-        fputcsv($out, ['ID', 'Created', 'Date', 'Time', 'Name', 'Email', 'Phone', 'Guest', 'Notes', 'Status', 'Meeting', 'Custom']);
+        fputcsv($out, ['ID', 'Created', 'Date', 'Time', 'Name', 'Email', 'Phone', 'Guest', 'Notes', 'Status', 'Meeting', 'Custom', 'Location', 'Duration', 'Event']);
 
         foreach ($rows ?: [] as $r) {
             fputcsv($out, array_map([$this, 'safeCell'], [
@@ -72,6 +72,9 @@ class DisplayController extends BaseController
                 $r->status,
                 $r->meeting_url ?? '',
                 $this->customText($r->custom_data ?? ''),
+                ($r->location ?? '') === 'phone' ? 'phone' : 'meet',
+                (string) ($r->duration_min ?? ''),
+                $r->event_name ?? '',
             ]));
         }
 
@@ -106,13 +109,14 @@ class DisplayController extends BaseController
                 ->order($db->quoteName('booking_time') . ' DESC')
         )->loadObjectList();
 
-        $data = [['ID', 'Created', 'Date', 'Time', 'Name', 'Email', 'Phone', 'Guest', 'Notes', 'Status', 'Meeting', 'Custom']];
+        $data = [['ID', 'Created', 'Date', 'Time', 'Name', 'Email', 'Phone', 'Guest', 'Notes', 'Status', 'Meeting', 'Custom', 'Location', 'Duration', 'Event']];
         foreach ($rows ?: [] as $r) {
             $data[] = [
                 (string) $r->id, (string) $r->created, (string) $r->booking_date, (string) $r->booking_time,
                 (string) $r->customer_name, (string) $r->customer_email, (string) ($r->customer_phone ?? ''),
                 (string) ($r->guest_email ?? ''), (string) ($r->notes ?? ''), (string) $r->status, (string) ($r->meeting_url ?? ''),
                 $this->customText($r->custom_data ?? ''),
+                ($r->location ?? '') === 'phone' ? 'phone' : 'meet', (string) ($r->duration_min ?? ''), (string) ($r->event_name ?? ''),
             ];
         }
 

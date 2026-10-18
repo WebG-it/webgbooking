@@ -70,6 +70,7 @@ $badgeClass = [
                     <th scope="col"><?php echo HTMLHelper::_('searchtools.sort', 'COM_WEBGBOOKING_COL_NAME', 'customer_name', $listDirn, $listOrder); ?></th>
                     <th scope="col"><?php echo HTMLHelper::_('searchtools.sort', 'COM_WEBGBOOKING_COL_EMAIL', 'customer_email', $listDirn, $listOrder); ?></th>
                     <th scope="col" class="d-none d-md-table-cell"><?php echo HTMLHelper::_('searchtools.sort', 'COM_WEBGBOOKING_COL_PHONE', 'customer_phone', $listDirn, $listOrder); ?></th>
+                    <th scope="col" class="d-none d-lg-table-cell"><?php echo Text::_('COM_WEBGBOOKING_COL_LOCATION'); ?></th>
                     <th scope="col" class="d-none d-lg-table-cell"><?php echo Text::_('COM_WEBGBOOKING_COL_MEETING'); ?></th>
                     <th scope="col"><?php echo HTMLHelper::_('searchtools.sort', 'COM_WEBGBOOKING_COL_STATUS', 'status', $listDirn, $listOrder); ?></th>
                     <th scope="col" class="d-none d-md-table-cell"><?php echo HTMLHelper::_('searchtools.sort', 'COM_WEBGBOOKING_COL_CREATED', 'created', $listDirn, $listOrder); ?></th>
@@ -77,7 +78,7 @@ $badgeClass = [
             </thead>
             <tbody>
                 <?php if (empty($this->items)) : ?>
-                    <tr><td colspan="9"><?php echo Text::_('COM_WEBGBOOKING_EMPTY'); ?></td></tr>
+                    <tr><td colspan="10"><?php echo Text::_('COM_WEBGBOOKING_EMPTY'); ?></td></tr>
                 <?php else : ?>
                     <?php foreach ($this->items as $rowNum => $i) : ?>
                         <?php
@@ -104,6 +105,12 @@ $badgeClass = [
                             </td>
                             <td><a href="mailto:<?php echo htmlspecialchars((string) $i->customer_email, ENT_QUOTES, 'UTF-8'); ?>"><?php echo htmlspecialchars((string) $i->customer_email, ENT_QUOTES, 'UTF-8'); ?></a></td>
                             <td class="d-none d-md-table-cell"><?php echo htmlspecialchars((string) ($i->customer_phone ?? ''), ENT_QUOTES, 'UTF-8'); ?></td>
+                            <td class="d-none d-lg-table-cell">
+                                <?php echo htmlspecialchars((($i->location ?? '') === 'phone' ? Text::_('COM_WEBGBOOKING_LOC_PHONE') : Text::_('COM_WEBGBOOKING_LOC_MEET')) . (!empty($i->duration_min) ? ' · ' . (int) $i->duration_min . ' min' : ''), ENT_QUOTES, 'UTF-8'); ?>
+                                <?php if (($i->location ?? '') === 'phone' && !empty($i->customer_phone)) : ?>
+                                    <div class="small text-muted"><?php echo htmlspecialchars((string) $i->customer_phone, ENT_QUOTES, 'UTF-8'); ?></div>
+                                <?php endif; ?>
+                            </td>
                             <td class="d-none d-lg-table-cell">
                                 <?php if (!empty($i->meeting_url)) : ?>
                                     <a href="<?php echo htmlspecialchars((string) $i->meeting_url, ENT_QUOTES, 'UTF-8'); ?>" target="_blank" rel="noopener noreferrer"><?php echo Text::_('COM_WEBGBOOKING_MEETING_LINK'); ?></a>

@@ -1,0 +1,54 @@
+{
+ "hour": {
+  "title": "Riunione 1 ora",
+  "service": "Riunione - 1 ora",
+  "event_duration": "60",
+  "event_buffer_before": "15",
+  "event_buffer_after": "15",
+  "event_location": "choice",
+  "redirect_url": "/wgbtest/thanks.html",
+  "allow_guest": true,
+  "analytics_event": "test_booking_done"
+ },
+ "half": {
+  "title": "Chiamata veloce",
+  "service": "Chiamata veloce",
+  "event_duration": "30",
+  "event_location": "phone",
+  "allow_guest": false
+ },
+ "def": {
+  "title": "Default"
+ },
+ "meet30": {
+  "title": "Meet 30",
+  "service": "Call Meet 30",
+  "event_duration": "30",
+  "event_location": "meet",
+  "reminder_times": "2h",
+  "reminder_subject": "Tra poco: {name}, ore {time}",
+  "reminder_body": "<p>Ciao {name}, ti ricordiamo l'incontro del {date} alle {time}.</p>{meet_block}<p>Luogo: {location} ({duration} min) - {event}</p>{cancel_block}"
+ },
+ "both": {
+  "_multi": [
+   {
+    "title": "Riunione 1 ora",
+    "service": "Riunione - 1 ora",
+    "event_duration": "60",
+    "event_buffer_before": "15",
+    "event_buffer_after": "15",
+    "event_location": "choice",
+    "redirect_url": "/wgbtest/thanks.html",
+    "allow_guest": true,
+    "analytics_event": "test_booking_done"
+   },
+   {
+    "title": "Chiamata veloce",
+    "service": "Chiamata veloce",
+    "event_duration": "30",
+    "event_location": "phone",
+    "allow_guest": false
+   }
+  ]
+ }
+}

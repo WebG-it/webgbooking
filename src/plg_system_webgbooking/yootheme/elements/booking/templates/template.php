@@ -16,6 +16,7 @@ use Joomla\CMS\Language\Text;
 use Joomla\CMS\Plugin\PluginHelper;
 use Joomla\CMS\Uri\Uri;
 use Joomla\Registry\Registry;
+use WebG\Plugin\System\Webgbooking\Extension\Webgbooking;
 
 \defined('_JEXEC') or die;
 
@@ -90,10 +91,43 @@ if ($cfRaw !== '') {
     }
 }
 
+// EVENT TYPE of this element: duration, buffers, where the meeting happens. Empty duration/buffers fall back to
+// the plugin options (resolved server-side on every request, so a change of the defaults applies at once).
+$numOrNull = static function ($v) {
+    $v = trim((string) $v);
+
+    return ($v !== '' && is_numeric($v) && (int) $v >= 0) ? (int) $v : null;
+};
+$evCfg = [
+    'dur'  => $numOrNull($props['event_duration'] ?? ''),
+    'bb'   => $numOrNull($props['event_buffer_before'] ?? ''),
+    'ba'   => $numOrNull($props['event_buffer_after'] ?? ''),
+    'loc'  => $enum($props['event_location'] ?? '', ['meet', 'phone', 'choice'], 'meet'),
+    'name' => mb_substr(trim(strip_tags($service)), 0, 120),
+];
+$shownDur = ($evCfg['dur'] ?? 0) > 0 ? (int) $evCfg['dur'] : (int) $pp->get('slot_duration', 30);
+$shownDur = max(5, min(480, $shownDur));
+
+// Thank-you page: absolute http(s) URL or a site path. Anything else is ignored.
+$redir = trim((string) ($props['redirect_url'] ?? ''));
+if ($redir !== '' && !preg_match('#^(https?://[^\s]+|/(?!/)[^\s]*)$#i', $redir)) {
+    $redir = '';
+}
+
+// Reminders: element override (on/off, times, text); empty times/text fall back to the plugin options.
+$remCfg = [
+    'on'      => !isset($props['act_reminder_on']) || !empty($props['act_reminder_on']),
+    'times'   => Webgbooking::parseTimes((string) ($props['reminder_times'] ?? '')),
+    'subject' => (string) ($props['reminder_subject'] ?? ''),
+    'body'    => (string) ($props['reminder_body'] ?? ''),
+];
+
 // Per-element ACTIONS config (customer email / staff email / webhook), signed with the site secret
 // so the client cannot tamper it (no spam-relay / no SSRF — the server only trusts what it signed).
 $actionsCfg = [
     'fields' => $customDefs,
+    'event' => $evCfg,
+    'reminder' => $remCfg,
     'customer' => [
         'on'      => !isset($props['act_customer_on']) || !empty($props['act_customer_on']),
         'subject' => (string) ($props['email_subject'] ?? ''),
@@ -111,12 +145,17 @@ $actionsCfg = [
         'method' => (string) ($props['webhook_method'] ?? 'POST'),
     ],
 ];
+$secret    = (string) Factory::getApplication()->get('secret');
 $payload   = base64_encode((string) json_encode($actionsCfg));
-$formToken = $payload . '.' . hash_hmac('sha256', $payload, (string) Factory::getApplication()->get('secret'));
+$formToken = $payload . '.' . hash_hmac('sha256', $payload, $secret);
+$evToken   = Webgbooking::signEv($evCfg, $secret); // small signed token for the GET availability calls
 
 $cfg = [
     'locale'    => $locale,
     'form'      => $formToken,
+    'ev'        => $evToken,
+    'location'  => $evCfg['loc'],
+    'redirectUrl' => $redir,
     'cols'      => $slotCols,
     'slotStyle' => $slotStyle,
     'slotSize'  => $slotSize ? 'uk-button-' . $slotSize : '',
@@ -129,7 +168,7 @@ $cfg = [
     'workStart' => $timeOk($pp->get('work_start', '09:00'), '09:00'),
     'workEnd'   => $timeOk($pp->get('work_end', '18:00'), '18:00'),
     'interval'  => (int) $pp->get('slot_interval', 30),
-    'duration'  => (int) $pp->get('slot_duration', 30),
+    'duration'  => $shownDur,
     'workDays'  => $workDays,
     'minNotice' => (int) $pp->get('min_notice', 2),
     'window'    => (int) $pp->get('window_days', 30),
@@ -147,6 +186,13 @@ $cfg = [
         'fGuest'      => Text::_('PLG_SYSTEM_WEBGBOOKING_FIELD_GUEST'),
         'fNewsletter' => Text::_('PLG_SYSTEM_WEBGBOOKING_FIELD_NEWSLETTER'),
         'emailNote'   => Text::_('PLG_SYSTEM_WEBGBOOKING_EMAIL_NOTE'),
+        'emailNotePhone' => Text::_('PLG_SYSTEM_WEBGBOOKING_EMAIL_NOTE_PHONE'),
+        'locChoice'   => Text::_('PLG_SYSTEM_WEBGBOOKING_LOC_CHOICE'),
+        'locMeet'     => Text::_('PLG_SYSTEM_WEBGBOOKING_LOC_MEET'),
+        'locPhone'    => Text::_('PLG_SYSTEM_WEBGBOOKING_LOC_PHONE'),
+        'fPhoneNeeded' => Text::_('PLG_SYSTEM_WEBGBOOKING_FIELD_PHONE_NEEDED'),
+        'phoneReq'    => Text::_('PLG_SYSTEM_WEBGBOOKING_PHONE_REQUIRED'),
+        'minShort'    => Text::_('PLG_SYSTEM_WEBGBOOKING_MINUTES'),
         'privacy'     => Text::_('PLG_SYSTEM_WEBGBOOKING_PRIVACY'),
         'bookNow'     => Text::_('PLG_SYSTEM_WEBGBOOKING_BOOK_NOW'),
         'required'    => Text::_('PLG_SYSTEM_WEBGBOOKING_REQUIRED'),
@@ -179,7 +225,7 @@ $uid = 'wgb-' . substr(md5(uniqid('', true)), 0, 8);
 // initial parse in BOTH the front end and the YOOtheme customizer preview — unlike WebAssetManager
 // scripts, which the customizer does not reliably flush to the live preview (the calendar stayed
 // blank). A MutationObserver in wgb.js then re-initialises every instance the builder re-renders.
-$wgbVer    = '0.30.0';
+$wgbVer    = '0.31.0';
 $wgbAsset  = Uri::root(true) . '/plugins/system/webgbooking/yootheme/elements/booking/assets';
 $assetTags = '<link rel="stylesheet" href="' . htmlspecialchars($wgbAsset . '/wgb.css?' . $wgbVer, ENT_QUOTES, 'UTF-8') . '">'
     . '<script src="' . htmlspecialchars($wgbAsset . '/wgb.js?' . $wgbVer, ENT_QUOTES, 'UTF-8') . '" defer></script>';
