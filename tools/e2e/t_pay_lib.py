@@ -49,8 +49,9 @@ def sessions():
         return {}
 
 
-def pay_in_mock(sid, amount=None):
-    jx("curl -sk 'https://api.stripe.com/__mock/pay?id=%s%s' >/dev/null" % (sid, ('&amount=%d' % amount) if amount else ''))
+def pay_in_mock(sid, amount=None, strict=False):
+    """The customer pays. strict=True: like the real Stripe, a session that is not open any more refuses the payment."""
+    jx("curl -sk 'https://api.stripe.com/__mock/pay?id=%s%s%s' >/dev/null" % (sid, ('&amount=%d' % amount) if amount else '', '&strict=1' if strict else ''))
 
 
 def event(etype, sid, eid=None, live=False):

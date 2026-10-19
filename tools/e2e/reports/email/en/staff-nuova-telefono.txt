@@ -1,0 +1,20 @@
+New booking
+===========
+A new appointment was booked.
+Service: Riunione - 1 ora
+Date: Monday 26/10/2026
+Time: 10:00 (CET, Europe/Rome)
+Duration: 60 minutes
+Where: Phone call to +39 347 555 0102
+
+CUSTOMER
+Name: Paolo Neri
+Email: paolo.neri@example.invalid
+Phone: +39 347 555 0102
+Booking no.: #479
+
+Open in the backend: http://localhost:8086/administrator/index.php?option=com_webgbooking&view=booking&id=479
+
+--
+wgbtest
+Notification from the booking system of wgbtest.

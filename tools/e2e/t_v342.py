@@ -54,7 +54,7 @@ check('Q5b ...and the builder shows it in Italian (no unresolved key)', d.get('u
 # ============================================================================ 6. admin diagnostics: how the visitor address is detected
 print('--- 6. IP diagnostics line')
 cases = [('173.245.48.5', '-', 'noheader', 'v4', '8.5'), ('::ffff:173.245.48.5', '198.51.100.9', 'cloudflare', 'v4mapped', '0.9'), ('2606:4700::1', '2001:db8::5', 'cloudflare', 'v6', '::5'),
-         ('8.8.8.8', '-', 'direct', 'v4', '8.8'), ('8.8.8.8', '1.2.3.4', 'unrecognized', 'v4', '8.8'), ('not-an-ip', '-', 'direct', 'unknown', ''), ('::ffff:8.8.8.8', '1.2.3.4', 'unrecognized', 'v4mapped', '8.8')]
+         ('8.8.8.8', '-', 'direct', 'v4', '8.8'), ('8.8.8.8', '1.2.3.4', 'unrecognized', 'v4', '8.8'), ('not-an-ip', '-', 'direct', 'unknown', ''), ('::ffff:8.8.8.8', '1.2.3.4', 'unrecognized', 'v4mapped', '8.8'), ('8.8.8.8', '8.8.8.8', 'restored', 'v4', '8.8'), ('::ffff:8.8.8.8', '8.8.8.8', 'restored', 'v4mapped', '8.8')]
 res = php_json("php /tmp/mock/ipcheck.php diag " + ' '.join("'%s' '%s'" % (c[0], c[1]) for c in cases))
 for rem, cf, mode, fmt, tail in cases:
     d = res.get(rem + '|' + cf, {})

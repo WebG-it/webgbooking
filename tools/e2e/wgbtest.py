@@ -90,6 +90,11 @@ def day(offset):
     return (datetime.date.today() + datetime.timedelta(days=offset)).isoformat()
 
 
+def dmy(iso):
+    """2026-10-28 as the plugin writes it in subjects and alerts: 28/10/2026."""
+    return '%s/%s/%s' % (iso[8:10], iso[5:7], iso[0:4])
+
+
 def mails():
     out = jx('ls /tmp/mail/*.eml 2>/dev/null | sort -V')
     return [p for p in out.split() if p.endswith('.eml')]
@@ -104,20 +109,22 @@ def decode_mail(raw):
     import email
     from email import policy
     try:
-        msg = email.message_from_string(raw.split('\r\n', 2)[2] if raw.startswith('X-Rcpt') else raw, policy=policy.default)
+        msg = email.message_from_bytes((raw.split('\r\n', 2)[2] if raw.startswith('X-Rcpt') else raw).encode('utf-8'), policy=policy.default)   # bytes: an 8bit utf-8 part keeps its accents
     except Exception:
         return {'subject': '', 'html': raw, 'ics': '', 'rcpt': ''}
-    html_part, ics = '', ''
+    html_part, ics, text_part = '', '', ''
     for part in msg.walk():
         ct = part.get_content_type()
         if ct == 'text/html':
             html_part = part.get_content()
-        elif ct == 'text/plain' and not html_part:
-            html_part = part.get_content()
+        elif ct == 'text/plain':
+            text_part = part.get_content()
+            if not html_part:
+                html_part = text_part
         elif ct == 'text/calendar':
             ics = part.get_payload(decode=True).decode('utf-8', 'replace')
     rcpt = re.search(r'X-Rcpt: (.*)', raw)
-    return {'subject': str(msg['Subject']), 'html': html_part, 'ics': ics, 'rcpt': rcpt.group(1) if rcpt else '', 'to': str(msg['To'])}
+    return {'subject': str(msg['Subject']), 'html': html_part, 'text': text_part, 'ics': ics, 'rcpt': rcpt.group(1) if rcpt else '', 'to': str(msg['To'])}
 
 
 RENDER = 'php /tmp/mock/render_el.php /tmp/mock/configs.json >/dev/null; chmod -R a+rX /var/www/html/wgbtest'

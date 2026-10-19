@@ -1,0 +1,19 @@
+Qualcosa richiede la tua attenzione
+===================================
+Prenotazione n. 470 (Anna Riva, anna.riva@example.invalid): non sono andati a buon fine questi passaggi: google. L'attivita' pianificata riprova da sola ogni pochi minuti, solo i passaggi mancanti.
+Servizio: Call Meet 30
+Data: Giovedì 29/10/2026
+Ora: 09:00 (CET, Europe/Rome)
+Durata: 30 minuti
+Dove: Google Meet
+
+CLIENTE
+Nome: Anna Riva
+Email: anna.riva@example.invalid
+Prenotazione n.: #470
+
+Apri nel backend: http://localhost:8086/administrator/index.php?option=com_webgbooking&view=booking&id=470
+
+--
+wgbtest
+Notifica del sistema di prenotazione di wgbtest.

@@ -29,11 +29,12 @@ use Joomla\Database\DatabaseInterface;
 use Joomla\Event\Event;
 use Joomla\Event\Priority;
 use Joomla\Event\SubscriberInterface;
+use WebG\Plugin\System\Webgbooking\Mail\EmailLayout;
 
 final class Webgbooking extends CMSPlugin implements SubscriberInterface
 {
     /** Cache-buster for the bundled front-end assets (wgb.css/js, UIkit). Bump when those change. */
-    public const ASSET_VER = '0.34.2';
+    public const ASSET_VER = '0.34.3';
 
     protected $autoloadLanguage = true;
 
@@ -386,7 +387,11 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                     )->execute();
                     $this->respond(['ok' => false, 'message' => Text::_('PLG_SYSTEM_WEBGBOOKING_PAY_UNAVAILABLE')]);
                 }
+                // The slot stays held for exactly as long as Stripe accepts the payment (never a window where Stripe takes money for a freed slot).
                 $upd = (object) ['id' => $row->id, 'stripe_session_id' => (string) $session['id']];
+                if (!empty($session['expires_at']) && (int) $session['expires_at'] > time()) {
+                    $upd->hold_until = Factory::getDate('@' . (int) $session['expires_at'])->toSql();
+                }
                 $db->updateObject('#__webgbooking_bookings', $upd, 'id');
                 // What the return page needs after the stored config has been cleared (no personal data).
                 $this->kvSet('ret:' . $session['id'], (string) json_encode(['redirect' => (string) ($actions['redirect'] ?? ''), 'analytics' => (string) ($actions['analytics'] ?? '')]));
@@ -627,9 +632,10 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
     /**
      * How the visitor address of a request is detected, for the admin diagnostics line: which rule applied, the format of
      * REMOTE_ADDR and only the LAST THREE characters of the detected address (never the address, never its hash).
-     * mode: cloudflare (header accepted: the connection comes from a Cloudflare range) | direct (no Cloudflare header)
-     *       | unrecognized (header present but REMOTE_ADDR outside the ranges: header ignored) | noheader (REMOTE_ADDR is in a
-     *       Cloudflare range but the header is missing: every visitor shows the edge address).
+     * mode: cloudflare (header accepted: the connection comes from a Cloudflare range) | restored (REMOTE_ADDR already equals the
+     *       header: the server restored the real IP) | direct (no Cloudflare header, real IP) | unrecognized (header present, REMOTE_ADDR
+     *       is another address outside the ranges: looks like a proxy not in the list) | noheader (REMOTE_ADDR in a Cloudflare
+     *       range but the header is missing: every visitor shows the edge address).
      */
     public function ipDiagnosis(string $remote, string $cfHeader): array
     {
@@ -644,14 +650,17 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
         } else {
             $fmt = 'unknown';
         }
-        $edge     = $fmt !== 'unknown' && $this->fromCloudflare(self::normalizeIp($remote));
+        $norm     = self::normalizeIp($remote);
+        $edge     = $fmt !== 'unknown' && $this->fromCloudflare($norm);
         $cfValid  = $cf !== '' && filter_var($cf, FILTER_VALIDATE_IP);
-        $detected = $fmt === 'unknown' ? '' : self::normalizeIp($remote);
+        $detected = $fmt === 'unknown' ? '' : $norm;
         if ($cfValid && $edge) {
             $mode     = 'cloudflare';
             $detected = $cf;
+        } elseif ($cfValid && self::normalizeIp($cf) === $norm) {
+            $mode = 'restored';          // the server already put the visitor address in REMOTE_ADDR (e.g. mod_remoteip): the real IP
         } elseif ($cfValid) {
-            $mode = 'unrecognized';
+            $mode = 'unrecognized';      // header present, REMOTE_ADDR is some other address that is not a listed Cloudflare range: looks like a proxy not in the list
         } elseif ($edge) {
             $mode = 'noheader';
         } else {
@@ -988,8 +997,10 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
         $when    = (new \DateTime($row->booking_date))->format('d/m/Y') . ' ' . $row->booking_time;
         $holdEnd = (new \DateTime((string) $row->hold_until, new \DateTimeZone('UTC')))->getTimestamp();
 
-        // Stripe wants expires_at between 30 minutes and 24 hours from now.
-        $expires = max($holdEnd + 90, time() + 31 * 60);
+        // The session ends exactly when the hold ends. Stripe only accepts 30 minutes to 24 hours from now, so a 30 minute
+        // hold gets a few seconds more: the hold is then moved to the session's real end (see handleBook), never the other way.
+        $expires = max($holdEnd, time() + 30 * 60 + 30);
+        $deadline = (new \DateTime('@' . $expires))->setTimezone(new \DateTimeZone($this->siteTz()))->format('d/m/Y H:i');
 
         [$code, $s] = $this->stripeCall('POST', '/v1/checkout/sessions', [
             'mode'                => 'payment',
@@ -998,6 +1009,8 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             'success_url'         => $base . '&action=payreturn&session_id={CHECKOUT_SESSION_ID}',
             'cancel_url'          => $base . '&action=paycancel',
             'expires_at'          => $expires,
+            // Said on the payment page itself, so a customer who leaves the tab open knows what happens after the deadline.
+            'custom_text'         => ['submit' => ['message' => Text::sprintf('PLG_SYSTEM_WEBGBOOKING_PAY_STRIPE_DEADLINE', $when, $deadline)]],
             'line_items'          => [[
                 'quantity'   => 1,
                 'price_data' => [
@@ -1256,7 +1269,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             $this->wlog(Text::sprintf('PLG_SYSTEM_WEBGBOOKING_LOG_FX_INCOMPLETE', (int) $row->id, implode(',', $failed), $tries));
             $this->alertStaff(
                 'fx' . (int) $row->id,
-                Text::sprintf('PLG_SYSTEM_WEBGBOOKING_ALERT_FX_SUBJECT', $row->booking_date, $row->booking_time),
+                Text::sprintf('PLG_SYSTEM_WEBGBOOKING_ALERT_FX_SUBJECT', $this->shortDate((string) $row->booking_date), $row->booking_time),
                 Text::sprintf('PLG_SYSTEM_WEBGBOOKING_ALERT_FX_BODY', (int) $row->id, $row->customer_name, $row->customer_email, implode(', ', $failed), $state === 'failed' ? Text::_('PLG_SYSTEM_WEBGBOOKING_ALERT_FX_GAVEUP') : Text::_('PLG_SYSTEM_WEBGBOOKING_ALERT_FX_WILLRETRY')),
                 12,
                 $row
@@ -1273,12 +1286,8 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             }
             $this->useSiteLanguage();
             $mf      = Factory::getContainer()->get(MailerFactoryInterface::class);
-            $e       = fn($s) => htmlspecialchars((string) $s, ENT_QUOTES, 'UTF-8');
             $dateFmt = (new \DateTime($row->booking_date))->format('d/m/Y');
-            $body    = '<p style="margin:0 0 14px;">' . $e(Text::_('PLG_SYSTEM_WEBGBOOKING_EMAIL_HELLO')) . ' ' . $e($row->customer_name) . ',</p>'
-                . '<p style="margin:0 0 14px;">' . $e(Text::sprintf('PLG_SYSTEM_WEBGBOOKING_LINKMAIL_INTRO', $dateFmt, $row->booking_time)) . '</p>'
-                . '<p style="margin:20px 0;"><a href="' . $e($row->meeting_url) . '" style="display:inline-block;background:#1f2937;color:#ffffff;text-decoration:none;padding:11px 22px;border-radius:8px;font-weight:600;">' . $e(Text::_('PLG_SYSTEM_WEBGBOOKING_EMAIL_MEET_BTN')) . '</a></p>';
-            $this->sendHtmlMail($mf, $row->customer_email, Text::_('PLG_SYSTEM_WEBGBOOKING_LINKMAIL_SUBJECT'), $this->wrapEmail($body), '');
+            $this->sendLayout($mf, $row->customer_email, Text::_('PLG_SYSTEM_WEBGBOOKING_LINKMAIL_SUBJECT'), $this->customerMail($row, 'link', $this->manageUrl($row), $dateFmt));
 
             return true;
         } catch (\Throwable $ex) {
@@ -1425,6 +1434,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
         $startTs    = (new \DateTime($row->booking_date . ' ' . $row->booking_time . ':00', $tz))->getTimestamp();
         $holdLapsed = $row->status === 'expired' || (!empty($row->hold_until) && Factory::getDate($row->hold_until)->toUnix() < time());
         $outcome    = 'confirmed';
+        $why        = '';
 
         $lockName = $this->lockName($db, $row->booking_date);
         if (!$this->acquireLock($db, $lockName)) {
@@ -1433,6 +1443,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
         try {
             if (!$amountOk || $startTs <= $nowT) {
                 $outcome = 'review';
+                $why     = !$amountOk ? 'amount' : 'past';
             } elseif ($holdLapsed) {
                 $next = (new \DateTime($row->booking_date . ' 00:00:00', $tz))->modify('+1 day')->format('Y-m-d');
                 $cfg  = $this->slotConfig($this->eventFromRow($row));
@@ -1442,10 +1453,12 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                 $busy = $this->googleBusy($row->booking_date, $next, $tz, false);
                 if ($busy === null) {
                     $outcome = 'review'; // cannot prove the slot is free: a person decides
+                    $why     = 'unknown';
                 } else {
                     $slots = $this->computeDay($row->booking_date, $tz, $busy, 0, $cfg, $this->localBookings($row->booking_date, $next, $tz, (int) $row->id));
                     if (!\in_array($row->booking_time, $slots, true)) {
                         $outcome = 'review';
+                        $why     = 'slot';
                     }
                 }
             }
@@ -1464,6 +1477,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                 $set[] = $db->quoteName('fx_tries') . ' = 0';
             } else {
                 $set[] = $db->quoteName('pending_ctx') . ' = NULL';
+                $set[] = $db->quoteName('review_why') . ' = ' . $db->quote($why);
             }
             if (\is_array($plan)) {
                 $set[] = $db->quoteName('reminders_sent') . ' = ' . $db->quote((string) json_encode($this->pastOffsets($plan, $startTs, $nowT)));
@@ -1491,7 +1505,9 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
         $row->stripe_payment_intent = $pi;
 
         if ($outcome === 'review') {
+            $row->review_why = $why;
             $this->notifyPaymentReview($row, $amountOk ? 'slot' : 'amount');
+            $this->notifyLatePayment($row, $why);        // the customer hears it at once, not only the staff
 
             return $amountOk ? 'review' : 'mismatch';
         }
@@ -1537,16 +1553,56 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
         return 'orphan';
     }
 
+    /** A button back to the page the customer booked from (or the site home). */
+    private function backButton(object $row, string $labelKey): string
+    {
+        $url = !empty($row->source_url) && preg_match('#^https?://#i', (string) $row->source_url) ? (string) $row->source_url : '';
+
+        return $url !== '' ? '<p><a class="btn btn-ghost" href="' . htmlspecialchars($url, ENT_QUOTES, 'UTF-8') . '">' . htmlspecialchars(Text::_($labelKey), ENT_QUOTES, 'UTF-8') . '</a></p>' : '';
+    }
+
+    /**
+     * Money arrived for a booking that cannot be confirmed (the slot was taken after the hold ended, or it cannot be
+     * checked): the CUSTOMER is told at once what happened and what to do, besides the staff alert.
+     * $why: slot | past (the time is no longer available) | unknown | amount (we are checking).
+     */
+    private function notifyLatePayment(object $row, string $why): void
+    {
+        try {
+            $this->useSiteLanguage();
+            $P    = 'PLG_SYSTEM_WEBGBOOKING_';
+            $mf   = Factory::getContainer()->get(MailerFactoryInterface::class);
+            $gone = \in_array($why, ['slot', 'past'], true);
+            $date = $this->mailDay((string) $row->booking_date);
+            // the day name opens a sentence in the box, but sits inside one here: Italian writes it in lower case
+            $inText = strncmp($this->langTag(), 'it', 2) === 0 ? mb_strtolower($date) : $date;
+            $amount = self::formatAmount((int) $row->amount_cents, (string) $row->currency, $this->langTag());
+            $back   = !empty($row->source_url) && preg_match('#^https?://#i', (string) $row->source_url) ? (string) $row->source_url : $this->siteRoot();
+            $m = [
+                'title'       => Text::_($gone ? $P . 'PAY_LATE_TITLE' : $P . 'PAY_LATE_SUBJECT_CHECK'),
+                'preheader'   => Text::sprintf($P . 'MAIL_PRE_APPT', $date, $row->booking_time),
+                'lead'        => [Text::_($P . 'EMAIL_HELLO') . ' ' . $row->customer_name . ',', Text::sprintf($gone ? $P . 'PAY_LATE_BODY_GONE' : $P . 'PAY_LATE_BODY_CHECK', $inText, $row->booking_time, $amount)],
+                'notices'     => [['tone' => 'warn', 'text' => Text::sprintf($P . 'EMAIL_PAID', $amount)]],
+                'summary'     => ['rows' => $this->mailRows($row, 'customer')],
+                'buttons'     => $gone ? [['label' => Text::_($P . 'PAY_LATE_CTA'), 'url' => $back, 'primary' => true]] : [],
+                'footer_note' => Text::_($P . 'EMAIL_FOOTER'),
+            ];
+            $this->sendLayout($mf, $row->customer_email, Text::_($gone ? $P . 'PAY_LATE_SUBJECT_GONE' : $P . 'PAY_LATE_SUBJECT_CHECK'), $m);
+        } catch (\Throwable $x) {
+            $this->wlog(Text::sprintf('PLG_SYSTEM_WEBGBOOKING_LOG_MAIL_FAILED', 'late payment', (int) $row->id));
+        }
+    }
+
     /** Staff alert: money received but the booking cannot stand (slot taken / amount differs / mode / orphan). Refund by hand. */
     private function notifyPaymentReview(object $row, string $why): void
     {
         $keys = ['amount' => 'PLG_SYSTEM_WEBGBOOKING_PAY_REVIEW_BODY_AMOUNT', 'mode' => 'PLG_SYSTEM_WEBGBOOKING_PAY_REVIEW_BODY_MODE', 'orphan' => 'PLG_SYSTEM_WEBGBOOKING_PAY_REVIEW_BODY_ORPHAN'];
         $this->alertStaff(
             'pay-' . $why . '-' . (int) $row->id,
-            Text::sprintf('PLG_SYSTEM_WEBGBOOKING_PAY_REVIEW_SUBJECT', $row->booking_date, $row->booking_time),
+            Text::sprintf('PLG_SYSTEM_WEBGBOOKING_PAY_REVIEW_SUBJECT', $this->shortDate((string) $row->booking_date), $row->booking_time),
             Text::sprintf(
                 $keys[$why] ?? 'PLG_SYSTEM_WEBGBOOKING_PAY_REVIEW_BODY_SLOT',
-                $row->booking_date,
+                $this->shortDate((string) $row->booking_date),
                 $row->booking_time,
                 $row->customer_name,
                 $row->customer_email,
@@ -1767,7 +1823,14 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             $this->htmlPage(Text::_('PLG_SYSTEM_WEBGBOOKING_PAY_OK_TITLE'), '<h1 class="ok">' . $e(Text::_('PLG_SYSTEM_WEBGBOOKING_PAY_OK_TITLE')) . '</h1><p class="muted">' . $e(Text::_('PLG_SYSTEM_WEBGBOOKING_PAY_OK_MSG')) . '</p>', $ga !== null ? $this->gaHead($ga) : '');
         }
         if (($row->payment_status ?? '') === 'paid') {
+            if (\in_array((string) ($row->review_why ?? ''), ['slot', 'past'], true)) {
+                // Paid after the time to pay, and the slot is gone: say so plainly, with a way to choose again.
+                $this->htmlPage(Text::_('PLG_SYSTEM_WEBGBOOKING_PAY_LATE_TITLE'), '<h1>' . $e(Text::_('PLG_SYSTEM_WEBGBOOKING_PAY_LATE_TITLE')) . '</h1><p class="muted">' . $e(Text::_('PLG_SYSTEM_WEBGBOOKING_PAY_LATE_MSG')) . '</p>' . $this->backButton($row, 'PLG_SYSTEM_WEBGBOOKING_PAY_LATE_CTA'));
+            }
             $this->htmlPage(Text::_('PLG_SYSTEM_WEBGBOOKING_PAY_REVIEW_TITLE'), '<h1>' . $e(Text::_('PLG_SYSTEM_WEBGBOOKING_PAY_REVIEW_TITLE')) . '</h1><p class="muted">' . $e(Text::_('PLG_SYSTEM_WEBGBOOKING_PAY_REVIEW_MSG')) . '</p>');
+        }
+        if ($row->status === 'expired') {
+            $this->htmlPage(Text::_('PLG_SYSTEM_WEBGBOOKING_PAY_EXPIRED_TITLE'), '<h1>' . $e(Text::_('PLG_SYSTEM_WEBGBOOKING_PAY_EXPIRED_TITLE')) . '</h1><p class="muted">' . $e(Text::_('PLG_SYSTEM_WEBGBOOKING_PAY_EXPIRED_MSG')) . '</p>' . $this->backButton($row, 'PLG_SYSTEM_WEBGBOOKING_PAY_CHOOSE_AGAIN'));
         }
 
         $this->htmlPage(Text::_('PLG_SYSTEM_WEBGBOOKING_PAY_PENDING_TITLE'), '<h1>' . $e(Text::_('PLG_SYSTEM_WEBGBOOKING_PAY_PENDING_TITLE')) . '</h1><p class="muted">' . $e(Text::_('PLG_SYSTEM_WEBGBOOKING_PAY_PENDING_MSG')) . '</p>');
@@ -1779,6 +1842,8 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
         $row = $this->bookingByTokenAny($token);
         $e   = fn($s) => htmlspecialchars((string) $s, ENT_QUOTES, 'UTF-8');
         $sk  = $this->stripeSecretOpt('stripe_sk');
+        // Already past its time to pay (not the customer pressing "back" just now): the page says the time ran out.
+        $wasExpired = $row && $row->status === 'expired' && ($row->payment_status ?? '') !== 'paid';
 
         if ($row && $row->status === 'awaiting_payment' && $sk !== '') {
             $sid = (string) ($row->stripe_session_id ?? '');
@@ -1805,6 +1870,9 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             )->execute();
         }
 
+        if ($wasExpired) {
+            $this->htmlPage(Text::_('PLG_SYSTEM_WEBGBOOKING_PAY_EXPIRED_TITLE'), '<h1>' . $e(Text::_('PLG_SYSTEM_WEBGBOOKING_PAY_EXPIRED_TITLE')) . '</h1><p class="muted">' . $e(Text::_('PLG_SYSTEM_WEBGBOOKING_PAY_EXPIRED_MSG')) . '</p>' . $this->backButton($row, 'PLG_SYSTEM_WEBGBOOKING_PAY_CHOOSE_AGAIN'));
+        }
         $back = $row && !empty($row->source_url) && preg_match('#^https?://#i', (string) $row->source_url)
             ? '<p><a class="btn btn-ghost" href="' . $e($row->source_url) . '">' . $e(Text::_('PLG_SYSTEM_WEBGBOOKING_PAY_BACK')) . '</a></p>' : '';
         $this->htmlPage(Text::_('PLG_SYSTEM_WEBGBOOKING_PAY_CANCELLED_TITLE'), '<h1>' . $e(Text::_('PLG_SYSTEM_WEBGBOOKING_PAY_CANCELLED_TITLE')) . '</h1><p class="muted">' . $e(Text::_('PLG_SYSTEM_WEBGBOOKING_PAY_CANCELLED_MSG')) . '</p>' . $back);
@@ -2749,7 +2817,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                     'attributes'     => (object) $attrs,
                     'includeListIds' => $lists,
                     'templateId'     => (int) $doi['template'],
-                    'redirectionUrl' => (string) (($doi['redirect'] ?? '') !== '' ? $doi['redirect'] : Uri::root()),
+                    'redirectionUrl' => (string) (($doi['redirect'] ?? '') !== '' ? $doi['redirect'] : $this->siteRoot()),
                 ], $key);
             } else {
                 [$code, $data] = $this->brevoCall('POST', '/v3/contacts', ['email' => $row->customer_email, 'attributes' => (object) $attrs], $key);
@@ -2893,6 +2961,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             $config = $this->getApplication()->getConfig();
             $admin  = trim((string) $this->params->get('notify_email', '')) ?: (string) $config->get('mailfrom');
             $mf     = Factory::getContainer()->get(MailerFactoryInterface::class);
+            $this->rootFrom($row);
             $manageUrl = $this->manageUrl($row);
 
             $dateFmt = $row->booking_date;
@@ -2932,6 +3001,26 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
         return $ok;
     }
 
+    /**
+     * Until 0.34.1 the builder showed an Italian email text as the default of the customer and staff body fields, and saved it
+     * when the element was stored. That text is the OLD default: it is fixed Italian, says "confirmed" even for a booking waiting
+     * for confirmation and has no payment line. A body that is exactly that text (whitespace, quote style and entities forgiven)
+     * is treated as empty, so the element takes the current translated default. Any edited text is left alone.
+     */
+    private static function isLegacyDefaultBody(string $body): bool
+    {
+        if (trim($body) === '') {
+            return false;
+        }
+        $b = html_entity_decode($body, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $b = str_replace('"', "'", $b);
+        $b = (string) preg_replace('/<br\s*\/?>/i', '<br>', $b);
+        $b = (string) preg_replace('/\s+/u', ' ', $b);
+        $b = (string) preg_replace('/>\s+</', '><', $b);
+
+        return \in_array(md5(trim($b)), ['dcc4ea0bdf679aff87a7dea35287626d', 'f406d3e589bc3a2f0123a0a21097ad3e'], true);
+    }
+
     /** Customer email. */
     private function notifyCustomer(object $row, bool $reschedule, $mf, string $manageUrl, string $dateFmt): void
     {
@@ -2939,18 +3028,22 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
 
         // ---- Customer email action (and invited guest). Skipped if the action is off. ----
         if ($reschedule || ($row->_custOn ?? true)) {
+            $isRequest = false;
             if ($reschedule) {
                 $subject = self::fillTpl(Text::_('PLG_SYSTEM_WEBGBOOKING_RESCHEDULE_EMAIL_SUBJECT'), ['{name}' => $row->customer_name, '{date}' => $dateFmt, '{time}' => $row->booking_time]);
-                $bodyTpl = $this->bodyTemplate('PLG_SYSTEM_WEBGBOOKING_EMAIL_RESCHEDULED');
+                $bodyTpl = '';
             } else {
                 $elSub      = (string) ($row->emailSubjectTpl ?? '');
                 $elBody     = (string) ($row->emailBodyTpl ?? '');
+                if (self::isLegacyDefaultBody($elBody)) {
+                    $elBody = '';
+                }
                 $isRequest  = (string) ($row->status ?? '') === 'pending';
                 $subjectTpl = $elSub !== '' ? $elSub : (trim((string) $this->params->get('email_subject', '')) ?: Text::_($isRequest ? 'PLG_SYSTEM_WEBGBOOKING_EMAIL_CUSTOMER_SUBJECT_REQUEST' : 'PLG_SYSTEM_WEBGBOOKING_EMAIL_CUSTOMER_SUBJECT'));
                 $subject    = self::fillTpl($subjectTpl, ['{name}' => $row->customer_name, '{date}' => $dateFmt, '{time}' => $row->booking_time]);
-                $bodyTpl    = $elBody !== '' ? $elBody : (trim((string) $this->params->get('email_body', '')) ?: $this->defaultEmailBody($isRequest));
+                $bodyTpl    = $elBody !== '' ? $elBody : trim((string) $this->params->get('email_body', ''));
             }
-            $this->sendHtmlMail($mf, $row->customer_email, $subject, $this->wrapEmail($this->renderTpl($bodyTpl, $row, $manageUrl, $dateFmt, !$reschedule)), $ics);
+            $this->sendLayout($mf, $row->customer_email, $subject, $this->customerMail($row, $reschedule ? 'rescheduled' : ($isRequest ? 'request' : 'confirmed'), $manageUrl, $dateFmt, $bodyTpl), $ics);
 
         }
     }
@@ -2963,7 +3056,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
         }
         $icsGuest = $this->buildIcs($row, $reschedule ? 'REQUEST' : 'PUBLISH', true);
         $gSubject = self::fillTpl(Text::_('PLG_SYSTEM_WEBGBOOKING_EMAIL_GUEST_SUBJECT'), ['{name}' => $row->customer_name, '{date}' => $dateFmt, '{time}' => $row->booking_time]);
-        $this->sendHtmlMail($mf, $row->guest_email, $gSubject, $this->wrapEmail($this->guestEmailBody($row, $dateFmt)), $icsGuest);
+        $this->sendLayout($mf, $row->guest_email, $gSubject, $this->customerMail($row, 'guest', '', $dateFmt), $icsGuest);
     }
 
     /** Keep only valid addresses of a comma separated list (max 500 chars). */
@@ -2999,86 +3092,377 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
     /** Staff email: per-element HTML template, or the plain default. */
     private function notifyStaff(object $row, $mf, string $manageUrl, string $dateFmt, string $admin, bool $moved = false): void
     {
-        // ---- Staff email action: per-element HTML template, or the plain default. ----
-        if ($row->_staffOn ?? true) {
-            $tos = $this->staffRecipients($row);
-            if ($tos) {
-                $sSubTpl = (string) ($row->_staffSubject ?? '');
-                $sSub    = $moved ? Text::sprintf('PLG_SYSTEM_WEBGBOOKING_EMAIL_ADMIN_SUBJECT_MOVED', $row->booking_date, $row->booking_time) : ($sSubTpl !== '' ? self::fillTpl($sSubTpl, ['{name}' => $row->customer_name, '{date}' => $dateFmt, '{time}' => $row->booking_time]) : Text::sprintf('PLG_SYSTEM_WEBGBOOKING_EMAIL_ADMIN_SUBJECT', $row->booking_date, $row->booking_time));
-                $sBody   = $moved ? '' : (string) ($row->_staffBody ?? '');
-                if ($sBody !== '') {
-                    $this->sendHtmlMail($mf, $tos, $sSub, $this->wrapEmail($this->renderTpl($sBody, $row, $manageUrl, $dateFmt)), '');
-                } else {
-                    $meetLine  = $this->rowLocation($row) === 'phone'
-                        ? ' ' . Text::sprintf('PLG_SYSTEM_WEBGBOOKING_STAFF_PHONE_LINE', (string) $row->customer_phone, $this->rowDuration($row))
-                        : (!empty($row->meeting_url) ? ' ' . Text::sprintf('PLG_SYSTEM_WEBGBOOKING_MEET_LINE', $row->meeting_url) : '');
-                    $guestLine = !empty($row->guest_email) ? "\n" . Text::sprintf('PLG_SYSTEM_WEBGBOOKING_EMAIL_GUEST_LINE', $row->guest_email) : '';
-                    if (($row->payment_status ?? '') === 'paid') {
-                        $guestLine .= "\n" . Text::sprintf('PLG_SYSTEM_WEBGBOOKING_STAFF_PAID_LINE', self::formatAmount((int) $row->amount_cents, (string) $row->currency, $this->langTag()), (string) ($row->stripe_payment_intent ?? ''));
-                    }
-                    $custLines = '';
-                    foreach ($this->customAnswers($row) as $it) {
-                        $custLines .= "\n" . $it['l'] . ': ' . $it['v'];
-                    }
-                    $m = $mf->createMailer();
-                    $m->addRecipient($tos);
-                    $m->setSubject($sSub);
-                    $movedLine = $moved ? Text::sprintf('PLG_SYSTEM_WEBGBOOKING_EMAIL_ADMIN_MOVED_INTRO', (string) ($row->_prevDate ?? ''), (string) ($row->_prevTime ?? '')) . "\n\n" : '';
-                    $m->setBody($movedLine . Text::sprintf('PLG_SYSTEM_WEBGBOOKING_EMAIL_ADMIN_BODY', $row->booking_date, $row->booking_time, $row->customer_name, $row->customer_email, $row->customer_phone ?: '-', $row->notes ?: '-') . $meetLine . $guestLine . $custLines);
-                    $m->Send();
-                }
-            }
+        if (!($row->_staffOn ?? true)) {
+            return;
         }
+        $tos = $this->staffRecipients($row);
+        if (!$tos) {
+            return;
+        }
+        $sSubTpl = (string) ($row->_staffSubject ?? '');
+        $sSub    = $moved
+            ? Text::sprintf('PLG_SYSTEM_WEBGBOOKING_EMAIL_ADMIN_SUBJECT_MOVED', $this->shortDate((string) $row->booking_date), $row->booking_time)
+            : ($sSubTpl !== '' ? self::fillTpl($sSubTpl, ['{name}' => $row->customer_name, '{date}' => $dateFmt, '{time}' => $row->booking_time]) : Text::sprintf('PLG_SYSTEM_WEBGBOOKING_EMAIL_ADMIN_SUBJECT', $this->shortDate((string) $row->booking_date), $row->booking_time));
+        $sBody = $moved ? '' : (string) ($row->_staffBody ?? '');
+        if (self::isLegacyDefaultBody($sBody)) {
+            $sBody = '';
+        }
+        $this->sendLayout($mf, $tos, $sSub, $this->staffMail($row, $moved ? 'moved' : 'new', $manageUrl, $dateFmt, $sBody));
     }
 
     /** Self-service management URL (cancel / future reschedule), authorised by the per-booking token. */
     private function manageUrl(object $row, string $root = ''): string
     {
         if ($root === '') {
-            try {
-                $root = Uri::root();
-            } catch (\Throwable $e) {
-                $root = '';
-            }
+            $root = $this->siteRoot();
         }
 
         return $root . 'index.php?option=com_ajax&group=system&plugin=webgbooking&format=html&action=manage&token=' . rawurlencode((string) $row->manage_token);
     }
 
+    // ------------------------------------------------------------------------------------------------
+    // Emails: ONE layout for all of them (Mail/EmailLayout.php). The functions below only say WHAT goes in.
+    // ------------------------------------------------------------------------------------------------
+
+    /** Address of the site; from the scheduler or the command line there is no web request, so the address stored with the booking is used. */
+    private string $rootHint = '';
+
+    private function siteRoot(): string
+    {
+        try {
+            return Uri::root();
+        } catch (\Throwable $e) {
+            return $this->rootHint;
+        }
+    }
+
+    /** Remember the site address saved on a booking (reminder_cfg.root) for emails sent outside a web request. */
+    private function rootFrom(object $row): void
+    {
+        $cfg = json_decode((string) ($row->reminder_cfg ?? ''), true);
+        if (\is_array($cfg) && !empty($cfg['root'])) {
+            $this->rootHint = (string) $cfg['root'];
+        }
+    }
+
+    /** Branding from the plugin options. Neutral by default: no logo, blue accent, the site name. */
+    private function mailBrand(): array
+    {
+        $accent = EmailLayout::hex((string) $this->params->get('mail_color', ''), '#2b59c3');
+
+        return [
+            'name'      => trim((string) $this->getApplication()->get('sitename', '')) ?: 'WebG Booking',
+            'logo'      => $this->mediaUrl((string) $this->params->get('mail_logo', '')),
+            'logo_dark' => $this->mediaUrl((string) $this->params->get('mail_logo_dark', '')),
+            'color'     => $accent,
+            'button'    => EmailLayout::hex((string) $this->params->get('mail_button_color', ''), $accent),
+            'footer'    => trim((string) $this->params->get('mail_footer', '')),
+            'line'         => EmailLayout::hex((string) $this->params->get('mail_line_color', ''), ''),
+            'link'         => EmailLayout::hex((string) $this->params->get('mail_link_color', ''), ''),
+            'text'         => EmailLayout::hex((string) $this->params->get('mail_text_color', ''), ''),
+            'footer_color' => EmailLayout::hex((string) $this->params->get('mail_footer_color', ''), ''),
+            'site_url'  => $this->siteRoot(),
+        ];
+    }
+
+    /** Address of an image chosen with the media field ("images/logo.png#joomlaImage://..."): https/http as is, a path under the site root. */
+    private function mediaUrl(string $v): string
+    {
+        $v = trim(explode('#', $v, 2)[0]);
+        if ($v === '') {
+            return '';
+        }
+        if (preg_match('#^https?://[^\s"<>]+$#i', $v)) {
+            return $v;
+        }
+        if (preg_match('#^[A-Za-z0-9_./ %()-]+$#', $v) && strpos($v, '..') === false) {
+            return $this->siteRoot() . str_replace(' ', '%20', ltrim($v, '/'));
+        }
+
+        return '';
+    }
+
+    /** Date for subjects and alerts in the order of the site language (28/10/2026; 10/28/2026 only for US English), instead of the stored 2026-10-28. */
+    private function shortDate(string $date): string
+    {
+        try {
+            return (new \DateTime($date))->format($this->langTag() === 'en-US' ? 'm/d/Y' : 'd/m/Y');
+        } catch (\Throwable $e) {
+            return $date;
+        }
+    }
+
+    /** "Wednesday 21/10/2026" in the language of the site (weekday names are plugin strings: no dependency on a core language pack). */
+    private function mailDay(string $date): string
+    {
+        try {
+            $dt = new \DateTime($date);
+
+            return Text::_('PLG_SYSTEM_WEBGBOOKING_MAIL_DAY_' . $dt->format('w')) . ' ' . $dt->format('d/m/Y');
+        } catch (\Throwable $e) {
+            return $date;
+        }
+    }
+
+    /** "15:00 (CEST, Europe/Rome)": the time with its zone. */
+    private function mailTime(object $row): string
+    {
+        try {
+            $tz = new \DateTimeZone($this->siteTz());
+            $dt = new \DateTime($row->booking_date . ' ' . $row->booking_time . ':00', $tz);
+
+            return $row->booking_time . ' (' . $dt->format('T') . ', ' . $tz->getName() . ')';
+        } catch (\Throwable $e) {
+            return (string) $row->booking_time;
+        }
+    }
+
+    /** Rows of the appointment box. $who: customer | guest | staff. A value may be [text, url]. */
+    private function mailRows(object $row, string $who = 'customer'): array
+    {
+        $rows = [];
+        $svc  = trim((string) ($row->event_name ?? ''));
+        if ($svc !== '') {
+            $rows[] = [Text::_('PLG_SYSTEM_WEBGBOOKING_MAIL_L_SERVICE'), $svc];
+        }
+        $rows[] = [Text::_('PLG_SYSTEM_WEBGBOOKING_MAIL_L_DATE'), $this->mailDay((string) $row->booking_date)];
+        $rows[] = [Text::_('PLG_SYSTEM_WEBGBOOKING_MAIL_L_TIME'), $this->mailTime($row)];
+        $rows[] = [Text::_('PLG_SYSTEM_WEBGBOOKING_MAIL_L_DURATION'), Text::sprintf('PLG_SYSTEM_WEBGBOOKING_MAIL_DURATION_VALUE', $this->rowDuration($row))];
+        if ($this->rowLocation($row) === 'phone') {
+            $rows[] = [Text::_('PLG_SYSTEM_WEBGBOOKING_MAIL_L_WHERE'), $who === 'guest' ? Text::_('PLG_SYSTEM_WEBGBOOKING_MAIL_WHERE_PHONE') : Text::sprintf('PLG_SYSTEM_WEBGBOOKING_LOC_PHONE_AT', (string) $row->customer_phone)];
+        } else {
+            $url    = (string) ($row->meeting_url ?? '');
+            $rows[] = [Text::_('PLG_SYSTEM_WEBGBOOKING_MAIL_L_WHERE'), $url !== '' ? [Text::_('PLG_SYSTEM_WEBGBOOKING_LOC_MEET'), $url] : Text::_('PLG_SYSTEM_WEBGBOOKING_LOC_MEET')];
+        }
+        if ($who !== 'guest' && ($row->payment_status ?? '') === 'paid' && (int) ($row->amount_cents ?? 0) > 0) {
+            $amt    = self::formatAmount((int) $row->amount_cents, (string) $row->currency, $this->langTag());
+            $rows[] = [Text::_('PLG_SYSTEM_WEBGBOOKING_MAIL_L_PAYMENT'), $who === 'staff' ? Text::sprintf('PLG_SYSTEM_WEBGBOOKING_STAFF_PAID_LINE', $amt, (string) ($row->stripe_payment_intent ?? '')) : $amt];
+        }
+
+        return $rows;
+    }
+
+    /** "Add to Google Calendar" link built from the booking (no secret in it). */
+    private function mailCalendarUrl(object $row): string
+    {
+        try {
+            $tz = new \DateTimeZone($this->siteTz());
+            $s  = (new \DateTime($row->booking_date . ' ' . $row->booking_time . ':00', $tz))->setTimezone(new \DateTimeZone('UTC'));
+            $e  = (clone $s)->modify('+' . $this->rowDuration($row) . ' minutes');
+
+            return 'https://calendar.google.com/calendar/render?' . http_build_query([
+                'action'  => 'TEMPLATE',
+                'text'    => trim((string) ($row->event_name ?? '')) ?: (string) $this->getApplication()->get('sitename', 'WebG Booking'),
+                'dates'   => $s->format('Ymd\THis\Z') . '/' . $e->format('Ymd\THis\Z'),
+                'details' => $this->rowLocation($row) === 'phone' ? '' : (string) ($row->meeting_url ?? ''),
+            ]);
+        } catch (\Throwable $x) {
+            return '';
+        }
+    }
+
+    private function mailBackendUrl(object $row): string
+    {
+        return $this->siteRoot() . 'administrator/index.php?option=com_webgbooking&view=booking&id=' . (int) $row->id;
+    }
+
+    /** The data of the customer and the answers of the form, as sections of a staff email. */
+    private function mailStaffSections(object $row): array
+    {
+        $cust = [[Text::_('PLG_SYSTEM_WEBGBOOKING_MAIL_L_NAME'), (string) $row->customer_name], [Text::_('PLG_SYSTEM_WEBGBOOKING_MAIL_L_EMAIL'), (string) $row->customer_email]];
+        if (trim((string) $row->customer_phone) !== '') {
+            $cust[] = [Text::_('PLG_SYSTEM_WEBGBOOKING_MAIL_L_PHONE'), (string) $row->customer_phone];
+        }
+        if (!empty($row->guest_email)) {
+            $cust[] = [Text::_('PLG_SYSTEM_WEBGBOOKING_MAIL_L_GUEST'), (string) $row->guest_email];
+        }
+        if (trim((string) $row->notes) !== '') {
+            $cust[] = [Text::_('PLG_SYSTEM_WEBGBOOKING_MAIL_L_NOTES'), (string) $row->notes];
+        }
+        $cust[] = [Text::_('PLG_SYSTEM_WEBGBOOKING_MAIL_L_BOOKING'), '#' . (int) $row->id];
+        $secs = [['title' => Text::_('PLG_SYSTEM_WEBGBOOKING_MAIL_S_CUSTOMER'), 'rows' => $cust]];
+        $ans  = [];
+        foreach ($this->customAnswers($row) as $it) {
+            $ans[] = [$it['l'], $it['v']];
+        }
+        if ($ans) {
+            $secs[] = ['title' => Text::_('PLG_SYSTEM_WEBGBOOKING_MAIL_S_ANSWERS'), 'rows' => $ans];
+        }
+
+        return $secs;
+    }
+
+    private static function hasPlaceholder(string $tpl, array $names): bool
+    {
+        foreach ($names as $n) {
+            if (strpos($tpl, $n) !== false) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * What goes into a customer or guest email. $kind: confirmed | request | rescheduled | reminder | link | guest | guest_reminder.
+     * $bodyTpl is the element's (or the plugin's) own text: it goes INTO the body of the layout, it does not replace the layout
+     * (header, title, appointment box, buttons and footer stay).
+     */
+    private function customerMail(object $row, string $kind, string $manageUrl, string $dateFmt, string $bodyTpl = ''): array
+    {
+        $P      = 'PLG_SYSTEM_WEBGBOOKING_';
+        $guest  = \in_array($kind, ['guest', 'guest_reminder'], true);
+        $custom = trim($bodyTpl) !== '';
+        $hello  = Text::_($P . 'EMAIL_HELLO') . ($guest ? ',' : ' ' . $row->customer_name . ',');
+        $titles = ['confirmed' => 'MAIL_TITLE_CONFIRMED', 'request' => 'MAIL_TITLE_REQUEST', 'rescheduled' => 'MAIL_TITLE_RESCHEDULED', 'reminder' => 'MAIL_TITLE_REMINDER', 'link' => 'MAIL_TITLE_LINK', 'guest' => 'MAIL_TITLE_GUEST', 'guest_reminder' => 'MAIL_TITLE_GUEST_REMINDER'];
+        $lead   = [];
+        if (!$custom) {
+            switch ($kind) {
+                case 'request':
+                    $lead[] = $hello . ' ' . Text::_($P . 'EMAIL_REQUEST');
+                    break;
+                case 'rescheduled':
+                    $lead[] = $hello . ' ' . Text::_($P . 'EMAIL_RESCHEDULED');
+                    break;
+                case 'reminder':
+                    $lead[] = $hello . ' ' . Text::_($P . 'EMAIL_REMINDER');
+                    break;
+                case 'link':
+                    $lead[] = $hello . ' ' . Text::sprintf($P . 'LINKMAIL_INTRO', $dateFmt, $row->booking_time);
+                    break;
+                case 'guest':
+                    $lead[] = $hello;
+                    $lead[] = Text::sprintf($P . 'EMAIL_GUEST_INTRO', $row->customer_name);
+                    break;
+                case 'guest_reminder':
+                    $lead[] = $hello;
+                    $lead[] = Text::sprintf($P . 'EMAIL_GUEST_REMINDER_INTRO', $row->customer_name);
+                    break;
+                default:
+                    $lead[] = $hello . ' ' . Text::_($P . 'EMAIL_CONFIRMED');
+            }
+        }
+        if (\in_array($kind, ['confirmed', 'request', 'rescheduled', 'guest'], true)) {
+            $lead[] = Text::_($P . 'EMAIL_ICS_HINT');
+        }
+
+        $loc      = $this->rowLocation($row);
+        $notices  = [];
+        if (!$guest && \in_array($kind, ['confirmed', 'rescheduled'], true) && ($row->payment_status ?? '') === 'paid' && (int) ($row->amount_cents ?? 0) > 0) {
+            $notices[] = ['tone' => 'ok', 'text' => Text::sprintf($P . 'EMAIL_PAID', self::formatAmount((int) $row->amount_cents, (string) $row->currency, $this->langTag()))];
+        }
+        if (!$guest && $loc !== 'phone' && empty($row->meeting_url) && !empty($row->_meetPending) && !self::hasPlaceholder($bodyTpl, ['{meet_block}', '{location_block}'])) {
+            $notices[] = ['tone' => 'info', 'text' => Text::_($P . 'EMAIL_MEET_PENDING')];
+        }
+        if (!$guest && $loc === 'phone' && \in_array($kind, ['confirmed', 'request', 'rescheduled', 'reminder'], true)) {
+            $notices[] = ['tone' => 'info', 'text' => Text::sprintf($P . 'EMAIL_PHONE_CALL', (string) $row->customer_phone)];
+        }
+
+        $buttons = [];
+        if ($loc !== 'phone' && !empty($row->meeting_url) && !self::hasPlaceholder($bodyTpl, ['{meet_block}', '{location_block}', '{meet_url}'])) {
+            $buttons[] = ['label' => Text::_($P . 'EMAIL_MEET_BTN'), 'url' => (string) $row->meeting_url, 'primary' => true];
+        }
+        if (\in_array($kind, ['confirmed', 'request', 'rescheduled', 'guest'], true)) {
+            $buttons[] = ['label' => Text::_($P . 'MAIL_BTN_CALENDAR'), 'url' => $this->mailCalendarUrl($row)];
+        }
+        if (!$guest && $kind !== 'link' && !self::hasPlaceholder($bodyTpl, ['{cancel_block}', '{cancel_url}'])) {
+            $buttons[] = ['label' => Text::_($P . 'EMAIL_MANAGE_LINK'), 'url' => $manageUrl];
+        }
+
+        return [
+            'title'       => Text::_($P . $titles[$kind]),
+            'preheader'   => Text::sprintf($P . 'MAIL_PRE_APPT', $this->mailDay((string) $row->booking_date), $row->booking_time),
+            'lead'        => $lead,
+            'notices'     => $notices,
+            'summary'     => ['rows' => $this->mailRows($row, $guest ? 'guest' : 'customer')],
+            'body_html'   => $custom ? $this->renderTpl($bodyTpl, $row, $manageUrl, $dateFmt) : '',
+            'buttons'     => $buttons,
+            'signoff'     => Text::_($P . 'EMAIL_SIGNOFF'),
+            'footer_note' => Text::_($P . 'EMAIL_FOOTER'),
+        ];
+    }
+
+    /** What goes into a staff email about a booking. $kind: new | moved | cancelled. */
+    private function staffMail(object $row, string $kind, string $manageUrl, string $dateFmt, string $bodyTpl = ''): array
+    {
+        $P       = 'PLG_SYSTEM_WEBGBOOKING_';
+        $paid    = ($row->payment_status ?? '') === 'paid' && (int) ($row->amount_cents ?? 0) > 0;
+        $notices = [];
+        if ($kind === 'moved') {
+            $title = Text::_($P . 'MAIL_TITLE_STAFF_MOVED');
+            $lead  = [Text::sprintf($P . 'EMAIL_ADMIN_MOVED_INTRO', $this->shortDate((string) ($row->_prevDate ?? '')), (string) ($row->_prevTime ?? ''))];
+        } elseif ($kind === 'cancelled') {
+            $title = Text::_($P . 'MAIL_TITLE_STAFF_CANCELLED');
+            $lead  = [Text::sprintf($P . 'CANCEL_ADMIN_BODY', $this->shortDate((string) $row->booking_date), $row->booking_time, $row->customer_name, $row->customer_email)];
+            if ($paid) {
+                $notices[] = ['tone' => 'warn', 'text' => Text::sprintf($P . 'CANCEL_REFUND_STAFF', self::formatAmount((int) $row->amount_cents, (string) $row->currency, $this->langTag()), (string) ($row->stripe_payment_intent ?? ''))];
+            }
+        } else {
+            $title = Text::_($P . 'MAIL_TITLE_STAFF_NEW');
+            $lead  = [Text::_($P . ($paid ? 'MAIL_STAFF_LEAD_NEW_PAID' : 'MAIL_STAFF_LEAD_NEW'))];
+        }
+
+        return [
+            'title'       => $title,
+            'preheader'   => Text::sprintf($P . 'MAIL_PRE_STAFF', $row->customer_name, $this->mailDay((string) $row->booking_date), $row->booking_time),
+            'lead'        => $lead,
+            'notices'     => $notices,
+            'summary'     => ['rows' => $this->mailRows($row, 'staff')],
+            'body_html'   => trim($bodyTpl) !== '' ? $this->renderTpl($bodyTpl, $row, $manageUrl, $dateFmt) : '',
+            'sections'    => $this->mailStaffSections($row),
+            'buttons'     => [['label' => Text::_($P . 'MAIL_BTN_BACKEND'), 'url' => $this->mailBackendUrl($row), 'primary' => true]],
+            'footer_note' => Text::sprintf($P . 'MAIL_STAFF_FOOTER', (string) $this->getApplication()->get('sitename', 'WebG Booking')),
+        ];
+    }
+
+    /** Render with the layout and send (HTML + plain text alternative). */
+    private function sendLayout($mf, $to, string $subject, array $m, string $ics = '', string $icsMethod = 'PUBLISH'): void
+    {
+        $r = EmailLayout::render($m + ['lang' => $this->langTag(), 'brand' => $this->mailBrand()]);
+        $this->sendHtmlMail($mf, $to, $subject, $r['html'], $ics, $icsMethod, $r['text']);
+    }
+
+    /** A button for the blocks inside a custom text ({meet_block}), in the brand colours. */
+    private function inlineButton(string $label, string $url): string
+    {
+        $b   = $this->mailBrand();
+        $bg  = (string) $b['button'];
+        $txt = EmailLayout::contrast('#ffffff', $bg) >= 4.5 ? '#ffffff' : '#111827';
+
+        return '<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:16px 0;"><tr><td class="btn-td" bgcolor="' . $bg . '" style="background-color:' . $bg . ';border-radius:8px;"><a class="btn-a" href="' . htmlspecialchars($url, ENT_QUOTES, 'UTF-8') . '" style="display:inline-block;padding:13px 26px;font-family:Roboto,\'Segoe UI\',Helvetica,Arial,sans-serif;font-size:16px;line-height:20px;font-weight:700;color:' . $txt . ';text-decoration:none;border-radius:8px;">'
+            . htmlspecialchars($label, ENT_QUOTES, 'UTF-8') . '</a></td></tr></table>';
+    }
+
     /** Replace placeholders in a (default or admin-edited) HTML email template. */
-    private function renderTpl(string $tpl, object $row, string $manageUrl, string $dateFmt, bool $withPayment = true): string
+    private function renderTpl(string $tpl, object $row, string $manageUrl, string $dateFmt): string
     {
         $e = fn($s) => htmlspecialchars((string) $s, ENT_QUOTES, 'UTF-8');
 
-        // Paid events: "Paid 49,00 EUR" (the receipt itself is Stripe's, sent to the customer's email).
-        $amount = '';
+        // The "Payment received" line is part of the layout for every paid booking, so {payment_block} is empty here;
+        // {amount} gives the amount for a text that wants to write it itself.
+        $amount   = '';
         $payBlock = '';
         if (($row->payment_status ?? '') === 'paid' && (int) ($row->amount_cents ?? 0) > 0) {
             $amount = self::formatAmount((int) $row->amount_cents, (string) $row->currency, $this->langTag());
-            if ($withPayment) {
-                $payBlock = '<p style="margin:16px 0 0;padding:10px 14px;background:#eef8f1;border:1px solid #cfe9d8;border-radius:8px;font-weight:600;color:#1d6b3f;">'
-                    . $e(Text::sprintf('PLG_SYSTEM_WEBGBOOKING_EMAIL_PAID', $amount)) . '</p>';
-            }
         }
 
         $isPhone   = $this->rowLocation($row) === 'phone';
         $meetBlock = '';
         if (!$isPhone && empty($row->meeting_url) && !empty($row->_meetPending)) {
             // The Google event is still being created: promise the link instead of showing an empty one.
-            $meetBlock = '<p style="margin:20px 0;padding:12px 16px;background:#f6f8fa;border:1px solid #e6e9ee;border-radius:8px;font-weight:600;">'
+            $meetBlock = '<p class="note-box t-head" style="margin:16px 0;padding:12px 16px;background-color:#f4f6fb;border:1px solid #d9deea;border-radius:8px;font-weight:600;">'
                 . $e(Text::_('PLG_SYSTEM_WEBGBOOKING_EMAIL_MEET_PENDING')) . '</p>';
         } elseif ($isPhone) {
             // Phone appointment: no link, we say we will call the customer at the number they gave.
-            $meetBlock = '<p style="margin:20px 0;padding:12px 16px;background:#f6f8fa;border:1px solid #e6e9ee;border-radius:8px;font-weight:600;">'
+            $meetBlock = '<p class="note-box t-head" style="margin:16px 0;padding:12px 16px;background-color:#f4f6fb;border:1px solid #d9deea;border-radius:8px;font-weight:600;">'
                 . $e(Text::sprintf('PLG_SYSTEM_WEBGBOOKING_EMAIL_PHONE_CALL', (string) $row->customer_phone)) . '</p>';
         } elseif (!empty($row->meeting_url)) {
-            $meetBlock = '<p style="margin:20px 0;"><a href="' . $e($row->meeting_url) . '" style="display:inline-block;background:#1f2937;color:#ffffff;text-decoration:none;padding:11px 22px;border-radius:8px;font-weight:600;">'
-                . $e(Text::_('PLG_SYSTEM_WEBGBOOKING_EMAIL_MEET_BTN')) . '</a></p>';
+            $meetBlock = $this->inlineButton(Text::_('PLG_SYSTEM_WEBGBOOKING_EMAIL_MEET_BTN'), (string) $row->meeting_url);
         }
         $locLabel = $isPhone
             ? Text::sprintf('PLG_SYSTEM_WEBGBOOKING_LOC_PHONE_AT', (string) $row->customer_phone)
             : Text::_('PLG_SYSTEM_WEBGBOOKING_LOC_MEET');
-        $cancelBlock = '<p style="margin:18px 0 0;font-size:13px;color:#6a6a6a;"><a href="' . $e($manageUrl) . '" style="color:#1f2937;">'
+        $cancelBlock = '<p class="t-muted" style="margin:18px 0 0;font-size:14px;color:#5b6074;"><a class="t-link" href="' . $e($manageUrl) . '" style="color:#1f3f9a;text-decoration:underline;">'
             . $e(Text::_('PLG_SYSTEM_WEBGBOOKING_EMAIL_MANAGE_LINK')) . '</a></p>';
 
         // Custom questions block (answers to the per-element custom form fields).
@@ -3091,7 +3475,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             $customBlock = '<table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;margin-top:14px;">' . $rows . '</table>';
         }
 
-        return self::fillTpl($tpl, [
+        $out = self::fillTpl($tpl, [
             '{name}'         => $e($row->customer_name),
             '{email}'        => $e($row->customer_email),
             '{date}'         => $e($dateFmt),
@@ -3110,6 +3494,8 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             '{amount}'       => $e($amount),
             '{payment_block}' => $payBlock,
         ]);
+
+        return $out;
     }
 
     /** Decode the stored custom-field answers as a list of ['l' => label, 'v' => value]. */
@@ -3140,86 +3526,28 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
         return $map;
     }
 
-    /** Default, nicely-designed email body (translatable; uses {placeholders}). */
-    private function defaultEmailBody(bool $request = false): string
-    {
-        return $this->bodyTemplate($request ? 'PLG_SYSTEM_WEBGBOOKING_EMAIL_REQUEST' : 'PLG_SYSTEM_WEBGBOOKING_EMAIL_CONFIRMED');
-    }
-
-    /** Shared email body template with a configurable intro line. */
-    private function bodyTemplate(string $introKey): string
-    {
-        $t   = fn($k) => htmlspecialchars(Text::_($k), ENT_QUOTES, 'UTF-8');
-        $cell = 'padding:6px 0;font-size:14px;';
-
-        return '<p style="margin:0 0 14px;">' . $t('PLG_SYSTEM_WEBGBOOKING_EMAIL_HELLO') . ' {name},</p>'
-            . '<p style="margin:0 0 18px;">' . $t($introKey) . '</p>'
-            . '<table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;border:1px solid #e6e9ee;border-radius:8px;">'
-            . '<tr><td style="' . $cell . 'padding-left:14px;color:#6a6a6a;width:90px;">' . $t('PLG_SYSTEM_WEBGBOOKING_EMAIL_LABEL_DATE') . '</td><td style="' . $cell . 'font-weight:600;">{date}</td></tr>'
-            . '<tr><td style="' . $cell . 'padding-left:14px;color:#6a6a6a;border-top:1px solid #eef1f4;">' . $t('PLG_SYSTEM_WEBGBOOKING_EMAIL_LABEL_TIME') . '</td><td style="' . $cell . 'font-weight:600;border-top:1px solid #eef1f4;">{time}</td></tr>'
-            . '</table>'
-            . '{payment_block}'
-            . '{meet_block}'
-            . '<p style="margin:18px 0 0;font-size:13px;color:#6a6a6a;">' . $t('PLG_SYSTEM_WEBGBOOKING_EMAIL_ICS_HINT') . '</p>'
-            . '{cancel_block}'
-            . '<p style="margin:22px 0 0;">' . $t('PLG_SYSTEM_WEBGBOOKING_EMAIL_SIGNOFF') . '</p>';
-    }
-
-    /** Wrap the email body in a responsive, email-client-safe shell. */
-    private function wrapEmail(string $inner): string
-    {
-        $brand = htmlspecialchars((string) $this->getApplication()->get('sitename', 'WebG Booking'), ENT_QUOTES, 'UTF-8');
-        $foot  = htmlspecialchars(Text::_('PLG_SYSTEM_WEBGBOOKING_EMAIL_FOOTER'), ENT_QUOTES, 'UTF-8');
-
-        return '<!DOCTYPE html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>'
-            . '<body style="margin:0;padding:0;background:#f2f4f7;">'
-            . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f2f4f7;padding:24px 12px;"><tr><td align="center">'
-            . '<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e6e9ee;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#1f2937;">'
-            . '<tr><td style="background:#1f2937;padding:18px 28px;color:#ffffff;font-size:16px;font-weight:600;">' . $brand . '</td></tr>'
-            . '<tr><td style="padding:26px 28px;font-size:15px;line-height:1.55;">' . $inner . '</td></tr>'
-            . '<tr><td style="padding:16px 28px;background:#f6f8fa;color:#8a929b;font-size:12px;line-height:1.5;border-top:1px solid #eef1f4;">' . $foot . '</td></tr>'
-            . '</table></td></tr></table></body></html>';
-    }
-
     /** Send one HTML email with the optional .ics attachment. $to may be a string or an array. */
-    private function sendHtmlMail($mf, $to, string $subject, string $html, string $ics, string $icsMethod = 'PUBLISH'): void
+    private function sendHtmlMail($mf, $to, string $subject, string $html, string $ics, string $icsMethod = 'PUBLISH', ?string $text = null): void
     {
         $m = $mf->createMailer();
         $m->isHtml(true);
         $m->addRecipient($to);
         $m->setSubject($subject);
         $m->setBody($html);
+        if ($text !== null) {
+            $m->AltBody = $text;                       // the plain-text alternative of the same email
+        }
+        $fromName = trim((string) $this->params->get('mail_from_name', ''));
+        $fromAddr = (string) $this->getApplication()->get('mailfrom', '');
+        if ($fromName !== '' && $fromAddr !== '') {
+            $m->setSender([$fromAddr, $fromName]);
+        }
         if ($ics !== '') {
             $m->addStringAttachment($ics, 'appuntamento.ics', 'base64', 'text/calendar; charset=utf-8; method=' . $icsMethod);
         }
         if ($m->Send() !== true) {
             throw new \RuntimeException('mail not sent');
         }
-    }
-
-    /** Guest-facing email body: an invitation, without any management/cancel link. */
-    private function guestEmailBody(object $row, string $dateFmt, string $introKey = 'PLG_SYSTEM_WEBGBOOKING_EMAIL_GUEST_INTRO'): string
-    {
-        $t    = fn($k) => htmlspecialchars(Text::_($k), ENT_QUOTES, 'UTF-8');
-        $e    = fn($s) => htmlspecialchars((string) $s, ENT_QUOTES, 'UTF-8');
-        $cell = 'padding:6px 0;font-size:14px;';
-
-        $meetBlock = '';
-        if ($this->rowLocation($row) === 'phone') {
-            $meetBlock = '<p style="margin:20px 0;font-weight:600;">' . $t('PLG_SYSTEM_WEBGBOOKING_EMAIL_PHONE_GUEST') . '</p>';
-        } elseif (!empty($row->meeting_url)) {
-            $meetBlock = '<p style="margin:20px 0;"><a href="' . $e($row->meeting_url) . '" style="display:inline-block;background:#1f2937;color:#ffffff;text-decoration:none;padding:11px 22px;border-radius:8px;font-weight:600;">'
-                . $t('PLG_SYSTEM_WEBGBOOKING_EMAIL_MEET_BTN') . '</a></p>';
-        }
-
-        return '<p style="margin:0 0 14px;">' . $t('PLG_SYSTEM_WEBGBOOKING_EMAIL_HELLO') . ',</p>'
-            . '<p style="margin:0 0 18px;">' . htmlspecialchars(Text::sprintf($introKey, $row->customer_name), ENT_QUOTES, 'UTF-8') . '</p>'
-            . '<table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;border:1px solid #e6e9ee;border-radius:8px;">'
-            . '<tr><td style="' . $cell . 'padding-left:14px;color:#6a6a6a;width:90px;">' . $t('PLG_SYSTEM_WEBGBOOKING_EMAIL_LABEL_DATE') . '</td><td style="' . $cell . 'font-weight:600;">' . $e($dateFmt) . '</td></tr>'
-            . '<tr><td style="' . $cell . 'padding-left:14px;color:#6a6a6a;border-top:1px solid #eef1f4;">' . $t('PLG_SYSTEM_WEBGBOOKING_EMAIL_LABEL_TIME') . '</td><td style="' . $cell . 'font-weight:600;border-top:1px solid #eef1f4;">' . $e($row->booking_time) . '</td></tr>'
-            . '</table>'
-            . $meetBlock
-            . '<p style="margin:18px 0 0;font-size:13px;color:#6a6a6a;">' . $t('PLG_SYSTEM_WEBGBOOKING_EMAIL_ICS_HINT') . '</p>';
     }
 
     /**
@@ -3747,11 +4075,23 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             if (!$tos) {
                 return;
             }
-            $m = Factory::getContainer()->get(MailerFactoryInterface::class)->createMailer();
-            $m->addRecipient($tos);
-            $m->setSubject($subject);
-            $m->setBody($body);
-            $m->Send();
+            $P   = 'PLG_SYSTEM_WEBGBOOKING_';
+            $mf  = Factory::getContainer()->get(MailerFactoryInterface::class);
+            if ($row !== null) {
+                $this->rootFrom($row);
+            }
+            $lay = [
+                'title'       => Text::_($P . 'MAIL_TITLE_ALERT'),
+                'preheader'   => mb_substr($subject, 0, 120),
+                'lead'        => array_values(array_filter(array_map('trim', preg_split('/\n+/', $body) ?: []), static fn($l) => $l !== '')),
+                'footer_note' => Text::sprintf($P . 'MAIL_STAFF_FOOTER', (string) $this->getApplication()->get('sitename', 'WebG Booking')),
+            ];
+            if ($row !== null && isset($row->booking_date, $row->booking_time)) {
+                $lay['summary']  = ['rows' => $this->mailRows($row, 'staff')];
+                $lay['sections'] = $this->mailStaffSections($row);
+                $lay['buttons']  = [['label' => Text::_($P . 'MAIL_BTN_BACKEND'), 'url' => $this->mailBackendUrl($row), 'primary' => true]];
+            }
+            $this->sendLayout($mf, $tos, $subject, $lay);
         } catch (\Throwable $e) {
         }
     }
@@ -3991,6 +4331,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             );
         }
 
+        $paid = ($row->payment_status ?? '') === 'paid' && (int) ($row->amount_cents ?? 0) > 0;
         try {
             $this->cancelRow($row, false);
         } catch (\Throwable $ex) {
@@ -4000,6 +4341,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             Text::_('PLG_SYSTEM_WEBGBOOKING_MANAGE_CANCELLED_TITLE'),
             '<h1 class="ok">' . $e(Text::_('PLG_SYSTEM_WEBGBOOKING_MANAGE_CANCELLED_TITLE')) . '</h1>'
             . '<p class="muted">' . $e(Text::_('PLG_SYSTEM_WEBGBOOKING_MANAGE_CANCELLED_MSG')) . '</p>'
+            . ($paid ? '<p class="muted"><strong>' . $e(Text::sprintf('PLG_SYSTEM_WEBGBOOKING_CANCEL_REFUND_CUSTOMER', self::formatAmount((int) $row->amount_cents, (string) $row->currency, $this->langTag()))) . '</strong></p>' : '')
         );
     }
 
@@ -4321,20 +4663,10 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
         $sent = false;
 
         try {
-            $mf    = Factory::getContainer()->get(MailerFactoryInterface::class);
+            $P   = 'PLG_SYSTEM_WEBGBOOKING_';
+            $mf  = Factory::getContainer()->get(MailerFactoryInterface::class);
+            $this->rootFrom($row);
             $tos = $this->staffRecipients($row);
-
-            if (!$byAdmin && $tos) {
-                try {
-                    $m = $mf->createMailer();
-                    $m->addRecipient($tos);
-                    $m->setSubject(Text::sprintf('PLG_SYSTEM_WEBGBOOKING_CANCEL_ADMIN_SUBJECT', $row->booking_date, $row->booking_time));
-                    $m->setBody(Text::sprintf('PLG_SYSTEM_WEBGBOOKING_CANCEL_ADMIN_BODY', $row->booking_date, $row->booking_time, $row->customer_name, $row->customer_email)
-                        . (($row->payment_status ?? '') === 'paid' ? "\n\n" . Text::sprintf('PLG_SYSTEM_WEBGBOOKING_CANCEL_REFUND_STAFF', self::formatAmount((int) $row->amount_cents, (string) $row->currency, $this->langTag()), (string) ($row->stripe_payment_intent ?? '')) : ''));
-                    $m->Send();
-                } catch (\Throwable $e) {
-                }
-            }
 
             $dateFmt = $row->booking_date;
             try {
@@ -4342,14 +4674,29 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             } catch (\Throwable $e) {
             }
 
-            $e    = fn($s) => htmlspecialchars((string) $s, ENT_QUOTES, 'UTF-8');
-            $body = '<p style="margin:0 0 14px;">' . $e(Text::_('PLG_SYSTEM_WEBGBOOKING_EMAIL_HELLO')) . ' ' . $e($row->customer_name) . ',</p>'
-                . '<p style="margin:0 0 14px;">' . $e(Text::sprintf($byAdmin ? 'PLG_SYSTEM_WEBGBOOKING_CANCEL_BY_STAFF_BODY' : 'PLG_SYSTEM_WEBGBOOKING_CANCEL_CUSTOMER_LINE', $dateFmt, $row->booking_time)) . '</p>'
-                . (!$byAdmin && ($row->payment_status ?? '') === 'paid'
-                    ? '<p style="margin:0 0 14px;">' . $e(Text::sprintf('PLG_SYSTEM_WEBGBOOKING_CANCEL_REFUND_CUSTOMER', self::formatAmount((int) $row->amount_cents, (string) $row->currency, $this->langTag()))) . '</p>' : '')
-                . '<p style="margin:22px 0 0;">' . $e(Text::_('PLG_SYSTEM_WEBGBOOKING_EMAIL_SIGNOFF')) . '</p>';
+            if (!$byAdmin && $tos) {
+                try {
+                    $this->sendLayout($mf, $tos, Text::sprintf($P . 'CANCEL_ADMIN_SUBJECT', $this->shortDate((string) $row->booking_date), $row->booking_time), $this->staffMail($row, 'cancelled', $this->manageUrl($row), $dateFmt));
+                } catch (\Throwable $e) {
+                }
+            }
 
-            $this->sendHtmlMail($mf, $row->customer_email, Text::_('PLG_SYSTEM_WEBGBOOKING_CANCEL_CUSTOMER_SUBJECT'), $this->wrapEmail($body), $this->buildIcs($row, 'CANCEL'), 'CANCEL');
+            $notices = [];
+            if (!$byAdmin && ($row->payment_status ?? '') === 'paid' && (int) ($row->amount_cents ?? 0) > 0) {
+                $notices[] = ['tone' => 'ok', 'text' => Text::sprintf($P . 'CANCEL_REFUND_CUSTOMER', self::formatAmount((int) $row->amount_cents, (string) $row->currency, $this->langTag()))];
+            }
+            $back = !empty($row->source_url) && preg_match('#^https?://#i', (string) $row->source_url) ? (string) $row->source_url : '';
+            $m = [
+                'title'       => Text::_($P . 'MAIL_TITLE_CANCELLED'),
+                'preheader'   => Text::sprintf($P . 'MAIL_PRE_APPT', $this->mailDay((string) $row->booking_date), $row->booking_time),
+                'lead'        => [Text::_($P . 'EMAIL_HELLO') . ' ' . $row->customer_name . ',', Text::sprintf($byAdmin ? $P . 'CANCEL_BY_STAFF_BODY' : $P . 'CANCEL_CUSTOMER_LINE', $dateFmt, $row->booking_time)],
+                'notices'     => $notices,
+                'summary'     => ['rows' => $this->mailRows($row, 'customer')],
+                'buttons'     => $back !== '' ? [['label' => Text::_($P . 'MAIL_BTN_REBOOK'), 'url' => $back, 'primary' => true]] : [],
+                'signoff'     => Text::_($P . 'EMAIL_SIGNOFF'),
+                'footer_note' => Text::_($P . 'EMAIL_FOOTER'),
+            ];
+            $this->sendLayout($mf, $row->customer_email, Text::_($P . 'CANCEL_CUSTOMER_SUBJECT'), $m, $this->buildIcs($row, 'CANCEL'), 'CANCEL');
             $sent = true;
         } catch (\Throwable $e) {
         }
@@ -4492,6 +4839,10 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
     {
         try {
             $mf        = Factory::getContainer()->get(MailerFactoryInterface::class);
+            $this->rootFrom($row);
+            if (!empty($plan['root'])) {
+                $this->rootHint = (string) $plan['root'];
+            }
             $manageUrl = $this->manageUrl($row, (string) ($plan['root'] ?? ''));
             $dateFmt   = (new \DateTime($row->booking_date))->format('d/m/Y');
             $tags      = ['{name}' => $row->customer_name, '{date}' => $dateFmt, '{time}' => $row->booking_time];
@@ -4502,28 +4853,16 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             }
             $bodyTpl = (string) ($plan['body'] ?? '');
             if ($bodyTpl === '') {
-                $bodyTpl = trim((string) $this->params->get('reminder_body', '')) ?: $this->bodyTemplate('PLG_SYSTEM_WEBGBOOKING_EMAIL_REMINDER');
+                $bodyTpl = trim((string) $this->params->get('reminder_body', ''));
             }
 
             // No .ics on a reminder: the appointment is already in their calendar from the confirmation.
-            $this->sendHtmlMail(
-                $mf,
-                $row->customer_email,
-                self::fillTpl($subjectTpl, $tags),
-                $this->wrapEmail($this->renderTpl($bodyTpl, $row, $manageUrl, $dateFmt, false)),
-                ''
-            );
+            $this->sendLayout($mf, $row->customer_email, self::fillTpl($subjectTpl, $tags), $this->customerMail($row, 'reminder', $manageUrl, $dateFmt, $bodyTpl));
 
             // The invited guest gets a reminder too: no management link, no phone of the customer.
             if (!empty($row->guest_email)) {
                 try {
-                    $this->sendHtmlMail(
-                        $mf,
-                        $row->guest_email,
-                        self::fillTpl($subjectTpl, $tags),
-                        $this->wrapEmail($this->guestEmailBody($row, $dateFmt, 'PLG_SYSTEM_WEBGBOOKING_EMAIL_GUEST_REMINDER_INTRO')),
-                        ''
-                    );
+                    $this->sendLayout($mf, $row->guest_email, self::fillTpl($subjectTpl, $tags), $this->customerMail($row, 'guest_reminder', '', $dateFmt));
                 } catch (\Throwable $e) {
                 }
             }

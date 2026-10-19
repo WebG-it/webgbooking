@@ -1,0 +1,44 @@
+Appuntamento annullato
+
+======================
+
+L'appuntamento del 2026-10-30 alle 10:00 di Marta Pagante (marta.pagante@example.invalid) è stato annullato dall'utente.
+
+Prenotazione PAGATA (29,00 €, Stripe pi_mock_aa7c27): da rimborsare a mano da Stripe.
+
+Servizio: Audit SEO
+
+Data: Venerdì 30/10/2026
+
+Ora: 10:00 (CET, Europe/Rome)
+
+Durata: 30 minuti
+
+Dove: Google Meet (https://meet.google.com/abc-defg-hij)
+
+Pagamento: Pagato: 29,00 € (Stripe pi_mock_aa7c27).
+
+
+
+CLIENTE
+
+Nome: Marta Pagante
+
+Email: marta.pagante@example.invalid
+
+Telefono: +39 333 456 7890
+
+Prenotazione n.: #471
+
+
+
+Apri nel backend: http://localhost:8086/administrator/index.php?option=com_webgbooking&view=booking&id=471
+
+
+
+--
+
+wgbtest
+
+Notifica del sistema di prenotazione di wgbtest.
+

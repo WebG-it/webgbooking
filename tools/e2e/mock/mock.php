@@ -107,6 +107,7 @@ if ($host === 'api.stripe.com') {
         parse_str($query, $q);
         $id = $q['id'] ?? '';
         if ($path === '/__mock/pay' && isset($sess[$id])) {
+            if (isset($q['strict']) && ($sess[$id]['status'] ?? '') !== 'open') { $err(400, 'This Checkout Session is no longer open: payment refused'); }   // an expired tab cannot pay
             $sess[$id]['payment_status'] = 'paid'; $sess[$id]['status'] = 'complete';
             $sess[$id]['payment_intent'] = 'pi_mock_' . substr($id, -6);
             if (isset($q['amount'])) { $sess[$id]['amount_total'] = (int) $q['amount']; }

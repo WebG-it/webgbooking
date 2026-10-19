@@ -1,0 +1,17 @@
+Pagamento ricevuto, ma l'orario non è più disponibile
+=====================================================
+Ciao Carlo Tardivo,
+Abbiamo ricevuto il tuo pagamento di 29,00 € per il lunedì 26/10/2026 alle 09:00, ma quell'orario non è più disponibile, quindi non possiamo confermare l'appuntamento. Ti rimborsiamo l'importo per intero (può servire qualche giorno perché compaia sulla carta) oppure ti scriviamo per accordarci su un nuovo orario. Puoi anche scegliere subito un'altra data e un altro orario con il link qui sotto.
+Pagamento ricevuto: 29,00 €. La ricevuta ti arriva da Stripe.
+Servizio: Audit SEO
+Data: Lunedì 26/10/2026
+Ora: 09:00 (CET, Europe/Rome)
+Durata: 30 minuti
+Dove: Google Meet
+Pagamento: 29,00 €
+
+Scegli un altro orario: https://www.example.invalid/prenota
+
+--
+wgbtest
+Email inviata automaticamente. Se non hai richiesto tu questo appuntamento, ignora questo messaggio.

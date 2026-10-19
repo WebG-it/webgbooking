@@ -1,0 +1,32 @@
+An appointment you are invited to is coming up
+
+==============================================
+
+Hi,
+
+Reminder: Luca Ferri invited you to this appointment:
+
+Date: Monday 19/10/2026
+
+Time: 19:54 (CEST, Europe/Rome)
+
+Duration: 30 minutes
+
+Where: Google Meet (https://meet.google.com/abc-defg-hij)
+
+
+
+Join the video call: https://meet.google.com/abc-defg-hij
+
+
+
+See you soon!
+
+
+
+--
+
+wgbtest
+
+This email was sent automatically. If you did not request this appointment, please ignore it.
+

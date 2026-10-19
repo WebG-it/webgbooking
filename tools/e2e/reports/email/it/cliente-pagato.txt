@@ -1,0 +1,42 @@
+Il tuo appuntamento è confermato
+
+================================
+
+Ciao Marta Pagante, il tuo appuntamento è confermato. Ecco i dettagli:
+
+In allegato trovi il file .ics: aprilo per aggiungere l'appuntamento al tuo calendario.
+
+Pagamento ricevuto: 29,00 €. La ricevuta ti arriva da Stripe.
+
+Servizio: Audit SEO
+
+Data: Venerdì 30/10/2026
+
+Ora: 10:00 (CET, Europe/Rome)
+
+Durata: 30 minuti
+
+Dove: Google Meet (https://meet.google.com/abc-defg-hij)
+
+Pagamento: 29,00 €
+
+
+
+Partecipa alla videochiamata: https://meet.google.com/abc-defg-hij
+
+Aggiungi a Google Calendar: https://calendar.google.com/calendar/render?action=TEMPLATE&text=Audit+SEO&dates=20261030T090000Z%2F20261030T093000Z&details=https%3A%2F%2Fmeet.google.com%2Fabc-defg-hij
+
+Modifica o annulla l'appuntamento: http://localhost:8086/index.php?option=com_ajax&group=system&plugin=webgbooking&format=html&action=manage&token=ESEMPIO
+
+
+
+A presto!
+
+
+
+--
+
+wgbtest
+
+Email inviata automaticamente. Se non hai richiesto tu questo appuntamento, ignora questo messaggio.
+

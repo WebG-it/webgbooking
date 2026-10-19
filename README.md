@@ -13,16 +13,17 @@ Un solo pacchetto installa **componente + plugin di sistema + plugin delle attiv
 
 1. Joomla → *Sistema → Installa → Installa da URL*, incolla:
    ```
-   https://raw.githubusercontent.com/WebG-it/webgbooking/main/dist/pkg_webgbooking-0.34.2.zip
+   https://raw.githubusercontent.com/WebG-it/webgbooking/main/dist/pkg_webgbooking-0.34.3.zip
    ```
 2. I plugin si **attivano da soli** e il pacchetto crea l'attività pianificata dei promemoria (ogni 5 minuti). YOOtheme Customizer → **Add Element** → gruppo **WebG** → **Booking**.
 3. Backend prenotazioni e connessione Google: **Componenti → WebG Booking**.
 
 Gli aggiornamenti successivi arrivano via **Sistema → Aggiorna** come **un unico "WebG Booking"** (clicca *Trova aggiornamenti*).
 
-## Cosa fa (0.34.2)
+## Cosa fa (0.34.3)
 - **Tipo di evento per elemento** (scheda *Event* dell'elemento): durata in minuti, tempo libero prima/dopo, luogo, pagina di ritorno. Più elementi nella stessa pagina o in pagine diverse funzionano insieme (es. "Riunione - 1 ora" e "Chiamata veloce"): disponibilità e validazione usano la durata dell'elemento, non un valore globale (che resta il predefinito se il campo è vuoto). Un appuntamento di 60 minuti blocca anche le fasce da 30 che lo toccano, con i suoi buffer.
 - **Luogo**: *Google Meet*, *Telefonata (ti chiamo io)* o *Scelta del cliente*. Con la telefonata il numero è obbligatorio (controllato dal server), l'evento Google nasce **senza Meet** con il numero nel titolo e nella descrizione, email e `.ics` dicono "ti chiamo al numero X". Il luogo si salva sulla prenotazione e compare in lista e dettaglio admin, export CSV/Excel, webhook e Google Sheet.
+- **Email con un layout unico** (cliente e staff): scheda professionale con riquadro dell'appuntamento, pulsanti, modalita' scura, versione testuale; logo, colore, piede e nome del mittente si impostano nelle opzioni del plugin (scheda *Aspetto delle email*). Il testo scritto nell'elemento va dentro il layout.
 - **Promemoria** al cliente prima dell'incontro (predefinito 24 ore e 1 ora, configurabili per elemento o nelle opzioni del plugin, testo personalizzabile con i segnaposto). Li invia il **Task Scheduler di Joomla** (plugin `plg_task_webgbookingreminders`), che gira anche solo col traffico del sito (modalità lazy) o da cron. Mai due volte lo stesso promemoria, mai su prenotazioni annullate o passate; se si sposta l'appuntamento ricominciano.
 - **Conferma**: le prenotazioni gratuite sono confermate subito (email *Appuntamento confermato*); l'opzione *Conferma manuale* dell'elemento ripristina il flusso "richiesta, poi confermo io". Le email allo staff (nuova prenotazione, riprogrammazione, annullo, avvisi) vanno al destinatario staff dell'elemento, con ripiego sull'indirizzo di notifica del plugin.
 - **Google**: la pagina del componente mostra tre stati (non collegato, collegamento scaduto con un solo *Ricollega Google*, collegato). La copia su Foglio Google e' opzionale e usa solo il permesso Sheets (nessun accesso a Drive).

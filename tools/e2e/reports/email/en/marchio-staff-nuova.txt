@@ -1,0 +1,50 @@
+New booking
+
+===========
+
+A new appointment was booked.
+
+Service: Call Meet 30
+
+Date: Tuesday 03/11/2026
+
+Time: 09:30 (CET, Europe/Rome)
+
+Duration: 30 minutes
+
+Where: Google Meet (https://meet.google.com/abc-defg-hij)
+
+
+
+CUSTOMER
+
+Name: Giulia Bianchi
+
+Email: giulia.bianchi@example.invalid
+
+Phone: +39 333 123 4567
+
+Notes: Prima consulenza.
+
+Booking no.: #490
+
+
+
+Open in the backend: http://localhost:8086/administrator/index.php?option=com_webgbooking&view=booking&id=490
+
+
+
+--
+
+wgbtest
+
+Studio Esempio S.r.l.
+
+Via Roma 1, 10121 Torino
+
+P.IVA 01234567890
+
+Informativa privacy: https://www.example.invalid/privacy
+
+Notification from the booking system of wgbtest.
+

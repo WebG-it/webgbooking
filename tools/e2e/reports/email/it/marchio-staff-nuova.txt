@@ -1,0 +1,50 @@
+Nuova prenotazione
+
+==================
+
+È stato prenotato un nuovo appuntamento.
+
+Servizio: Call Meet 30
+
+Data: Martedì 03/11/2026
+
+Ora: 09:30 (CET, Europe/Rome)
+
+Durata: 30 minuti
+
+Dove: Google Meet (https://meet.google.com/abc-defg-hij)
+
+
+
+CLIENTE
+
+Nome: Giulia Bianchi
+
+Email: giulia.bianchi@example.invalid
+
+Telefono: +39 333 123 4567
+
+Note: Prima consulenza.
+
+Prenotazione n.: #477
+
+
+
+Apri nel backend: http://localhost:8086/administrator/index.php?option=com_webgbooking&view=booking&id=477
+
+
+
+--
+
+wgbtest
+
+Studio Esempio S.r.l.
+
+Via Roma 1, 10121 Torino
+
+P.IVA 01234567890
+
+Informativa privacy: https://www.example.invalid/privacy
+
+Notifica del sistema di prenotazione di wgbtest.
+

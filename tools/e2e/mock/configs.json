@@ -278,5 +278,42 @@
   "service": "Manuale senza email",
   "confirm_manual": true,
   "act_customer_on": false
+ },
+ "paidcustom": {
+  "title": "Pagato testo mio",
+  "service": "Pagato testo mio",
+  "price_amount": "29",
+  "email_body": "<p>Ciao {name}, grazie per aver prenotato.</p>",
+  "staff_body": "<p>Nuova: {date} {time}</p>"
+ },
+ "paidblock": {
+  "title": "Pagato con blocco",
+  "service": "Pagato con blocco",
+  "price_amount": "29",
+  "email_body": "<p>Grazie {name}</p>{payment_block}"
+ },
+ "paidamount": {
+  "title": "Pagato con importo",
+  "service": "Pagato con importo",
+  "price_amount": "29",
+  "email_body": "<p>Totale {amount}</p>"
+ },
+ "legacyc": {
+  "title": "Vecchio predefinito",
+  "service": "Vecchio predefinito",
+  "email_body": "<p>Ciao {name},</p><p>il tuo appuntamento è confermato per il <strong>{date}</strong> alle <strong>{time}</strong>.</p>{meet_block}<p style='font-size:13px;color:#6a6a6a'>In allegato trovi il file .ics per aggiungerlo al tuo calendario.</p>{cancel_block}<p>A presto!</p>",
+  "staff_body": "<p>Nuova prenotazione: <strong>{date}</strong> alle <strong>{time}</strong>.</p><p>Nome: {name}<br>Email: {email}<br>Telefono: {phone}</p><p>Note: {notes}</p>{custom}"
+ },
+ "legacyc2": {
+  "title": "Vecchio predefinito riformattato",
+  "service": "Vecchio predefinito riformattato",
+  "email_body": "<p>Ciao {name},</p>\n<p>il tuo appuntamento &egrave; confermato per il <strong>{date}</strong> alle <strong>{time}</strong>.</p>{meet_block}<p style=\"font-size:13px;color:#6a6a6a\">In allegato trovi il file .ics per aggiungerlo al tuo calendario.</p>{cancel_block}<p>A presto!</p>",
+  "staff_body": "<p>Nuova prenotazione: <strong>{date}</strong> alle <strong>{time}</strong>.</p><p>Nome: {name}<br />Email: {email}<br />Telefono: {phone}</p><p>Note: {notes}</p>{custom}"
+ },
+ "legacyedit": {
+  "title": "Predefinito modificato",
+  "service": "Predefinito modificato",
+  "email_body": "<p>Ciao {name},</p><p>il tuo appuntamento è confermato per il <strong>{date}</strong> alle <strong>{time}</strong>.</p>{meet_block}<p style='font-size:13px;color:#6a6a6a'>In allegato trovi il file .ics per aggiungerlo al tuo calendario.</p>{cancel_block}<p>Ti aspettiamo!</p>",
+  "staff_body": "<p>Nuova richiesta: <strong>{date}</strong> alle <strong>{time}</strong>.</p><p>Nome: {name}<br>Email: {email}<br>Telefono: {phone}</p><p>Note: {notes}</p>{custom}"
  }
 }

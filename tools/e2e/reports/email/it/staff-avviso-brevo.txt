@@ -1,0 +1,46 @@
+Qualcosa richiede la tua attenzione
+
+===================================
+
+Prenotazione n. 475 (Irene Testa, irene.testa@example.invalid): il contatto non e' stato salvato su Brevo. Motivo: la chiave API non è impostata nelle opzioni del plugin (scheda Integrazioni). Un nuovo tentativo non servirebbe: correggi l'impostazione, poi aggiungi il contatto a mano.
+
+Servizio: Brevo sempre
+
+Data: Domenica 01/11/2026
+
+Ora: 09:00 (CET, Europe/Rome)
+
+Durata: 30 minuti
+
+Dove: Google Meet (https://meet.google.com/abc-defg-hij)
+
+
+
+CLIENTE
+
+Nome: Irene Testa
+
+Email: irene.testa@example.invalid
+
+Prenotazione n.: #475
+
+
+
+RISPOSTE DEL MODULO
+
+Citta: Torino
+
+Progetto: Sito nuovo
+
+
+
+Apri nel backend: http://localhost:8086/administrator/index.php?option=com_webgbooking&view=booking&id=475
+
+
+
+--
+
+wgbtest
+
+Notifica del sistema di prenotazione di wgbtest.
+

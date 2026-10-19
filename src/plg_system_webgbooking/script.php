@@ -91,6 +91,7 @@ return new class () implements InstallerScriptInterface {
                 . $db->quoteName('staff_to') . ' VARCHAR(500) NULL,'
                 . $db->quoteName('hook_cfg') . ' TEXT NULL,'
                 . $db->quoteName('cust_cfg') . ' MEDIUMTEXT NULL,'
+                . $db->quoteName('review_why') . ' VARCHAR(16) NULL,'
                 . 'PRIMARY KEY (' . $db->quoteName('id') . '),'
                 . 'KEY ' . $db->quoteName('idx_date') . ' (' . $db->quoteName('booking_date') . ',' . $db->quoteName('booking_time') . '),'
                 . 'KEY ' . $db->quoteName('idx_token') . ' (' . $db->quoteName('manage_token') . ')'
@@ -136,6 +137,8 @@ return new class () implements InstallerScriptInterface {
                 'hook_cfg'              => 'TEXT NULL',
                 // 0.34.1: the element's customer-email settings, for the admin "confirm and tell the customer"
                 'cust_cfg'              => 'MEDIUMTEXT NULL',
+                // 0.34.3: why a paid booking needs review (slot / past / unknown / amount): the customer pages and emails say it
+                'review_why'            => 'VARCHAR(16) NULL',
             ];
             foreach ($newCols as $name => $def) {
                 try {

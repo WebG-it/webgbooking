@@ -244,7 +244,7 @@ clear_mail()
 x = json.loads(Sess().post(AJAX + '&action=reschedule', {'action': 'reschedule', 'token': tok, 'date': day(D + 1), 'time': '15:00'}))
 st = [m for m in mails_to('elem-staff@example.invalid')]
 check('S1 the staff email of a reschedule says "Appointment moved" (not "New booking")', x.get('ok') is True and len(st) == 1 and ('moved' in st[0]['subject'].lower() or 'spostato' in st[0]['subject'].lower()) and 'new booking' not in st[0]['subject'].lower() and 'nuova prenotazione' not in st[0]['subject'].lower(), [m['subject'] for m in st])
-check('S2 ...with the new slot in the subject and the previous one in the text', st and day(D + 1) in st[0]['subject'] and '15:00' in st[0]['subject'] and day(D) in st[0]['html'] and '09:00' in st[0]['html'], st and st[0]['subject'])
+check('S2 ...with the new slot in the subject and the previous one in the text', st and dmy(day(D + 1)) in st[0]['subject'] and '15:00' in st[0]['subject'] and dmy(day(D)) in st[0]['html'] and '09:00' in st[0]['html'], st and st[0]['subject'])
 clear_mail()
 r = book('staffto', day(D + 2), '09:00', email='mv2@example.invalid', name='Nuovo Due')
 st = mails_to('elem-staff@example.invalid')

@@ -1,0 +1,20 @@
+[
+ {
+  "slug": "webg-cliente-confermato",
+  "label": "Conferma al cliente",
+  "audience": "cliente",
+  "group": "1 Con il marchio WebG (valori presi da Brevo)",
+  "subject": "Appuntamento confermato",
+  "rcpt": "giulia.bianchi@example.invalid",
+  "attach_ics": true
+ },
+ {
+  "slug": "webg-staff-nuova",
+  "label": "Nuova prenotazione per lo staff",
+  "audience": "staff",
+  "group": "1 Con il marchio WebG (valori presi da Brevo)",
+  "subject": "Nuova prenotazione: 26/10/2026 alle 09:30",
+  "rcpt": "staff@wgbtest.invalid",
+  "attach_ics": false
+ }
+]

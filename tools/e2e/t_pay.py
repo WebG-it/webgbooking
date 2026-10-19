@@ -160,7 +160,8 @@ rw7 = dbrow(b7)
 check('P11 late webhook, slot TAKEN -> needs_review, marked paid (no silent double meeting)', out.get('result') == 'review' and rw7['status'] == 'needs_review' and rw7['payment_status'] == 'paid', (out, rw7))
 ms = [decode_mail(mail_text(p)) for p in mails()]
 alert = next((m for m in ms if 'staff@' in m['rcpt'] and ('TO REVIEW' in m['subject'] or 'DA GESTIRE' in m['subject'])), None)
-check('P11b staff alert sent; the late payer gets NO email and no extra Google event is created', alert is not None and 'late2@' not in ' '.join(m['rcpt'] for m in ms) and len(gm_events()) == n_ev, [m['subject'] for m in ms])
+late_mail = [m for m in ms if 'late2@' in m['rcpt']]
+check('P11b staff alert sent; the late payer is told by ONE email that the time is no longer available (not a confirmation), and no extra Google event is created', alert is not None and len(late_mail) == 1 and 'no longer available' in late_mail[0]['subject'] and len(gm_events()) == n_ev, [m['subject'] for m in ms])
 check('P11c alert mentions refund by hand and the payment reference', alert is not None and ('refund' in alert['html'].lower() or 'rimbors' in alert['html'].lower()) and 'pi_mock_' in alert['html'], alert and alert['html'][:300])
 check('P11d needs_review does not block the slot of the other booking (single booking at 17:00 active)', sql("SELECT COUNT(*) FROM joom_webgbooking_bookings WHERE booking_date='%s' AND booking_time='17:00' AND status IN ('pending','confirmed')" % day(D)) == '1')
 # amount mismatch

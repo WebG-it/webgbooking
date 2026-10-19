@@ -1,0 +1,44 @@
+New booking
+
+===========
+
+A new appointment was booked.
+
+Service: Call Meet 30
+
+Date: Sunday 25/10/2026
+
+Time: 09:30 (CET, Europe/Rome)
+
+Duration: 30 minutes
+
+Where: Google Meet (https://meet.google.com/abc-defg-hij)
+
+
+
+CUSTOMER
+
+Name: Giulia Bianchi
+
+Email: giulia.bianchi@example.invalid
+
+Phone: +39 333 123 4567
+
+Guest: marco.verdi@example.invalid
+
+Notes: Vorrei capire se il sito attuale si puo aggiornare senza rifarlo da zero.
+
+Booking no.: #478
+
+
+
+Open in the backend: http://localhost:8086/administrator/index.php?option=com_webgbooking&view=booking&id=478
+
+
+
+--
+
+wgbtest
+
+Notification from the booking system of wgbtest.
+

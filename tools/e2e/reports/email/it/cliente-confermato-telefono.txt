@@ -1,0 +1,38 @@
+
+
+Il tuo appuntamento è confermato
+
+================================
+
+Ciao Paolo Neri, il tuo appuntamento è confermato. Ecco i dettagli:
+
+In allegato trovi il file .ics: aprilo per aggiungere l'appuntamento al tuo calendario.
+
+Ti chiamo al numero +39 347 555 0102 nel giorno e all'ora indicati.
+
+Servizio: Riunione - 1 ora
+
+Data: Lunedì 26/10/2026
+
+Ora: 10:00 (CET, Europe/Rome)
+
+Durata: 60 minuti
+
+Dove: Telefonata al numero +39 347 555 0102
+
+Aggiungi a Google Calendar: https://calendar.google.com/calendar/render?action=TEMPLATE&text=Riunione+-+1+ora&dates=20261026T090000Z%2F20261026T100000Z&details=
+
+Modifica o annulla l'appuntamento: http://localhost:8086/index.php?option=com_ajax&group=system&plugin=webgbooking&format=html&action=manage&token=ESEMPIO
+
+
+
+A presto!
+
+
+
+--
+
+wgbtest
+
+Email inviata automaticamente. Se non hai richiesto tu questo appuntamento, ignora questo messaggio.
+

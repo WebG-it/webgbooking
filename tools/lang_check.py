@@ -114,6 +114,10 @@ def main():
                 for a, b in (('en-GB', 'it-IT'), ('it-IT', 'en-GB')):
                     for missing in sorted(set(k[a]) - set(k[b])):
                         problems.append('%s/%s: key %s is in %s but missing in %s' % (d, f, missing, a, b))
+                for kk, vv in k['it-IT'].items():
+                    # Italian written with an apostrophe instead of the accent (e' piu' modalita'): always a defect
+                    if re.search(r"(?<![A-Za-z'])(e|E|piu|gia|puo|finche|cosi|perche|modalita|attivita|citta|qualita|funzionalita|disponibilita|possibilita)'(?![A-Za-z])", vv):
+                        problems.append('%s/it-IT/%s: key %s writes an accent as an apostrophe' % (d, f, kk))
                 for l in LANGS:
                     for kk, vv in k[l].items():
                         if not vv.strip():

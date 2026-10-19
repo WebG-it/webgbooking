@@ -1,0 +1,20 @@
+Nuova prenotazione
+==================
+È stato prenotato un nuovo appuntamento.
+Servizio: Riunione - 1 ora
+Data: Lunedì 26/10/2026
+Ora: 10:00 (CET, Europe/Rome)
+Durata: 60 minuti
+Dove: Telefonata al numero +39 347 555 0102
+
+CLIENTE
+Nome: Paolo Neri
+Email: paolo.neri@example.invalid
+Telefono: +39 347 555 0102
+Prenotazione n.: #466
+
+Apri nel backend: http://localhost:8086/administrator/index.php?option=com_webgbooking&view=booking&id=466
+
+--
+wgbtest
+Notifica del sistema di prenotazione di wgbtest.

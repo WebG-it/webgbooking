@@ -1,0 +1,15 @@
+Pagamento ricevuto: stiamo verificando il tuo appuntamento
+==========================================================
+Ciao Dario Controllo,
+Abbiamo ricevuto il tuo pagamento di 29,00 € per il martedì 27/10/2026 alle 09:00. Stiamo verificando l'appuntamento e ti scriviamo a breve per confermarlo oppure per rimborsarti.
+Pagamento ricevuto: 29,00 €. La ricevuta ti arriva da Stripe.
+Servizio: Audit SEO
+Data: Martedì 27/10/2026
+Ora: 09:00 (CET, Europe/Rome)
+Durata: 30 minuti
+Dove: Google Meet
+Pagamento: 29,00 €
+
+--
+wgbtest
+Email inviata automaticamente. Se non hai richiesto tu questo appuntamento, ignora questo messaggio.

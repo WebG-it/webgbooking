@@ -1,0 +1,254 @@
+[
+ {
+  "slug": "cliente-confermato-meet",
+  "label": "Appuntamento confermato, con videochiamata",
+  "audience": "cliente",
+  "group": "1 Prenotazione",
+  "subject": "Appointment confirmed",
+  "rcpt": "giulia.bianchi@example.invalid",
+  "attach_ics": true
+ },
+ {
+  "slug": "cliente-ospite-invito",
+  "label": "Invito per l'ospite",
+  "audience": "cliente",
+  "group": "1 Prenotazione",
+  "subject": "Invitation: appointment on 25/10/2026 at 09:30",
+  "rcpt": "marco.verdi@example.invalid",
+  "attach_ics": true
+ },
+ {
+  "slug": "staff-nuova-prenotazione",
+  "label": "Nuova prenotazione",
+  "audience": "staff",
+  "group": "1 Prenotazione",
+  "subject": "New booking: 2026-10-25 at 09:30",
+  "rcpt": "staff@wgbtest.invalid",
+  "attach_ics": false
+ },
+ {
+  "slug": "cliente-spostato",
+  "label": "Appuntamento spostato",
+  "audience": "cliente",
+  "group": "1 Prenotazione",
+  "subject": "Appointment moved: 25/10/2026 at 11:00",
+  "rcpt": "giulia.bianchi@example.invalid",
+  "attach_ics": true
+ },
+ {
+  "slug": "staff-spostato",
+  "label": "Appuntamento spostato dal cliente",
+  "audience": "staff",
+  "group": "1 Prenotazione",
+  "subject": "Appointment moved: 2026-10-25 at 11:00",
+  "rcpt": "staff@wgbtest.invalid",
+  "attach_ics": false
+ },
+ {
+  "slug": "cliente-annullato",
+  "label": "Appuntamento annullato",
+  "audience": "cliente",
+  "group": "1 Prenotazione",
+  "subject": "Appointment cancelled",
+  "rcpt": "giulia.bianchi@example.invalid",
+  "attach_ics": true
+ },
+ {
+  "slug": "staff-annullato",
+  "label": "Appuntamento annullato dal cliente",
+  "audience": "staff",
+  "group": "1 Prenotazione",
+  "subject": "Appointment cancelled: 2026-10-25 at 11:00",
+  "rcpt": "staff@wgbtest.invalid",
+  "attach_ics": false
+ },
+ {
+  "slug": "cliente-confermato-telefono",
+  "label": "Appuntamento confermato, telefonata",
+  "audience": "cliente",
+  "group": "1 Prenotazione",
+  "subject": "Appointment confirmed",
+  "rcpt": "paolo.neri@example.invalid",
+  "attach_ics": true
+ },
+ {
+  "slug": "staff-nuova-telefono",
+  "label": "Nuova prenotazione con telefonata",
+  "audience": "staff",
+  "group": "1 Prenotazione",
+  "subject": "New booking: 2026-10-26 at 10:00",
+  "rcpt": "staff@wgbtest.invalid",
+  "attach_ics": false
+ },
+ {
+  "slug": "cliente-richiesta",
+  "label": "Richiesta ricevuta (conferma manuale)",
+  "audience": "cliente",
+  "group": "1 Prenotazione",
+  "subject": "Your booking request",
+  "rcpt": "elena.gallo@example.invalid",
+  "attach_ics": true
+ },
+ {
+  "slug": "staff-richiesta",
+  "label": "Nuova richiesta da confermare",
+  "audience": "staff",
+  "group": "1 Prenotazione",
+  "subject": "New booking: 2026-10-27 at 15:00",
+  "rcpt": "staff@wgbtest.invalid",
+  "attach_ics": false
+ },
+ {
+  "slug": "cliente-testo-proprio",
+  "label": "Testo scritto nell'elemento, dentro il layout",
+  "audience": "cliente",
+  "group": "1 Prenotazione",
+  "subject": "Appointment confirmed",
+  "rcpt": "sara.conti@example.invalid",
+  "attach_ics": true
+ },
+ {
+  "slug": "cliente-promemoria",
+  "label": "Promemoria prima dell'appuntamento",
+  "audience": "cliente",
+  "group": "2 Promemoria e link",
+  "subject": "Reminder: appointment on 19/10/2026 at 19:54",
+  "rcpt": "luca.ferri@example.invalid",
+  "attach_ics": false
+ },
+ {
+  "slug": "cliente-promemoria-ospite",
+  "label": "Promemoria per l'ospite",
+  "audience": "cliente",
+  "group": "2 Promemoria e link",
+  "subject": "Reminder: appointment on 19/10/2026 at 19:54",
+  "rcpt": "ospite.promemoria@example.invalid",
+  "attach_ics": false
+ },
+ {
+  "slug": "cliente-confermato-link-dopo",
+  "label": "Confermato, il link arriva a breve",
+  "audience": "cliente",
+  "group": "2 Promemoria e link",
+  "subject": "Appointment confirmed",
+  "rcpt": "anna.riva@example.invalid",
+  "attach_ics": true
+ },
+ {
+  "slug": "staff-avviso-tecnico",
+  "label": "Avviso tecnico per lo staff (passaggi non completati)",
+  "audience": "staff",
+  "group": "5 Avvisi tecnici",
+  "subject": "WebG Booking: booking 2026-10-29 at 09:00 has steps that did not complete",
+  "rcpt": "staff@wgbtest.invalid",
+  "attach_ics": false
+ },
+ {
+  "slug": "cliente-link-videochiamata",
+  "label": "Ecco il link per la videochiamata",
+  "audience": "cliente",
+  "group": "2 Promemoria e link",
+  "subject": "Your video call link",
+  "rcpt": "anna.riva@example.invalid",
+  "attach_ics": false
+ },
+ {
+  "slug": "cliente-pagato",
+  "label": "Pagamento ricevuto, appuntamento confermato",
+  "audience": "cliente",
+  "group": "3 Prenotazione a pagamento",
+  "subject": "Appointment confirmed",
+  "rcpt": "marta.pagante@example.invalid",
+  "attach_ics": true
+ },
+ {
+  "slug": "staff-pagato",
+  "label": "Nuova prenotazione pagata",
+  "audience": "staff",
+  "group": "3 Prenotazione a pagamento",
+  "subject": "New booking: 2026-10-30 at 10:00",
+  "rcpt": "staff@wgbtest.invalid",
+  "attach_ics": false
+ },
+ {
+  "slug": "cliente-annullato-rimborso",
+  "label": "Annullato, con rimborso",
+  "audience": "cliente",
+  "group": "3 Prenotazione a pagamento",
+  "subject": "Appointment cancelled",
+  "rcpt": "marta.pagante@example.invalid",
+  "attach_ics": true
+ },
+ {
+  "slug": "staff-annullato-rimborso",
+  "label": "Annullato dal cliente, da rimborsare",
+  "audience": "staff",
+  "group": "3 Prenotazione a pagamento",
+  "subject": "Appointment cancelled: 2026-10-30 at 10:00",
+  "rcpt": "staff@wgbtest.invalid",
+  "attach_ics": false
+ },
+ {
+  "slug": "cliente-pagamento-tardivo",
+  "label": "Pagamento arrivato ma l'orario non e piu disponibile",
+  "audience": "cliente",
+  "group": "4 Pagamento tardivo",
+  "subject": "Payment received, but the time is no longer available",
+  "rcpt": "carlo.tardivo@example.invalid",
+  "attach_ics": false
+ },
+ {
+  "slug": "staff-pagamento-da-verificare",
+  "label": "Pagamento da verificare (soldi incassati, orario occupato)",
+  "audience": "staff",
+  "group": "4 Pagamento tardivo",
+  "subject": "TO REVIEW: payment received, slot not valid (2026-10-26 at 09:00)",
+  "rcpt": "staff@wgbtest.invalid",
+  "attach_ics": false
+ },
+ {
+  "slug": "cliente-pagamento-verifica",
+  "label": "Pagamento ricevuto, stiamo verificando",
+  "audience": "cliente",
+  "group": "4 Pagamento tardivo",
+  "subject": "Payment received: we are checking your appointment",
+  "rcpt": "dario.controllo@example.invalid",
+  "attach_ics": false
+ },
+ {
+  "slug": "staff-avviso-brevo",
+  "label": "Avviso: contatto non salvato in Brevo",
+  "audience": "staff",
+  "group": "5 Avvisi tecnici",
+  "subject": "WebG Booking: a booker was not added to Brevo",
+  "rcpt": "staff@wgbtest.invalid",
+  "attach_ics": false
+ },
+ {
+  "slug": "staff-avviso-webhook",
+  "label": "Avviso: webhook non configurato",
+  "audience": "staff",
+  "group": "5 Avvisi tecnici",
+  "subject": "WebG Booking: a webhook call was NOT sent (configuration)",
+  "rcpt": "staff@wgbtest.invalid",
+  "attach_ics": false
+ },
+ {
+  "slug": "marchio-cliente-confermato",
+  "label": "Con logo, colore e piede di pagina propri: cliente",
+  "audience": "cliente",
+  "group": "6 Con il marchio del cliente",
+  "subject": "Appointment confirmed",
+  "rcpt": "giulia.bianchi@example.invalid",
+  "attach_ics": true
+ },
+ {
+  "slug": "marchio-staff-nuova",
+  "label": "Con logo, colore e piede di pagina propri: staff",
+  "audience": "staff",
+  "group": "6 Con il marchio del cliente",
+  "subject": "New booking: 2026-11-03 at 09:30",
+  "rcpt": "staff@wgbtest.invalid",
+  "attach_ics": false
+ }
+]
