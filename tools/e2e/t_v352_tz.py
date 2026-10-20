@@ -94,6 +94,7 @@ class Chrome:
     def goto(self, url, wait='[data-wgb] .wgb-cal-grid'):
         self.cmd('Page.navigate', url=url)
         self.waitfor("!!document.querySelector('%s')" % wait)
+        self.waitfor("!!document.querySelector('.wgb-cal-grid .wgb-cell.wgb-avail')", 60)    # the month answer has been drawn
 
     def waitfor(self, cond, tries=80):
         for _ in range(tries):
@@ -167,7 +168,7 @@ try:
             check('V3 %s %04d-%02d: the times of each day, checked for %d days, are the converted site slots (days that change across midnight included)' % (tz, y, m, min(12, len(want))), not bad, bad[:3])
             if step == 0:
                 ch.js("document.querySelector('[data-act=\"next\"]').click()")
-                ch.waitfor("!!document.querySelector('.wgb-cal-grid')")
+                ch.waitfor("!!document.querySelector('.wgb-cal-grid .wgb-cell.wgb-avail')", 120)     # the next month has been answered and drawn
                 m = m % 12 + 1
                 y = y + (m == 1)
         # one real booking through the page: what the visitor picked must be the booked instant

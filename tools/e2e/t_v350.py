@@ -34,12 +34,7 @@ def upd(slug, **kw):
 
 
 def direct(path):
-    u = urllib.parse.urlparse(BASE + path)
-    c = http.client.HTTPConnection(u.hostname, u.port, timeout=60)
-    c.request('GET', u.path + ('?' + u.query if u.query else ''))
-    r = c.getresponse()
-    body = r.read().decode('utf-8', 'replace')
-    return r.status, {k.lower(): v for k, v in r.getheaders()}, body
+    return http_get(path)
 
 
 def dcfg(body):

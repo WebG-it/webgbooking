@@ -53,7 +53,8 @@
     function convertDays(days){var out={};for(var sd in days){if(!Object.prototype.hasOwnProperty.call(days,sd))continue;var ts=days[sd],ymd=sd.split('-');if(!ts||!ts.length)continue;for(var i=0;i<ts.length;i++){var hm=String(ts[i]).split(':'),ms=wallMs(+ymd[0],+ymd[1],+ymd[2],+hm[0],+hm[1],siteTz),p=tzParts(ms,st.tz),vk=p.year+'-'+pad2x(p.month)+'-'+pad2x(p.day),vt=pad2x(p.hour)+':'+pad2x(p.minute);(out[vk]=out[vk]||[]).push(vt);st.slotMap[vk+' '+vt]={sd:sd,st:String(ts[i]),ms:ms};}}for(var k in out){if(Object.prototype.hasOwnProperty.call(out,k))out[k].sort();}return out;}
     function tzMenu(){
       if(!siteTz||!st.tz)return '';
-      var opts=tzOptions(loc,[st.tz,siteTz,brTz]),cur=st.tz;
+      if(!st.tzOptsFor||st.tzOptsFor!==st.tz){st.tzOpts=tzOptions(loc,[st.tz,siteTz,brTz]);st.tzOptsFor=st.tz;}   /* ~400 zones to name: once per zone chosen, not at every redraw */
+      var opts=st.tzOpts,cur=st.tz;
       return '<div class="wgb-tz uk-margin-small-top"><label class="uk-text-meta uk-display-block" for="'+wgbId+'">'+esc(L.tzLabel||'')+'</label><select id="'+wgbId+'" class="uk-select uk-form-small wgb-tz-sel">'+opts.map(function(o){return '<option value="'+esc(o.id)+'"'+(o.id===cur?' selected':'')+'>'+esc(o.name+' ('+o.t+')')+'</option>';}).join('')+'</select></div>';
     }
     function avail(d){return !!(st.monthDays&&st.monthDays[isoDate(d)]);}

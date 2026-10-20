@@ -31,11 +31,8 @@ def ins(slug, title, **kw):
 
 
 def direct(path):
-    u = urllib.parse.urlparse(BASE + path)
-    c = http.client.HTTPConnection(u.hostname, u.port, timeout=60)
-    c.request('GET', u.path + ('?' + u.query if u.query else ''))
-    r = c.getresponse()
-    return r.status, r.read().decode('utf-8', 'replace')
+    st, hd, body = http_get(path)
+    return st, body
 
 
 def dcfg(body):

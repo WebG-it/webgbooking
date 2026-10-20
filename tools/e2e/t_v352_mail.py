@@ -27,10 +27,7 @@ def ins(slug, title, **kw):
 
 
 def direct_cfg(slug):
-    u = urllib.parse.urlparse(BASE + '/prenota/' + slug)
-    c = http.client.HTTPConnection(u.hostname, u.port, timeout=60)
-    c.request('GET', u.path)
-    b = c.getresponse().read().decode('utf-8', 'replace')
+    b = http_get('/prenota/' + slug)[2]
     return json.loads(html.unescape(re.search(r'data-wgb="([^"]+)"', b).group(1)))
 
 

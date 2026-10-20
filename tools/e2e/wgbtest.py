@@ -36,10 +36,15 @@ class Sess:
         self.op = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(self.cj))
 
     def get(self, url):
-        try:
-            return self.op.open(url, timeout=60).read().decode('utf-8', 'replace')
-        except urllib.error.HTTPError as e:
-            return e.read().decode('utf-8', 'replace')
+        for attempt in range(4):                      # Docker Desktop on a loaded PC now and then resets a connection: a GET can simply be repeated
+            try:
+                return self.op.open(url, timeout=60).read().decode('utf-8', 'replace')
+            except urllib.error.HTTPError as e:
+                return e.read().decode('utf-8', 'replace')
+            except (ConnectionError, urllib.error.URLError):
+                if attempt == 3:
+                    raise
+                time.sleep(2)
 
     def post(self, url, data):
         body = urllib.parse.urlencode(data).encode()
@@ -47,6 +52,23 @@ class Sess:
             return self.op.open(urllib.request.Request(url, data=body), timeout=60).read().decode('utf-8', 'replace')
         except urllib.error.HTTPError as e:
             return e.read().decode('utf-8', 'replace')
+
+
+def http_get(path):
+    """(status, {lower-case header: value}, body) of a page of the test site, with no cookies; repeated if the connection is reset."""
+    import http.client
+    u = urllib.parse.urlparse(BASE + path)
+    for attempt in range(4):
+        try:
+            c = http.client.HTTPConnection(u.hostname, u.port, timeout=60)
+            c.request('GET', u.path + ('?' + u.query if u.query else ''))
+            r = c.getresponse()
+            body = r.read().decode('utf-8', 'replace')
+            return r.status, {k.lower(): v for k, v in r.getheaders()}, body
+        except (ConnectionError, OSError):
+            if attempt == 3:
+                raise
+            time.sleep(2)
 
 
 AJAX = BASE + '/index.php?option=com_ajax&group=system&plugin=webgbooking&format=json'

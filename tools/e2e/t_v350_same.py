@@ -62,6 +62,8 @@ def normalise(pages):
             c['form'] = 'F'
             for k in ('locPhone', 'fPhoneNeeded', 'privacyHtml', 'phoneHint'):   # 0.35.1: the wording of the phone call and the privacy link changed on purpose
                 c.get('labels', {}).pop(k, None)
+            c.pop('siteTz', None)                                      # 0.35.2: the zone of the site, for the zone menu
+            c.get('labels', {}).pop('tzLabel', None)
             e = ev_of(c['ev'])
             e.pop('iat', None)
             c['ev'] = e
