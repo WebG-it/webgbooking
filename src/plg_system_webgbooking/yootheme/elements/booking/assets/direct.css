@@ -1,0 +1,79 @@
+/* Direct booking pages (/prenota/<slug>). Same look as the WebG Booking emails: one card on a light page, a coloured line on top
+   (or a rule under the header), the logo or the business name, footer text, dark colours in dark mode. The brand colours arrive as
+   CSS variables (--bk-*) written by the plugin; everything else is here. Mobile first: one column up to 820 px. */
+.bk-body{margin:0;background:#f2f4f7;color:var(--bk-text,#1f2433);font-family:Roboto,"Segoe UI",Helvetica,Arial,sans-serif;font-size:16px;line-height:1.55;-webkit-text-size-adjust:100%}
+.bk-page{box-sizing:border-box;max-width:960px;margin:0 auto;padding:20px 16px 32px}
+.bk-page *,.bk-page *::before,.bk-page *::after{box-sizing:border-box}
+.bk-card{background:#fff;border-radius:10px;overflow:hidden}
+.bk-card.bk-band{border-top:5px solid var(--bk-line,#2b59c3)}
+.bk-head{padding:22px 24px 14px}
+.bk-rule .bk-head{padding-bottom:18px;border-bottom:3px solid var(--bk-line,#2b59c3);margin:0 24px;padding-left:0;padding-right:0}
+.bk-center{text-align:center}
+.bk-home{text-decoration:none}
+.bk-name{font-size:20px;line-height:26px;font-weight:700;color:var(--bk-head,#14192b)}
+.bk-logo{display:inline-block;max-width:60%;height:44px;width:auto;border:0;vertical-align:middle}
+.bk-logo-d{display:none}
+.bk-content{padding:8px 24px 28px}
+.bk-rule .bk-content{padding-top:22px}
+.bk-grid{display:grid;grid-template-columns:1fr;gap:22px}
+.bk-eyebrow{margin:0 0 6px;font-size:12px;line-height:16px;font-weight:700;letter-spacing:1.6px;text-transform:uppercase;color:var(--bk-link,#2b59c3)}
+.bk-title{margin:0 0 14px;font-size:26px;line-height:32px;font-weight:700;color:var(--bk-head,#14192b);text-transform:none;letter-spacing:0}
+.bk-meta{list-style:none;margin:0 0 16px;padding:0;display:flex;flex-wrap:wrap;gap:8px 18px;font-size:15px;font-weight:600;color:var(--bk-head,#14192b)}
+.bk-meta li{display:flex;align-items:center;gap:7px}
+.bk-ic{flex:none;color:var(--bk-link,#2b59c3)}
+.bk-desc p{margin:0 0 12px;color:var(--bk-text,#1f2433);font-size:16px;line-height:25px}
+.bk-widget{background:#fff;color:#1f2937;border:1px solid var(--bk-box-line,#d6dcf0);border-radius:10px;padding:10px}
+.bk-widget .wgb-booking .wgb-mount{padding:6px}
+.bk-widget .uk-button-primary{background:var(--bk-btn,#2b59c3);color:var(--bk-btn-ink,#fff);border-radius:8px;border:0}
+.bk-widget .uk-button-primary:hover,.bk-widget .uk-button-primary:focus{background:var(--bk-btn,#2b59c3);color:var(--bk-btn-ink,#fff);filter:brightness(.92)}
+.bk-widget .wgb-booking .wgb-slot:hover,.bk-widget .wgb-booking .wgb-slot:focus{border-color:var(--bk-btn,#2b59c3)}
+.bk-foot{padding:22px 24px 24px;background:var(--bk-foot-bg,#2d3142)}
+.bk-f1{margin:0 0 6px;font-size:14px;line-height:22px;font-weight:700;color:var(--bk-f1,#fff)}
+.bk-f2{margin:0;font-size:13px;line-height:21px;color:var(--bk-f2,#d5d7e3)}
+.bk-foot-out{background:transparent;text-align:center;padding:20px 8px 4px}
+.bk-foot-out .bk-f1{color:var(--bk-f1)}
+.bk-foot-out .bk-f2{color:var(--bk-f2)}
+.bk-narrow{max-width:640px}
+.bk-lead{margin:0 0 18px;color:var(--bk-text,#1f2433)}
+.bk-link{color:var(--bk-link,#2b59c3)}
+.bk-evs{display:grid;grid-template-columns:1fr;gap:12px}
+.bk-ev{display:flex;flex-direction:column;gap:6px;padding:16px 18px;border:1px solid var(--bk-box-line,#d6dcf0);border-left:6px solid var(--bk-line,#2b59c3);border-radius:8px;background:var(--bk-box,#f3f5fd);text-decoration:none;color:var(--bk-text,#1f2433)}
+.bk-ev:hover,.bk-ev:focus{background:#fff;outline:2px solid var(--bk-btn,#2b59c3);outline-offset:1px}
+.bk-ev-t{font-size:18px;line-height:24px;font-weight:700;color:var(--bk-head,#14192b)}
+.bk-ev-m{display:flex;align-items:center;gap:6px;font-size:14px;color:var(--bk-link,#2b59c3);font-weight:600}
+.bk-ev-m .bk-ic{width:16px;height:16px}
+.bk-ev-d{font-size:15px;line-height:22px}
+.bk-ev-go{font-size:14px;font-weight:700;color:var(--bk-link,#2b59c3)}
+@media (min-width:820px){
+  .bk-head{padding:26px 40px 16px}
+  .bk-rule .bk-head{margin:0 40px}
+  .bk-content{padding:12px 40px 36px}
+  .bk-grid{grid-template-columns:minmax(0,5fr) minmax(0,6fr);gap:34px;align-items:start}
+  .bk-title{font-size:30px;line-height:36px}
+  .bk-foot{padding:26px 40px 28px}
+  .bk-evs{grid-template-columns:1fr 1fr}
+}
+@media (max-width:420px){
+  .bk-page{padding:12px 10px 24px}
+  .bk-head{padding:18px 16px 10px}
+  .bk-rule .bk-head{margin:0 16px}
+  .bk-content{padding:6px 16px 22px}
+  .bk-foot{padding:20px 16px}
+  .bk-title{font-size:23px;line-height:29px}
+  .bk-widget{padding:6px}
+}
+@media (prefers-color-scheme:dark){
+  .bk-body{background:#14151d;color:#d6d8e2}
+  .bk-card{background:#1e2030}
+  .bk-name,.bk-title,.bk-meta,.bk-ev-t{color:#f4f5f9}
+  .bk-desc p,.bk-lead{color:#d6d8e2}
+  .bk-eyebrow,.bk-ic,.bk-link,.bk-ev-m,.bk-ev-go{color:var(--bk-link-d,#9db4ff)}
+  .bk-ev{background:var(--bk-box-d,#232846);border-color:#3a3e57;border-left-color:var(--bk-line,#2b59c3);color:#d6d8e2}
+  .bk-ev:hover,.bk-ev:focus{background:#2a2f4d}
+  .bk-foot{background:#0f1017}
+  .bk-f1,.bk-foot-out .bk-f1{color:#fff}.bk-f2,.bk-foot-out .bk-f2{color:#d5d7e3}
+  .bk-foot-out{background:transparent}
+  .bk-logo-l{display:none}.bk-logo-d{display:inline-block}
+  .bk-logo-plate{background:#fff;padding:6px 10px;border-radius:6px;height:56px}
+  .bk-widget{border-color:#3a3e57}
+}

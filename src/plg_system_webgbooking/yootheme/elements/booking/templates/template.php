@@ -5,276 +5,47 @@
  * YOOtheme contract: $this->el(), $props, $attrs, $children, $builder.
  *
  * Calendly-style flow: month CALENDAR -> time slots -> details FORM -> confirm.
- * Availability is demo data for now; real data comes from the com_webgbooking engine.
+ * The configuration is built by WidgetConfig (shared with the direct booking page); this file is the markup.
  * All visitor-facing strings are translatable (Joomla language, IT/EN shipped).
  *
  * @license GNU General Public License version 2 or later
  */
 
-use Joomla\CMS\Factory;
-use Joomla\CMS\Language\Text;
-use Joomla\CMS\Plugin\PluginHelper;
 use Joomla\CMS\Uri\Uri;
-use Joomla\Registry\Registry;
+use WebG\Plugin\System\Webgbooking\Booking\EventTypes;
+use WebG\Plugin\System\Webgbooking\Booking\WidgetConfig;
 use WebG\Plugin\System\Webgbooking\Extension\Webgbooking;
 
 \defined('_JEXEC') or die;
 
-$enum = fn($v, array $ok, $def = '') => in_array($v, $ok, true) ? $v : $def;
-
-$cardClass = [
-    'card' => 'uk-card uk-card-default uk-card-body',
-    'primary' => 'uk-card uk-card-primary uk-card-body',
-    'secondary' => 'uk-card uk-card-secondary uk-card-body',
-    'plain' => 'wgb-plain',
-][$props['card_style'] ?? 'card'] ?? 'uk-card uk-card-default uk-card-body';
-
-$layout    = $enum($props['layout'] ?? '', ['inline', 'popup', 'slidein'], 'inline');
-$slotCols  = (int) $enum((string) ($props['slot_columns'] ?? ''), ['2', '3', '4'], '3');
-$slotStyle = $enum($props['slot_style'] ?? '', ['default', 'primary', 'secondary'], 'default');
-$slotSize  = $enum($props['slot_size'] ?? '', ['small', 'large']);
-$btnStyle  = $enum($props['button_style'] ?? '', ['default', 'primary', 'secondary'], 'primary');
-$btnSize   = $enum($props['button_size'] ?? '', ['small', 'large']);
-$accent    = preg_match('/^#[0-9a-fA-F]{3,8}$/', (string) ($props['accent_color'] ?? '')) ? $props['accent_color'] : '';
-
-$title    = (string) ($props['title'] ?? '') !== '' ? $props['title'] : Text::_('PLG_SYSTEM_WEBGBOOKING_DEFAULT_TITLE');
-$service  = (string) ($props['service'] ?? '');
-$btnText  = (string) ($props['button_text'] ?? '') !== '' ? $props['button_text'] : Text::_('PLG_SYSTEM_WEBGBOOKING_DEFAULT_BUTTON');
-
-$locale  = Factory::getApplication()->getLanguage()->getTag();
-$density  = $enum($props['cal_density'] ?? '', ['compact', 'comfortable'], 'compact');
-$calStyle = $enum($props['cal_style'] ?? '', ['calendly', 'plain'], 'calendly');
-$headCol  = preg_match('/^#[0-9a-fA-F]{3,8}$/', (string) ($props['header_color'] ?? '')) ? $props['header_color'] : '';
-
-// Availability comes from the plugin Options (backend); the widget builds real slots from it.
-$pp = new Registry(PluginHelper::getPlugin('system', 'webgbooking')->params ?? '');
-$timeOk = fn($v, $def) => preg_match('/^\d{1,2}:\d{2}$/', (string) $v) ? (string) $v : $def;
-$wd = $pp->get('work_days', [1, 2, 3, 4, 5]);
-$workDays = array_values(array_map('intval', is_array($wd) ? $wd : explode(',', (string) $wd)));
-
-// Custom form questions: parsed from the element config (one per line: "Label | type | required | options").
-// The DEFINITIONS travel inside the signed token below, so the server validates/labels answers against
-// exactly what it emitted — the client cannot inject fields or turn "required" off.
-$customDefs = [];
-$cfRaw = (string) ($props['custom_fields'] ?? '');
-if ($cfRaw !== '') {
-    $allowedTypes = ['text', 'textarea', 'email', 'tel', 'number', 'select', 'checkbox'];
-    $i = 0;
-    foreach (preg_split('/\r\n|\r|\n/', $cfRaw) as $line) {
-        $line = trim(strip_tags(html_entity_decode($line, ENT_QUOTES, 'UTF-8')));
-        if ($line === '') {
-            continue;
-        }
-        $parts = array_map('trim', explode('|', $line));
-        $label = $parts[0] ?? '';
-        if ($label === '') {
-            continue;
-        }
-        $type = strtolower($parts[1] ?? 'text');
-        if (!\in_array($type, $allowedTypes, true)) {
-            $type = 'text';
-        }
-        $required = isset($parts[2]) && \in_array(strtolower($parts[2]), ['required', '*', 'yes', '1', 'si', 'sì'], true);
-        $options = [];
-        if ($type === 'select' && !empty($parts[3])) {
-            foreach (explode(',', $parts[3]) as $opt) {
-                $opt = trim($opt);
-                if ($opt !== '') {
-                    $options[] = $opt;
-                }
-            }
-        }
-        $customDefs[] = ['name' => 'cf' . $i, 'label' => $label, 'type' => $type, 'required' => $required, 'options' => $options];
-        if (++$i >= 20) {
-            break; // safety cap
-        }
+// Since 0.35.0 the configuration (questions, event type, price, signed token, labels) is built by WidgetConfig, the same
+// code the direct booking page uses. An element that picks a SAVED EVENT TYPE takes the event definition from it (and the
+// server re-reads the type when the booking arrives); an element that does not pick one is configured by hand, as before.
+$etypeId = (int) ($props['event_type'] ?? 0);
+$wopts   = [];
+if ($etypeId > 0) {
+    $saved = EventTypes::get($etypeId);
+    if ($saved) {
+        $props = EventTypes::overlay($props, $saved);
+    } else {
+        $wopts['unavailable'] = true;
     }
+    $wopts['etype'] = $etypeId;
 }
-
-// EVENT TYPE of this element: duration, buffers, where the meeting happens. Empty duration/buffers fall back to
-// the plugin options (resolved server-side on every request, so a change of the defaults applies at once).
-$numOrNull = static function ($v) {
-    $v = trim((string) $v);
-
-    return ($v !== '' && is_numeric($v) && (int) $v >= 0) ? (int) $v : null;
-};
-// Availability of THIS element (empty = the plugin-wide hours/days/notice/window), signed with the rest.
-$hhmm = static fn($v) => preg_match('/^([01]?\d|2[0-3]):[0-5]\d$/', trim((string) $v)) ? trim((string) $v) : null;
-$availWs = $hhmm($props['avail_start'] ?? '');
-$availWe = $hhmm($props['avail_end'] ?? '');
-$availDays = null;
-if (trim((string) ($props['avail_days'] ?? '')) !== '') {
-    $availDays = array_values(array_unique(array_filter(array_map('intval', preg_split('/[,\s;]+/', trim((string) $props['avail_days']))), static fn($d) => $d >= 0 && $d <= 6)));
-    $availDays = $availDays ?: null;
-}
-$evCfg = [
-    'ws'   => ($availWs && $availWe) ? $availWs : null,
-    'we'   => ($availWs && $availWe) ? $availWe : null,
-    'wd'   => $availDays,
-    'nt'   => $numOrNull($props['avail_notice'] ?? ''),
-    'wn'   => $numOrNull($props['avail_window'] ?? ''),
-    'dur'  => $numOrNull($props['event_duration'] ?? ''),
-    'bb'   => $numOrNull($props['event_buffer_before'] ?? ''),
-    'ba'   => $numOrNull($props['event_buffer_after'] ?? ''),
-    'loc'  => $enum($props['event_location'] ?? '', ['meet', 'phone', 'choice'], 'meet'),
-    'name' => mb_substr(trim(strip_tags($service)), 0, 120),
-];
-$shownDur = ($evCfg['dur'] ?? 0) > 0 ? (int) $evCfg['dur'] : (int) $pp->get('slot_duration', 30);
-$shownDur = max(5, min(480, $shownDur));
-
-// Thank-you page: absolute http(s) URL or a site path. Anything else is ignored.
-$redir = trim((string) ($props['redirect_url'] ?? ''));
-// (a backslash is refused everywhere: browsers read "/\host" as "//host", an open redirect)
-if ($redir !== '' && !preg_match('#^(https?://[^\s\\\\]+|/(?![/\\\\])[^\s\\\\]*)$#i', $redir)) {
-    $redir = '';
-}
-
-// PRICE of this element (empty / 0 = free event, nothing changes). Signed with the rest of the config, so the
-// visitor can neither lower nor remove the price.
-// An amount that cannot be read unambiguously ("49.999", "4,9,9") or a currency outside EUR/USD/GBP/CHF marks the
-// price INVALID: the element then refuses bookings (and says so) instead of silently becoming a free event.
-$priceRaw   = trim((string) ($props['price_amount'] ?? ''));
-$priceAmt   = $priceRaw === '' ? 0 : Webgbooking::parseAmountStrict($priceRaw);
-$priceCur   = strtoupper(trim((string) ($props['price_currency'] ?? '')));
-$priceCur   = $priceCur === '' ? 'EUR' : $priceCur;
-$priceBad   = ($priceRaw !== '' && ($priceAmt === null || !\in_array($priceCur, Webgbooking::CURRENCIES, true)));
-$priceAmt   = (int) $priceAmt;
-$priceCfg   = $priceBad
-    ? ['invalid' => true]
-    : ($priceAmt > 0 ? ['amt' => $priceAmt, 'cur' => $priceCur, 'label' => mb_substr(trim(strip_tags((string) ($props['price_label'] ?? ''))), 0, 120)] : []);
-
-// Reminders: element override (on/off, times, text); empty times/text fall back to the plugin options.
-$remCfg = [
-    'on'      => !isset($props['act_reminder_on']) || !empty($props['act_reminder_on']),
-    'times'   => Webgbooking::parseTimes((string) ($props['reminder_times'] ?? '')),
-    'subject' => (string) ($props['reminder_subject'] ?? ''),
-    'body'    => (string) ($props['reminder_body'] ?? ''),
-];
-
-// Per-element ACTIONS config (customer email / staff email / webhook), signed with the site secret
-// so the client cannot tamper it (no spam-relay / no SSRF — the server only trusts what it signed).
-$actionsCfg = [
-    'fields' => $customDefs,
-    'v'     => (int) max(1, (int) $pp->get('config_epoch', 1)),
-    'iat'   => time(),
-    'event' => $evCfg,
-    'price' => $priceCfg,
-    'redirect' => $redir,
-    'analytics' => preg_match('/^[A-Za-z0-9_\-]{1,40}$/', trim((string) ($props['analytics_event'] ?? ''))) ? trim((string) $props['analytics_event']) : 'wgb_booking_completed',
-    'reminder' => $remCfg,
-    'manual'   => !empty($props['confirm_manual']),
-    // Signed: the newsletter tick only counts when this element really shows the box (the POST field is the visitor's).
-    'showNewsletter' => !empty($props['show_newsletter']),
-    'customer' => [
-        'on'      => !isset($props['act_customer_on']) || !empty($props['act_customer_on']),
-        'subject' => (string) ($props['email_subject'] ?? ''),
-        'body'    => (string) ($props['email_body'] ?? ''),
-    ],
-    'staff' => [
-        'on'      => !isset($props['act_staff_on']) || !empty($props['act_staff_on']),
-        'to'      => (string) ($props['staff_to'] ?? ''),
-        'subject' => (string) ($props['staff_subject'] ?? ''),
-        'body'    => (string) ($props['staff_body'] ?? ''),
-    ],
-    'webhook' => [
-        'on'     => !empty($props['act_webhook_on']),
-        'url'    => preg_match('#^https?://[^\s]+$#i', trim((string) ($props['webhook_url'] ?? ''))) ? trim((string) $props['webhook_url']) : '',
-        'method' => (string) ($props['webhook_method'] ?? 'POST'),
-        // Only the NAME of a header profile: the headers (and their secrets) live in the plugin options, never in this markup.
-        'profile' => mb_substr(trim((string) ($props['webhook_profile'] ?? '')), 0, 60),
-    ],
-    'brevo' => [
-        'on'    => !empty($props['act_brevo_on']),
-        'lists' => array_slice(array_values(array_filter(array_map('intval', preg_split('/[\s,;]+/', (string) ($props['brevo_lists'] ?? '')) ?: []), static fn($i) => $i > 0)), 0, 20),
-        'when'  => (string) ($props['brevo_when'] ?? 'newsletter') === 'always' ? 'always' : 'newsletter',
-        'attrs' => mb_substr((string) ($props['brevo_attrs'] ?? ''), 0, 1500),
-        'doi'   => [
-            'template' => (int) ($props['brevo_doi_template'] ?? 0),
-            'redirect' => preg_match('#^https://[^\s\\\\]+$#i', trim((string) ($props['brevo_doi_redirect'] ?? ''))) ? trim((string) $props['brevo_doi_redirect']) : '',
-        ],
-    ],
-];
-$secret    = (string) Factory::getApplication()->get('secret');
-// Sealed (AES-GCM + HMAC): the page source does not show the webhook address, staff recipients or Brevo settings.
-$formToken = Webgbooking::sealFormToken($actionsCfg, $secret);
-$evToken   = Webgbooking::signEv($evCfg, $secret, (int) max(1, (int) $pp->get('config_epoch', 1))); // small signed token for the GET availability calls
-
-$cfg = [
-    'locale'    => $locale,
-    'form'      => $formToken,
-    'ev'        => $evToken,
-    'location'  => $evCfg['loc'],
-    'redirectUrl' => $redir,
-    'priceInvalid' => $priceBad,
-    'price'     => ($priceCfg && empty($priceCfg['invalid'])) ? ['text' => Webgbooking::formatAmount($priceCfg['amt'], $priceCfg['cur'], $locale), 'hold' => max(30, min(1440, (int) $pp->get('stripe_hold_minutes', 30)))] : null,
-    'cols'      => $slotCols,
-    'slotStyle' => $slotStyle,
-    'slotSize'  => $slotSize ? 'uk-button-' . $slotSize : '',
-    'btnStyle'  => $btnStyle,
-    'allowGuest' => !empty($props['allow_guest']),
-    'customFields' => $customDefs,
-    'showNewsletter' => !empty($props['show_newsletter']),
-    'analyticsEvent' => trim((string) ($props['analytics_event'] ?? '')),
-    'accent'    => $accent,
-    'workStart' => $timeOk($evCfg['ws'] ?? $pp->get('work_start', '09:00'), '09:00'),
-    'workEnd'   => $timeOk($evCfg['we'] ?? $pp->get('work_end', '18:00'), '18:00'),
-    'interval'  => (int) $pp->get('slot_interval', 30),
-    'duration'  => $shownDur,
-    'workDays'  => $evCfg['wd'] ?? $workDays,
-    'minNotice' => $evCfg['nt'] ?? (int) $pp->get('min_notice', 2),
-    'window'    => $evCfg['wn'] ?? (int) $pp->get('window_days', 30),
-    'ajaxUrl'   => Uri::root(true) . '/index.php?option=com_ajax&group=system&plugin=webgbooking&format=json',
-    'labels'    => [
-        'stepDay'     => Text::_('PLG_SYSTEM_WEBGBOOKING_STEP_DAY'),
-        'stepTime'    => Text::_('PLG_SYSTEM_WEBGBOOKING_STEP_TIME'),
-        'stepDetails' => Text::_('PLG_SYSTEM_WEBGBOOKING_STEP_DETAILS'),
-        'back'        => Text::_('PLG_SYSTEM_WEBGBOOKING_BACK'),
-        'noSlots'     => Text::_('PLG_SYSTEM_WEBGBOOKING_NO_SLOTS'),
-        'fName'       => Text::_('PLG_SYSTEM_WEBGBOOKING_FIELD_NAME'),
-        'fEmail'      => Text::_('PLG_SYSTEM_WEBGBOOKING_FIELD_EMAIL'),
-        'fPhone'      => Text::_('PLG_SYSTEM_WEBGBOOKING_FIELD_PHONE'),
-        'fNotes'      => Text::_('PLG_SYSTEM_WEBGBOOKING_FIELD_NOTES'),
-        'fGuest'      => Text::_('PLG_SYSTEM_WEBGBOOKING_FIELD_GUEST'),
-        'fNewsletter' => Text::_('PLG_SYSTEM_WEBGBOOKING_FIELD_NEWSLETTER'),
-        'emailNote'   => Text::_('PLG_SYSTEM_WEBGBOOKING_EMAIL_NOTE'),
-        'emailNotePhone' => Text::_('PLG_SYSTEM_WEBGBOOKING_EMAIL_NOTE_PHONE'),
-        'locChoice'   => Text::_('PLG_SYSTEM_WEBGBOOKING_LOC_CHOICE'),
-        'locMeet'     => Text::_('PLG_SYSTEM_WEBGBOOKING_LOC_MEET'),
-        'locPhone'    => Text::_('PLG_SYSTEM_WEBGBOOKING_LOC_PHONE'),
-        'fPhoneNeeded' => Text::_('PLG_SYSTEM_WEBGBOOKING_FIELD_PHONE_NEEDED'),
-        'phoneReq'    => Text::_('PLG_SYSTEM_WEBGBOOKING_PHONE_REQUIRED'),
-        'minShort'    => Text::_('PLG_SYSTEM_WEBGBOOKING_MINUTES'),
-        'payNow'      => Text::_('PLG_SYSTEM_WEBGBOOKING_PAY_NOW'),
-        'payNote'     => Text::_('PLG_SYSTEM_WEBGBOOKING_PAY_NOTE'),
-        'payRedirecting' => Text::_('PLG_SYSTEM_WEBGBOOKING_PAY_REDIRECTING'),
-        'priceInvalid' => Text::_('PLG_SYSTEM_WEBGBOOKING_PRICE_INVALID'),
-        'calUnavailable' => Text::_('PLG_SYSTEM_WEBGBOOKING_CAL_UNAVAILABLE'),
-        'privacy'     => Text::_('PLG_SYSTEM_WEBGBOOKING_PRIVACY'),
-        'bookNow'     => Text::_('PLG_SYSTEM_WEBGBOOKING_BOOK_NOW'),
-        'required'    => Text::_('PLG_SYSTEM_WEBGBOOKING_REQUIRED'),
-        'demo'        => Text::_('PLG_SYSTEM_WEBGBOOKING_DEMO_NOTE'),
-        'done'        => Text::_('PLG_SYSTEM_WEBGBOOKING_DONE'),
-        'sending'     => Text::_('PLG_SYSTEM_WEBGBOOKING_SENDING'),
-        'bookErr'     => Text::_('PLG_SYSTEM_WEBGBOOKING_BOOK_ERR'),
-        'prevMonth'   => Text::_('PLG_SYSTEM_WEBGBOOKING_PREV_MONTH'),
-        'nextMonth'   => Text::_('PLG_SYSTEM_WEBGBOOKING_NEXT_MONTH'),
-        'loading'     => Text::_('PLG_SYSTEM_WEBGBOOKING_LOADING'),
-    ],
-];
-
-$cfgAttr = htmlspecialchars(json_encode($cfg, JSON_UNESCAPED_UNICODE), ENT_QUOTES, 'UTF-8');
-// Pick a foreground (white/dark) that stays readable on the chosen accent colour.
-$accentFg = static function (string $hex): string {
-    $h = ltrim($hex, '#');
-    if (strlen($h) === 3) { $h = $h[0] . $h[0] . $h[1] . $h[1] . $h[2] . $h[2]; }
-    if (strlen($h) < 6) { return '#ffffff'; }
-    $lum = 0.299 * hexdec(substr($h, 0, 2)) + 0.587 * hexdec(substr($h, 2, 2)) + 0.114 * hexdec(substr($h, 4, 2));
-    return $lum > 150 ? '#1f2937' : '#ffffff';
-};
-$vars = [];
-if ($accent) { $vars[] = '--wgb-accent:' . $accent; $vars[] = '--wgb-accent-fg:' . $accentFg($accent); }
-if ($headCol) { $vars[] = '--wgb-head:' . $headCol; $vars[] = '--wgb-head-op:1'; }
-$styleVar = $vars ? ' style="' . htmlspecialchars(implode(';', $vars), ENT_QUOTES, 'UTF-8') . '"' : '';
+$w         = WidgetConfig::build($props, $wopts);
+$cardClass = $w['cardClass'];
+$layout    = $w['layout'];
+$btnStyle  = $w['btnStyle'];
+$btnSize   = $w['btnSize'];
+$btnText   = $w['btnText'];
+$title     = $w['title'];
+$service   = $w['service'];
+$density   = $w['density'];
+$calStyle  = $w['calStyle'];
+$accent    = $w['accent'];
+$cfg       = $w['cfg'];
+$cfgAttr   = $w['cfgAttr'];
+$styleVar  = $w['styleVar'];
 $uid = 'wgb-' . substr(md5(uniqid('', true)), 0, 8);
 
 // Assets are output directly in the element markup (<link> + <script src>). This executes on the

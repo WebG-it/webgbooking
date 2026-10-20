@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<form>
+    <fields name="filter">
+        <field name="search" type="text" inputmode="search"
+            label="COM_WEBGBOOKING_ET_SEARCH_LABEL"
+            description="COM_WEBGBOOKING_ET_SEARCH_DESC"
+            hint="COM_WEBGBOOKING_ET_SEARCH_HINT" />
+        <field name="state" type="list" label="COM_WEBGBOOKING_ET_F_STATE" onchange="this.form.submit();">
+            <option value="">COM_WEBGBOOKING_ET_FILTER_STATE_ALL</option>
+            <option value="1">COM_WEBGBOOKING_ET_STATE_1</option>
+            <option value="0">COM_WEBGBOOKING_ET_STATE_0</option>
+        </field>
+        <field name="listed" type="list" label="COM_WEBGBOOKING_ET_F_LISTED" onchange="this.form.submit();">
+            <option value="">COM_WEBGBOOKING_ET_FILTER_LISTED_ALL</option>
+            <option value="1">COM_WEBGBOOKING_ET_LISTED_1</option>
+            <option value="0">COM_WEBGBOOKING_ET_LISTED_0</option>
+        </field>
+    </fields>
+    <fields name="list">
+        <field name="fullordering" type="list" onchange="this.form.submit();" default="ordering ASC">
+            <option value="">JGLOBAL_SORT_BY</option>
+            <option value="ordering ASC">COM_WEBGBOOKING_ET_SORT_ORDER</option>
+            <option value="title ASC">COM_WEBGBOOKING_ET_SORT_TITLE_ASC</option>
+            <option value="title DESC">COM_WEBGBOOKING_ET_SORT_TITLE_DESC</option>
+        </field>
+        <field name="limit" type="limitbox" class="input-mini" default="25" onchange="this.form.submit();" />
+    </fields>
+</form>

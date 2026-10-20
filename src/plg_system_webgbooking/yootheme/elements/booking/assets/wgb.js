@@ -12,6 +12,7 @@
     var L=cfg.labels||{},loc=cfg.locale||'en',cols=cfg.cols||3;
     var slotBtn='uk-button uk-button-'+(cfg.slotStyle||'default')+(cfg.slotSize?' '+cfg.slotSize:'');
     var mount=root.querySelector('.wgb-mount')||root;
+    if(cfg.unavailable){mount.innerHTML='<div class="uk-alert uk-alert-warning" role="alert" uk-alert>'+esc(cfg.unavailable)+'</div>';return;}
     if(cfg.priceInvalid){mount.innerHTML='<div class="uk-alert uk-alert-danger" role="alert" uk-alert>'+esc(L.priceInvalid||'')+'</div>';return;}
     mount.setAttribute('role','region');mount.setAttribute('aria-live','polite');mount.setAttribute('aria-atomic','false');
     var st={view:startToday(),date:null,time:null,form:{name:'',email:'',phone:'',notes:'',privacy:false,loc:'meet'},err:false,step:'cal'};

@@ -1,0 +1,15 @@
+{
+  "$schema": "https://developer.joomla.org/schemas/json-schema/web_assets.json",
+  "name": "com_webgbooking",
+  "version": "0.35.0",
+  "description": "WebG Booking admin assets",
+  "license": "GPL-2.0-or-later",
+  "assets": [
+    {
+      "name": "com_webgbooking.copylink",
+      "type": "script",
+      "uri": "com_webgbooking/copylink.js",
+      "attributes": { "defer": true }
+    }
+  ]
+}

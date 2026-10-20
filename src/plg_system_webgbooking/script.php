@@ -174,6 +174,45 @@ return new class () implements InstallerScriptInterface {
                 . ') DEFAULT CHARSET=utf8mb4'
             )->execute();
 
+            // 0.35.0: saved event types (the direct booking address /prenota/<slug> and the element's "saved event type" choice).
+            // Edited in the component, read by the plugin. Text fields keep the element's own format (price "49" or "29,00",
+            // questions one per line) so the same code reads both.
+            $db->setQuery(
+                'CREATE TABLE IF NOT EXISTS ' . $db->quoteName('#__webgbooking_eventtypes') . ' ('
+                . $db->quoteName('id') . ' INT UNSIGNED NOT NULL AUTO_INCREMENT,'
+                . $db->quoteName('slug') . ' VARCHAR(80) NOT NULL,'
+                . $db->quoteName('title') . ' VARCHAR(190) NOT NULL,'
+                . $db->quoteName('description') . ' TEXT NULL,'
+                . $db->quoteName('state') . ' TINYINT NOT NULL DEFAULT 1,'
+                . $db->quoteName('listed') . ' TINYINT NOT NULL DEFAULT 1,'
+                . $db->quoteName('duration') . ' VARCHAR(6) NULL,'
+                . $db->quoteName('buffer_before') . ' VARCHAR(6) NULL,'
+                . $db->quoteName('buffer_after') . ' VARCHAR(6) NULL,'
+                . $db->quoteName('location') . " VARCHAR(10) NOT NULL DEFAULT 'meet',"
+                . $db->quoteName('avail_start') . ' VARCHAR(5) NULL,'
+                . $db->quoteName('avail_end') . ' VARCHAR(5) NULL,'
+                . $db->quoteName('avail_days') . ' VARCHAR(40) NULL,'
+                . $db->quoteName('avail_notice') . ' VARCHAR(6) NULL,'
+                . $db->quoteName('avail_window') . ' VARCHAR(6) NULL,'
+                . $db->quoteName('price_amount') . ' VARCHAR(30) NULL,'
+                . $db->quoteName('price_currency') . ' VARCHAR(3) NULL,'
+                . $db->quoteName('price_label') . ' VARCHAR(120) NULL,'
+                . $db->quoteName('custom_fields') . ' TEXT NULL,'
+                . $db->quoteName('staff_to') . ' VARCHAR(500) NULL,'
+                . $db->quoteName('redirect_url') . ' VARCHAR(500) NULL,'
+                . $db->quoteName('confirm_manual') . ' TINYINT NOT NULL DEFAULT 0,'
+                . $db->quoteName('allow_guest') . ' TINYINT NOT NULL DEFAULT 1,'
+                . $db->quoteName('show_newsletter') . ' TINYINT NOT NULL DEFAULT 0,'
+                . $db->quoteName('ordering') . ' INT NOT NULL DEFAULT 0,'
+                . $db->quoteName('created') . ' DATETIME NULL,'
+                . $db->quoteName('modified') . ' DATETIME NULL,'
+                . $db->quoteName('created_by') . ' INT UNSIGNED NOT NULL DEFAULT 0,'
+                . 'PRIMARY KEY (' . $db->quoteName('id') . '),'
+                . 'UNIQUE KEY ' . $db->quoteName('uq_slug') . ' (' . $db->quoteName('slug') . '),'
+                . 'KEY ' . $db->quoteName('idx_state') . ' (' . $db->quoteName('state') . ',' . $db->quoteName('listed') . ',' . $db->quoteName('ordering') . ')'
+                . ') DEFAULT CHARSET=utf8mb4'
+            )->execute();
+
             // Key/value store: alert throttles, freeBusy cache, one-time outcome tokens.
             $db->setQuery(
                 'CREATE TABLE IF NOT EXISTS ' . $db->quoteName('#__webgbooking_kv') . ' ('

@@ -19,6 +19,15 @@ try {
 } catch (\Throwable $e) {
 }
 
+// Saved event types (component "Tipi di evento") the element can pick instead of the hand-written event tab.
+$wgbTypeChoices = [Text::_('PLG_SYSTEM_WEBGBOOKING_EL_ETYPE_NONE') => ''];
+try {
+    foreach (\WebG\Plugin\System\Webgbooking\Booking\EventTypes::choices() as $wgbId => $wgbLabel) {
+        $wgbTypeChoices[$wgbLabel] = (string) $wgbId;
+    }
+} catch (\Throwable $e) {
+}
+
 return [
     'name' => 'wgb_booking',
     'title' => Text::_('PLG_SYSTEM_WEBGBOOKING_EL_BOOKING'),
@@ -69,6 +78,13 @@ return [
             'text' => Text::_('PLG_SYSTEM_WEBGBOOKING_EL_ALLOW_INVITING_A_GUEST'),
         ],
         // --- Event type (per element, signed server-side via HMAC) ---
+        'event_type' => [
+            'label' => Text::_('PLG_SYSTEM_WEBGBOOKING_EL_ETYPE'),
+            'description' => Text::_('PLG_SYSTEM_WEBGBOOKING_EL_ETYPE_DESC'),
+            'type' => 'select',
+            'options' => $wgbTypeChoices,
+            'default' => '',
+        ],
         'event_duration' => [
             'label' => Text::_('PLG_SYSTEM_WEBGBOOKING_EL_DURATION_MINUTES'),
             'description' => Text::_('PLG_SYSTEM_WEBGBOOKING_EL_LENGTH_OF_THIS_APPOINTMENT'),
@@ -378,7 +394,7 @@ return [
                 ],
                 [
                     'title' => Text::_('PLG_SYSTEM_WEBGBOOKING_EL_EVENT'),
-                    'fields' => ['event_duration', 'event_buffer_before', 'event_buffer_after', 'event_location', 'avail_start', 'avail_end', 'avail_days', 'avail_notice', 'avail_window', 'price_amount', 'price_currency', 'price_label', 'redirect_url'],
+                    'fields' => ['event_type', 'event_duration', 'event_buffer_before', 'event_buffer_after', 'event_location', 'avail_start', 'avail_end', 'avail_days', 'avail_notice', 'avail_window', 'price_amount', 'price_currency', 'price_label', 'redirect_url'],
                 ],
                 [
                     'title' => Text::_('PLG_SYSTEM_WEBGBOOKING_EL_FORM'),

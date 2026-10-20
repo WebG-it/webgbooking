@@ -29,12 +29,15 @@ use Joomla\Database\DatabaseInterface;
 use Joomla\Event\Event;
 use Joomla\Event\Priority;
 use Joomla\Event\SubscriberInterface;
+use WebG\Plugin\System\Webgbooking\Booking\DirectPage;
+use WebG\Plugin\System\Webgbooking\Booking\EventTypes;
+use WebG\Plugin\System\Webgbooking\Booking\WidgetConfig;
 use WebG\Plugin\System\Webgbooking\Mail\EmailLayout;
 
 final class Webgbooking extends CMSPlugin implements SubscriberInterface
 {
     /** Cache-buster for the bundled front-end assets (wgb.css/js, UIkit). Bump when those change. */
-    public const ASSET_VER = '0.34.5';
+    public const ASSET_VER = '0.35.0';
 
     protected $autoloadLanguage = true;
 
@@ -50,6 +53,9 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
 
     public function onAfterInitialise(): void
     {
+        // Direct booking address (/prenota/<slug>): answered here, before Joomla routes the request.
+        $this->directRoute();
+
         if (!class_exists(\YOOtheme\Application::class)) {
             return;
         }
@@ -177,6 +183,16 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             // No valid signed config = not our widget (or a forged price/duration): refuse. Without this a
             // hand-made request could book a paid event as a free default one.
             $this->respond(['ok' => false, 'message' => Text::_('PLG_SYSTEM_WEBGBOOKING_INVALID_TOKEN')]);
+        }
+        // A SAVED EVENT TYPE (direct page, or an element that picked one): its questions, price, duration and place are read from
+        // the database now, not taken from the page. A page rendered before the type was edited is told to reload; a type that
+        // was unpublished or deleted books nothing.
+        $actions = $this->applyEventType($actions);
+        if ($actions === null) {
+            $this->respond(['ok' => false, 'message' => Text::_('PLG_SYSTEM_WEBGBOOKING_ETYPE_GONE')]);
+        }
+        if (!empty($actions['_stale'])) {
+            $this->respond(['ok' => false, 'message' => Text::_('PLG_SYSTEM_WEBGBOOKING_ETYPE_STALE')]);
         }
         $ev      = $this->resolveEvent((array) ($actions['event'] ?? []));
         // The newsletter tick counts only when the element really shows the box (signed in the config): the visitor
@@ -328,7 +344,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                             'subject' => (string) (($actions['customer'] ?? [])['subject'] ?? ''),
                             'body'    => (string) (($actions['customer'] ?? [])['body'] ?? ''),
                         ]),
-                        'source_url'      => substr((string) $input->server->getString('HTTP_REFERER', ''), 0, 255),
+                        'source_url'      => $this->sourceUrl($actions, $input),
                         'meeting_url'     => $loc === 'phone' ? '' : trim((string) $this->params->get('meeting_url', '')),
                         'guest_email'     => $guest,
                         'manage_token'    => bin2hex(random_bytes(16)),
@@ -445,6 +461,16 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                 if (hash_equals($calc, $sig)) {
                     $cfg = json_decode((string) self::b64d($payload), true);
                     if (\is_array($cfg) && $this->tokenFresh($cfg)) {
+                        if (!empty($cfg['et'])) {
+                            // A saved event type: availability follows its CURRENT definition (an edit applies at once);
+                            // one that was unpublished or deleted offers nothing.
+                            $row = EventTypes::get((int) $cfg['et']);
+                            if (!$row) {
+                                return ['dead' => true] + $this->resolveEvent([]);
+                            }
+                            $cfg = WidgetConfig::eventCfg(EventTypes::props($row)) + $cfg;
+                        }
+
                         return $this->resolveEvent($cfg);
                     }
                 }
@@ -515,6 +541,223 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
         }
 
         return 'meet';
+    }
+
+    // ------------------------------------------------------------------------------------------------
+    // Saved event types and the direct booking address (/prenota/<slug>)
+    // ------------------------------------------------------------------------------------------------
+
+    /**
+     * A booking that names a saved event type: questions, price, duration, place and availability are the type's CURRENT
+     * ones from the database. Returns null when the type is gone or unpublished; the array carries '_stale' when the page the
+     * visitor is on was rendered with another definition (the price, a question or the duration changed in the meantime).
+     * Tokens that name no type (a hand-configured element) come back untouched.
+     */
+    private function applyEventType(array $actions): ?array
+    {
+        $id = (int) ($actions['etype'] ?? 0);
+        if ($id <= 0) {
+            return $actions;
+        }
+        $row = EventTypes::get($id);
+        if (!$row) {
+            return null;
+        }
+        $p      = EventTypes::props($row);
+        $fields = WidgetConfig::customDefs((string) $p['custom_fields']);
+        $event  = WidgetConfig::eventCfg($p);
+        [$price] = WidgetConfig::priceCfg($p);
+        // what the visitor saw: the questions, the price, how long and where, the days and hours (the title alone is not a reason to reload)
+        $wasEv = (array) ($actions['event'] ?? []);
+        $nowEv = $event;
+        unset($wasEv['name'], $nowEv['name']);
+        $now    = json_decode((string) json_encode(['f' => $fields, 'e' => $nowEv, 'p' => $price]), true);
+        $was    = json_decode((string) json_encode(['f' => $actions['fields'] ?? [], 'e' => $wasEv, 'p' => $actions['price'] ?? []]), true);
+        if ($now !== $was) {
+            $actions['_stale'] = true;
+        }
+        $actions['fields'] = $fields;
+        $actions['event']  = $event;
+        $actions['price']  = $price;
+        if (($actions['src'] ?? '') === 'page') {
+            // the direct page also takes the page settings of the type (who is told, where the visitor goes next, confirmation by hand, the boxes shown)
+            $actions['manual']         = !empty($row->confirm_manual);
+            $actions['redirect']       = WidgetConfig::redirectUrl((string) ($row->redirect_url ?? ''));
+            $actions['showNewsletter'] = !empty($row->show_newsletter);
+            $actions['staff']['to']    = (string) ($row->staff_to ?? '');
+        }
+
+        return $actions;
+    }
+
+    /** Where a booking came from: the direct page of the type (the "choose again" buttons of the payment pages lead back to it), else the page the visitor was on. */
+    private function sourceUrl(array $actions, $input): string
+    {
+        if (($actions['src'] ?? '') === 'page' && !empty($actions['etype'])) {
+            $row = EventTypes::get((int) $actions['etype']);
+            if ($row) {
+                return substr(EventTypes::publicUrl((string) $row->slug, (string) $this->params->get('direct_path', '')), 0, 255);
+            }
+        }
+
+        return substr((string) $input->server->getString('HTTP_REFERER', ''), 0, 255);
+    }
+
+    /** Is there a Joomla menu item on this path? Then the site's own page wins over the direct booking address. */
+    private function menuTaken(string $path): bool
+    {
+        try {
+            $db = Factory::getContainer()->get(DatabaseInterface::class);
+
+            return (int) $db->setQuery(
+                $db->getQuery(true)->select('COUNT(*)')->from($db->quoteName('#__menu'))
+                    ->where($db->quoteName('path') . ' = ' . $db->quote($path))
+                    ->where($db->quoteName('published') . ' = 1')->where($db->quoteName('client_id') . ' = 0')
+            )->loadResult() > 0;
+        } catch (\Throwable $e) {
+            return true; // when in doubt, do not take over a page of the site
+        }
+    }
+
+    /**
+     * Answers /prenota/<slug> (and /prenota, the index) before Joomla routes the request: no menu item, no router rule, works
+     * with or without URL rewriting and with a language prefix. Only a GET on a slug that exists is answered here; anything else
+     * (an unknown slug, a menu item of the site on that path, a POST) is left to Joomla.
+     */
+    private function directRoute(): void
+    {
+        try {
+            $app = $this->getApplication();
+            if (!$app->isClient('site')) {
+                return;
+            }
+            $server = $app->getInput()->server;
+            if (!\in_array(strtoupper((string) $server->getString('REQUEST_METHOD', 'GET')), ['GET', 'HEAD'], true)) {
+                return;
+            }
+            $uri  = (string) $server->getString('REQUEST_URI', '');
+            $path = (string) parse_url($uri, PHP_URL_PATH); // a slug is letters, digits and hyphens: nothing to decode
+            $base = Uri::base(true);
+            if ($base !== '' && strncmp($path, $base, \strlen($base)) === 0) {
+                $path = substr($path, \strlen($base));
+            }
+            $path = trim($path, '/');
+            if (strncmp($path, 'index.php', 9) === 0) {
+                $path = trim(substr($path, 9), '/');
+            }
+            $seg = EventTypes::pathBase((string) $this->params->get('direct_path', ''));
+            if (!preg_match('#^((?:[a-z]{2}(?:-[a-z]{2})?/)?' . preg_quote($seg, '#') . ')(?:/([A-Za-z0-9-]{2,80}))?/?$#i', $path, $m)) {
+                return;
+            }
+            $slug = strtolower((string) ($m[2] ?? ''));
+            if ($slug === '') {
+                if ((int) $this->params->get('direct_index', 1) !== 1 || $this->menuTaken(strtolower($m[1])) || $this->menuTaken($seg)) {
+                    return;
+                }
+                $this->directIndex();
+
+                return;
+            }
+            $row = EventTypes::bySlug($slug);
+            if (!$row || $this->menuTaken(strtolower($m[1] . '/' . $slug))) {
+                return;
+            }
+            $this->directEvent($row);
+        } catch (\Throwable $e) {
+            // never break the site for this
+        }
+    }
+
+    /** Entry point of the component's site view (index.php?option=com_webgbooking&view=book&event=<slug>), the address that works even without friendly URLs. */
+    public function renderDirectPage(string $slug): void
+    {
+        $slug = strtolower(trim($slug));
+        if ($slug === '') {
+            if ((int) $this->params->get('direct_index', 1) === 1) {
+                $this->directIndex();
+            }
+            $this->directNotFound();
+        }
+        $row = EventTypes::bySlug($slug);
+        if (!$row) {
+            $this->directNotFound();
+        }
+        $this->directEvent($row);
+    }
+
+    private function directBase(): array
+    {
+        return [
+            'brand' => $this->mailBrand(),
+            'lang'  => $this->getApplication()->getLanguage()->getTag(),
+            'asset' => Uri::root(true) . '/plugins/system/webgbooking/yootheme/elements/booking/assets',
+            'ver'   => self::ASSET_VER,
+        ];
+    }
+
+    private function directLabels(): array
+    {
+        return [
+            'minutes'     => Text::_('PLG_SYSTEM_WEBGBOOKING_MINUTES'),
+            'meet'        => Text::_('PLG_SYSTEM_WEBGBOOKING_LOC_MEET'),
+            'phone'       => Text::_('PLG_SYSTEM_WEBGBOOKING_LOC_PHONE'),
+            'choice'      => Text::_('PLG_SYSTEM_WEBGBOOKING_DIRECT_CHOICE'),
+            'intro'       => Text::_('PLG_SYSTEM_WEBGBOOKING_DIRECT_WIDGET'),
+            'book'        => Text::_('PLG_SYSTEM_WEBGBOOKING_DIRECT_BOOK'),
+            'index_title' => Text::_('PLG_SYSTEM_WEBGBOOKING_DIRECT_INDEX_TITLE'),
+            'index_intro' => Text::_('PLG_SYSTEM_WEBGBOOKING_DIRECT_INDEX_INTRO'),
+            'index_empty' => Text::_('PLG_SYSTEM_WEBGBOOKING_DIRECT_INDEX_EMPTY'),
+            'nf_title'    => Text::_('PLG_SYSTEM_WEBGBOOKING_DIRECT_NF_TITLE'),
+            'nf_text'     => Text::_('PLG_SYSTEM_WEBGBOOKING_DIRECT_NF_TEXT'),
+        ];
+    }
+
+    private function directEvent(object $row): void
+    {
+        $w = WidgetConfig::build(EventTypes::pageProps($row), ['etype' => (int) $row->id, 'page' => true]);
+        $this->sendDirect(DirectPage::event($this->directBase() + [
+            'title'       => (string) $row->title,
+            'description' => (string) ($row->description ?? ''),
+            'duration'    => (int) $w['cfg']['duration'],
+            'location'    => (string) $w['cfg']['location'],
+            'price'       => !empty($w['cfg']['price']) ? (string) $w['cfg']['price']['text'] : '',
+            'w'           => $w,
+            'labels'      => $this->directLabels(),
+        ]));
+    }
+
+    private function directIndex(): void
+    {
+        $items = [];
+        foreach (EventTypes::listed() as $row) {
+            $w = WidgetConfig::build(EventTypes::pageProps($row), ['etype' => (int) $row->id, 'page' => true]);
+            $items[] = [
+                'title'       => (string) $row->title,
+                'description' => (string) ($row->description ?? ''),
+                'duration'    => (int) $w['cfg']['duration'],
+                'price'       => !empty($w['cfg']['price']) ? (string) $w['cfg']['price']['text'] : '',
+                'url'         => EventTypes::publicUrl((string) $row->slug, (string) $this->params->get('direct_path', '')),
+            ];
+        }
+        $this->sendDirect(DirectPage::index($this->directBase() + ['items' => $items, 'labels' => $this->directLabels()]));
+    }
+
+    private function directNotFound(): void
+    {
+        $index = (int) $this->params->get('direct_index', 1) === 1 ? EventTypes::publicUrl('', (string) $this->params->get('direct_path', '')) : '';
+        $this->sendDirect(DirectPage::notFound($this->directBase() + ['labels' => $this->directLabels(), 'index_url' => $index]), 404);
+    }
+
+    /** Send a direct page: never cached (the form token inside is fresh), never indexed, no referrer (a secret address must not travel to Stripe). */
+    private function sendDirect(string $html, int $status = 200): void
+    {
+        $app = $this->getApplication();
+        $app->setHeader('Content-Type', 'text/html; charset=utf-8', true);
+        $this->privacyHeaders($app);
+        $app->setHeader('status', (string) $status, true);
+        $app->sendHeaders();
+        echo $html;
+        $app->close();
     }
 
     /** A usable phone number to be called: only phone characters, at least 6 digits. */
@@ -3935,7 +4178,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
     /** Slots for a single day (used as a fallback by the widget). */
     private function availableSlots(string $date, array $ev = []): void
     {
-        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
+        if (!empty($ev['dead']) || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
             $this->respond(['slots' => []]);
         }
 
@@ -3961,7 +4204,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
      */
     private function monthSlots(string $from, string $to, array $ev = []): void
     {
-        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $from) || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $to)) {
+        if (!empty($ev['dead']) || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $from) || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $to)) {
             $this->respond(['days' => (object) []]);
         }
 

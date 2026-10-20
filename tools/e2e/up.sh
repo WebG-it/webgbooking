@@ -6,7 +6,8 @@ MAJ=${1:?usage: up.sh 5|6 port}; PORT=${2:?usage: up.sh 5|6 port}
 IMG=${JOOMLA_IMAGE:-joomla:$MAJ-apache}
 MDB=${MARIADB_IMAGE:-mariadb:11.4}
 ADMINPW=${WGB_E2E_ADMIN_PASS:?set WGB_E2E_ADMIN_PASS (any throwaway password for the test admin)}
-NET=wgbtest-$MAJ-net; DBC=wgbtest-$MAJ-db; JC=wgbtest-$MAJ-j
+PFX=${WGB_E2E_PFX:-wgbtest}   # another prefix = another set of containers (several sessions can test side by side)
+NET=$PFX-$MAJ-net; DBC=$PFX-$MAJ-db; JC=$PFX-$MAJ-j
 docker network create $NET >/dev/null 2>&1
 docker run -d --name $DBC --network $NET -e MARIADB_ROOT_PASSWORD=rootpw -e MARIADB_DATABASE=joomla -e MARIADB_USER=joomla -e MARIADB_PASSWORD=joomlapw --memory 512m "$MDB" >/dev/null
 sleep 12

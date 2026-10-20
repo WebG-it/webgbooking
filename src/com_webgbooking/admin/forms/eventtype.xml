@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="utf-8"?>
+<form>
+    <fieldset name="general" label="COM_WEBGBOOKING_ET_TAB_GENERAL">
+        <field name="id" type="hidden" default="0" />
+        <field name="title" type="text" required="true" maxlength="190" filter="string"
+            label="COM_WEBGBOOKING_ET_F_TITLE"
+            description="COM_WEBGBOOKING_ET_F_TITLE_DESC" />
+        <field name="slug" type="text" maxlength="80" filter="string" autocomplete="off" hint="chiamata-conoscitiva"
+            label="COM_WEBGBOOKING_ET_F_SLUG"
+            description="COM_WEBGBOOKING_ET_F_SLUG_DESC" />
+        <field name="state" type="list" default="1" filter="integer"
+            label="COM_WEBGBOOKING_ET_F_STATE"
+            description="COM_WEBGBOOKING_ET_F_STATE_DESC">
+            <option value="1">COM_WEBGBOOKING_ET_STATE_1</option>
+            <option value="0">COM_WEBGBOOKING_ET_STATE_0</option>
+        </field>
+        <field name="listed" type="list" default="1" filter="integer"
+            label="COM_WEBGBOOKING_ET_F_LISTED"
+            description="COM_WEBGBOOKING_ET_F_LISTED_DESC">
+            <option value="1">COM_WEBGBOOKING_ET_LISTED_1</option>
+            <option value="0">COM_WEBGBOOKING_ET_LISTED_0</option>
+        </field>
+        <field name="description" type="textarea" rows="6" filter="string"
+            label="COM_WEBGBOOKING_ET_F_DESCRIPTION"
+            description="COM_WEBGBOOKING_ET_F_DESCRIPTION_DESC" />
+        <field name="ordering" type="number" default="0" min="0" filter="integer"
+            label="COM_WEBGBOOKING_ET_F_ORDERING"
+            description="COM_WEBGBOOKING_ET_F_ORDERING_DESC" />
+    </fieldset>
+
+    <fieldset name="event" label="COM_WEBGBOOKING_ET_TAB_EVENT">
+        <field name="duration" type="text" size="6" maxlength="4" filter="string" hint="30"
+            label="COM_WEBGBOOKING_ET_F_DURATION"
+            description="COM_WEBGBOOKING_ET_F_DURATION_DESC" />
+        <field name="buffer_before" type="text" size="6" maxlength="4" filter="string"
+            label="COM_WEBGBOOKING_ET_F_BUFFER_BEFORE"
+            description="COM_WEBGBOOKING_ET_F_BUFFER_DESC" />
+        <field name="buffer_after" type="text" size="6" maxlength="4" filter="string"
+            label="COM_WEBGBOOKING_ET_F_BUFFER_AFTER"
+            description="COM_WEBGBOOKING_ET_F_BUFFER_DESC" />
+        <field name="location" type="list" default="meet" filter="cmd"
+            label="COM_WEBGBOOKING_ET_F_LOCATION"
+            description="COM_WEBGBOOKING_ET_F_LOCATION_DESC">
+            <option value="meet">COM_WEBGBOOKING_ET_LOC_MEET</option>
+            <option value="phone">COM_WEBGBOOKING_ET_LOC_PHONE</option>
+            <option value="choice">COM_WEBGBOOKING_ET_LOC_CHOICE</option>
+        </field>
+        <field name="avail_start" type="text" size="6" maxlength="5" filter="string" hint="09:00"
+            label="COM_WEBGBOOKING_ET_F_AVAIL_START"
+            description="COM_WEBGBOOKING_ET_F_AVAIL_DESC" />
+        <field name="avail_end" type="text" size="6" maxlength="5" filter="string" hint="18:00"
+            label="COM_WEBGBOOKING_ET_F_AVAIL_END"
+            description="COM_WEBGBOOKING_ET_F_AVAIL_DESC" />
+        <field name="avail_days" type="text" size="20" maxlength="40" filter="string" hint="1,2,3,4,5"
+            label="COM_WEBGBOOKING_ET_F_AVAIL_DAYS"
+            description="COM_WEBGBOOKING_ET_F_AVAIL_DAYS_DESC" />
+        <field name="avail_notice" type="text" size="6" maxlength="4" filter="string"
+            label="COM_WEBGBOOKING_ET_F_AVAIL_NOTICE"
+            description="COM_WEBGBOOKING_ET_F_AVAIL_NOTICE_DESC" />
+        <field name="avail_window" type="text" size="6" maxlength="4" filter="string"
+            label="COM_WEBGBOOKING_ET_F_AVAIL_WINDOW"
+            description="COM_WEBGBOOKING_ET_F_AVAIL_WINDOW_DESC" />
+    </fieldset>
+
+    <fieldset name="price" label="COM_WEBGBOOKING_ET_TAB_PRICE">
+        <field name="price_amount" type="text" size="12" maxlength="30" filter="string" hint="49,00"
+            label="COM_WEBGBOOKING_ET_F_PRICE_AMOUNT"
+            description="COM_WEBGBOOKING_ET_F_PRICE_AMOUNT_DESC" />
+        <field name="price_currency" type="list" default="EUR" filter="cmd"
+            label="COM_WEBGBOOKING_ET_F_PRICE_CURRENCY"
+            description="COM_WEBGBOOKING_ET_F_PRICE_CURRENCY_DESC">
+            <option value="EUR">EUR</option>
+            <option value="USD">USD</option>
+            <option value="GBP">GBP</option>
+            <option value="CHF">CHF</option>
+        </field>
+        <field name="price_label" type="text" size="50" maxlength="120" filter="string"
+            label="COM_WEBGBOOKING_ET_F_PRICE_LABEL"
+            description="COM_WEBGBOOKING_ET_F_PRICE_LABEL_DESC" />
+    </fieldset>
+
+    <fieldset name="questions" label="COM_WEBGBOOKING_ET_TAB_QUESTIONS">
+        <field name="custom_fields" type="textarea" rows="10" cols="80" filter="string" class="font-monospace"
+            label="COM_WEBGBOOKING_ET_F_QUESTIONS"
+            description="COM_WEBGBOOKING_ET_F_QUESTIONS_DESC" />
+    </fieldset>
+
+    <fieldset name="page" label="COM_WEBGBOOKING_ET_TAB_PAGE">
+        <field name="staff_to" type="text" size="60" maxlength="500" filter="string"
+            label="COM_WEBGBOOKING_ET_F_STAFF_TO"
+            description="COM_WEBGBOOKING_ET_F_STAFF_TO_DESC" />
+        <field name="redirect_url" type="text" size="60" maxlength="500" filter="string"
+            label="COM_WEBGBOOKING_ET_F_REDIRECT"
+            description="COM_WEBGBOOKING_ET_F_REDIRECT_DESC" />
+        <field name="confirm_manual" type="radio" layout="joomla.form.field.radio.switcher" default="0" filter="integer"
+            label="COM_WEBGBOOKING_ET_F_MANUAL"
+            description="COM_WEBGBOOKING_ET_F_MANUAL_DESC">
+            <option value="0">JNO</option>
+            <option value="1">JYES</option>
+        </field>
+        <field name="allow_guest" type="radio" layout="joomla.form.field.radio.switcher" default="1" filter="integer"
+            label="COM_WEBGBOOKING_ET_F_GUEST"
+            description="COM_WEBGBOOKING_ET_F_GUEST_DESC">
+            <option value="0">JNO</option>
+            <option value="1">JYES</option>
+        </field>
+        <field name="show_newsletter" type="radio" layout="joomla.form.field.radio.switcher" default="0" filter="integer"
+            label="COM_WEBGBOOKING_ET_F_NEWSLETTER"
+            description="COM_WEBGBOOKING_ET_F_NEWSLETTER_DESC">
+            <option value="0">JNO</option>
+            <option value="1">JYES</option>
+        </field>
+    </fieldset>
+</form>
