@@ -2,12 +2,12 @@
 .wgb-bk {
     /* Atum exposes --body-bg, --body-color, --border-color, --primary and flips them in dark mode; the --bs-* names are the fallback */
     --wgb-gap: 1rem;
-    --wgb-ink: var(--body-color, var(--wgb-ink));
+    --wgb-ink: var(--body-color, #212529);
     --wgb-line: var(--border-color, var(--bs-border-color, #dee2e6));
     --wgb-muted: color-mix(in srgb, var(--wgb-ink) 68%, transparent);
     --wgb-surface: var(--body-bg, var(--bs-body-bg, #fff));
     --wgb-soft: color-mix(in srgb, var(--wgb-ink) 6%, transparent);
-    --wgb-accent: var(--primary, var(--wgb-accent));
+    --wgb-accent: var(--primary, #0d6efd);
     display: grid;
     grid-template-columns: minmax(0, 1fr);
     gap: var(--wgb-gap);

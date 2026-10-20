@@ -96,6 +96,33 @@ r = book(None, D, '12:00', email='old352@example.invalid', cfg=cfg)
 cm0 = mails_to('old352@example.invalid')
 check('Z9 a booking without zone (an old page in cache) keeps the site time and zone in its email', r.get('ok') is True and cm0 and '12:00 (' in txt(cm0[0]['html']) and 'Europe/Rome' in txt(cm0[0]['html']), cm0 and txt(cm0[0]['html'])[:300])
 
+# the zones: only real identifiers; abbreviations fall back to the site zone; the old alias some browsers report is accepted
+for zz, want in (('EST', 'NULL'), ('CEST', 'NULL'), ('CET', 'NULL'), ('GMT+2', 'NULL'), ('Asia/Calcutta', 'Asia/Calcutta'), ('UTC', 'UTC'), ('Europe/Rome', 'Europe/Rome')):
+    em = 'zz%s352@example.invalid' % re.sub(r'[^a-z]', '', zz.lower())
+    tsz = int(site_instant(D, '12:30').timestamp())
+    r = book(None, D, '12:30', email=em, cfg=cfg, extra={'tz': zz, 'ts': str(tsz)})
+    got = sql("SELECT IFNULL(customer_tz,'NULL') FROM joom_webgbooking_bookings WHERE customer_email='%s'" % em)
+    check('Z10 zone "%s": %s' % (zz, 'kept' if want != 'NULL' else 'not a zone, falls back to the site zone (nothing stored)'), r.get('ok') is True and got == want, (r, got))
+    sql("DELETE FROM joom_webgbooking_bookings WHERE customer_email='%s'" % em)
+
+# the customer's own words come back as plain text (no links made from them), notes cut at 300 characters; the staff email is as before
+long_note = ('Nota con indirizzo https://evil.example.invalid/phish e poi ' + 'testo lungo ' * 40)
+jx('rm -f /tmp/mail/*.eml')
+r = book(None, D, '13:00', name='Plain Words', email='plain352@example.invalid', phone='+39 333 100 2000', notes=long_note, cfg=cfg, extra={'custom[cf0]': 'vedi https://evil.example.invalid/answer'})
+pm = mails_to('plain352@example.invalid')
+pm = pm[0] if pm else None
+sm2 = [m for m in mails_to('staff@wgbtest.invalid') if 'Plain Words' in m['subject']]
+sm2 = sm2[0] if sm2 else None
+ph_ = pm['html'] if pm else ''
+ix = ph_.find('Your answers') if 'Your answers' in ph_ else ph_.find('Le tue risposte')
+ans_part = ph_[ix:] if ix >= 0 else ''
+check('X1 customer email: the answers and notes are plain text, no link made from an address they contain', r.get('ok') is True and pm is not None and bool(ans_part) and 'https://evil.example.invalid' in ans_part and 'href="https://evil.example.invalid' not in ans_part, ans_part[:300])
+check('X2 customer email: the notes are cut at 300 characters with an ellipsis', pm is not None and '\u2026' in txt(ans_part) and ('testo lungo ' * 40) not in txt(ans_part), len(txt(ans_part)))
+sh_ = txt(sm2['html']) if sm2 else ''
+check('X3 the staff email is as before: complete notes (no cut), the address still a link', sm2 is not None and ('testo lungo ' * 30) in sh_ and 'href="https://evil.example.invalid/phish' in sm2['html'], len(sh_))
+css = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'src', 'com_webgbooking', 'media', 'css', 'booking-detail.css'), encoding='utf-8').read()
+check('X4 the admin detail stylesheet has real fallbacks (no variable that falls back to itself)', '--wgb-ink: var(--body-color, #212529)' in css and '--wgb-accent: var(--primary, #0d6efd)' in css, '')
+
 # ---- reschedule: the page header follows at once, the zone is updated
 tok = sql('SELECT manage_token FROM joom_webgbooking_bookings WHERE id=%d' % bid)
 murl = BASE + '/index.php?option=com_ajax&group=system&plugin=webgbooking&format=html&action=manage&token=' + tok

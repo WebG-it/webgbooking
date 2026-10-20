@@ -38,7 +38,7 @@ check('row: duration 60, buffers 15/15, phone, event name, no meeting url', rw['
 ev = gm_events()
 e = list(ev.values())[0] if ev else {}
 check('Google event created WITHOUT Meet', bool(e) and 'conferenceData' not in e and 'hangoutLink' not in e, e)
-check('Google event: 60 min, phone number in title and description', e.get('summary', '').find('+39 333 123 4567') > 0 and 'Riunione - 1 ora' in e.get('summary', '') and '+39 333 123 4567' in e.get('description', '') and e.get('start', {}).get('dateTime', '').endswith('T10:00:00') and e.get('end', {}).get('dateTime', '').endswith('T11:00:00'), e)
+check('Google event: 60 min; this booking has a guest, so the customer number is NOT in title, place or description (the business calls)', '+39 333 123 4567' not in (e.get('summary', '') + e.get('location', '') + e.get('description', '')) and 'Riunione - 1 ora' in e.get('summary', '') and ('I will call you' in e.get('description', '') or 'Ti chiamo io' in e.get('description', '')) and e.get('start', {}).get('dateTime', '').endswith('T10:00:00') and e.get('end', {}).get('dateTime', '').endswith('T11:00:00'), e)
 ms = mails()
 check('emails sent (customer, guest, staff)', len(ms) >= 3, ms)
 cm = [decode_mail(mail_text(p)) for p in ms]

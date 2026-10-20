@@ -14,6 +14,13 @@ Prove in `tools/e2e/t_v352.py`, `t_v352_mail.py`, `t_v352_tz.py` (in un browser 
 5. **Correzione: la pagina di gestione del cliente** mostrava ancora data e ora vecchie dopo "Appuntamento riprogrammato!" fino al ricaricamento. Ora la testata si aggiorna subito (e mostra l'ora nel fuso del cliente). I collegamenti "Riprogramma" e "Annulla" delle email puntano alle due sezioni della pagina.
 6. **Dettaglio prenotazione nel pannello rifatto** (Bootstrap 5 e Atum, chiaro e scuro, leggibile da telefono): testata col nome, stato a etichetta, data in esteso, durata e tipo; pulsante grande "Partecipa con Google Meet" oppure "Chiama"; scheda del cliente (email e telefono cliccabili, ospite, fuso); risposte e note; "Storico" con date e ore vere (creata, pagamento, evento Google, email, promemoria inviati e in arrivo, spostamento, annullo); i dettagli tecnici in un riquadro chiuso. Azioni e diritti invariati.
 
+7. **Attenzione, cosa cambia per chi usa gia' il prodotto.**
+   - Gli **oggetti delle notifiche a chi riceve gli appuntamenti cambiano** ("Nuovo evento: ...", "Evento spostato: ...", "Evento annullato: ..."): eventuali filtri o regole di posta costruiti sui vecchi oggetti vanno aggiornati.
+   - Quando un cliente sposta l'appuntamento, **la descrizione e il luogo dell'evento Google vengono riscritti** (non solo data e ora).
+   - Nuova opzione del plugin "Metti il link di gestione nell'evento Google" (predefinita: si'). Il collegamento per spostare o annullare nella descrizione puo' essere usato da chiunque legga quel calendario: **il calendario che riceve gli appuntamenti va tenuto privato**. Con un ospite sull'appuntamento la descrizione, il luogo e il titolo dell'evento non contengono il collegamento ne' telefono, note e risposte del cliente.
+   - Nelle email al cliente le risposte e le note tornano come testo semplice (nessun indirizzo diventa un collegamento) e le note sono tagliate a 300 caratteri con "..." (la notifica allo staff resta completa).
+   - Il fuso che il browser comunica viene accettato solo se e' un vero nome di fuso ("Europe/Rome", "UTC", gli alias "Regione/Citta'" come "Asia/Calcutta"): sigle come EST o CEST ricadono sul fuso del sito.
+
 Dopo l'aggiornamento svuotare la cache del sito (YOOtheme, Cloudflare) per vedere il nuovo modulo.
 
 ## 0.35.1 (pacchetto, componente e plugin): la telefonata non si presta a equivoci, il consenso rimanda alla privacy, i giorni sono caselle

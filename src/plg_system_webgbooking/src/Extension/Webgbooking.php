@@ -1244,7 +1244,8 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
         $base    = $root . 'index.php?option=com_ajax&group=system&plugin=webgbooking&format=html&token=' . rawurlencode((string) $row->manage_token);
         $label   = trim((string) ($price['label'] ?? ''));
         $name    = $label !== '' ? $label : (trim((string) ($row->event_name ?? '')) ?: 'WebG Booking');
-        $when    = (new \DateTime($row->booking_date))->format('d/m/Y') . ' ' . $row->booking_time;
+        $cv      = $this->custView($row);
+        $when    = $this->rowDateFmt($cv) . ' ' . $cv->booking_time . (!empty($cv->_tz) ? ' (' . $cv->_tz . ')' : '');   // the customer's zone, named
         $holdEnd = (new \DateTime((string) $row->hold_until, new \DateTimeZone('UTC')))->getTimestamp();
 
         // The session ends exactly when the hold ends. Stripe only accepts 30 minutes to 24 hours from now, so a 30 minute
@@ -1823,17 +1824,18 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             $P    = 'PLG_SYSTEM_WEBGBOOKING_';
             $mf   = Factory::getContainer()->get(MailerFactoryInterface::class);
             $gone = \in_array($why, ['slot', 'past'], true);
-            $date = $this->mailDay((string) $row->booking_date);
+            $cv   = $this->custView($row);          // what the customer sees: their zone
+            $date = $this->mailDay((string) $cv->booking_date);
             // the day name opens a sentence in the box, but sits inside one here: Italian writes it in lower case
             $inText = strncmp($this->langTag(), 'it', 2) === 0 ? mb_strtolower($date) : $date;
             $amount = self::formatAmount((int) $row->amount_cents, (string) $row->currency, $this->langTag());
             $back   = !empty($row->source_url) && preg_match('#^https?://#i', (string) $row->source_url) ? (string) $row->source_url : $this->siteRoot();
             $m = [
                 'title'       => Text::_($gone ? $P . 'PAY_LATE_TITLE' : $P . 'PAY_LATE_SUBJECT_CHECK'),
-                'preheader'   => Text::sprintf($P . 'MAIL_PRE_APPT', $date, $row->booking_time),
-                'lead'        => [Text::_($P . 'EMAIL_HELLO') . ' ' . $row->customer_name . ',', Text::sprintf($gone ? $P . 'PAY_LATE_BODY_GONE' : $P . 'PAY_LATE_BODY_CHECK', $inText, $row->booking_time, $amount)],
+                'preheader'   => Text::sprintf($P . 'MAIL_PRE_APPT', $date, $cv->booking_time),
+                'lead'        => [Text::_($P . 'EMAIL_HELLO') . ' ' . $row->customer_name . ',', Text::sprintf($gone ? $P . 'PAY_LATE_BODY_GONE' : $P . 'PAY_LATE_BODY_CHECK', $inText, $cv->booking_time, $amount)],
                 'notices'     => [['tone' => 'warn', 'text' => Text::sprintf($P . 'EMAIL_PAID', $amount)]],
-                'summary'     => ['rows' => $this->mailRows($row, 'customer')],
+                'summary'     => ['rows' => $this->mailRows($cv, 'customer')],
                 'buttons'     => $gone ? [['label' => Text::_($P . 'PAY_LATE_CTA'), 'url' => $back, 'primary' => true]] : [],
                 'footer_note' => Text::_($P . 'EMAIL_FOOTER'),
             ];
@@ -3529,7 +3531,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
     }
 
     /** The questions the customer answered, as bold question + answer: phone, the form's questions, the notes. */
-    private function answerRows(object $row): array
+    private function answerRows(object $row, int $notesMax = 0): array
     {
         $P  = 'PLG_SYSTEM_WEBGBOOKING_';
         $ar = [];
@@ -3540,7 +3542,11 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             $ar[] = [$it['l'], $it['v']];
         }
         if (trim((string) $row->notes) !== '') {
-            $ar[] = [Text::_($P . 'MAIL_L_NOTES'), (string) $row->notes];
+            $n = (string) $row->notes;
+            if ($notesMax > 0 && mb_strlen($n) > $notesMax) {
+                $n = rtrim(mb_substr($n, 0, $notesMax)) . "\u{2026}";
+            }
+            $ar[] = [Text::_($P . 'MAIL_L_NOTES'), $n];
         }
 
         return $ar;
@@ -3577,13 +3583,18 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
         if ($tz === '' || \strlen($tz) > 64 || !preg_match('#^[A-Za-z0-9_+\-/]+$#', $tz)) {
             return '';
         }
-        try {
-            new \DateTimeZone($tz);
-        } catch (\Throwable $e) {
-            return '';
+        // Only real zone identifiers ("Europe/Rome", "UTC", and the old "Region/City" aliases some browsers still report, like
+        // "Asia/Calcutta"). Abbreviations such as EST or CEST are not zones: they fall back to the site zone.
+        static $ids = null;
+        if ($ids === null) {
+            $ids = array_flip(array_merge(
+                \DateTimeZone::listIdentifiers(\DateTimeZone::ALL),
+                array_filter(\DateTimeZone::listIdentifiers(\DateTimeZone::ALL_WITH_BC), static fn($z) => strpos($z, '/') !== false),
+                ['UTC']
+            ));
         }
 
-        return $tz;
+        return isset($ids[$tz]) ? $tz : '';
     }
 
     /**
@@ -3849,8 +3860,9 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             $change    = true;
         }
         $secs = [];
-        if (!$guest && \in_array($kind, ['confirmed', 'request', 'rescheduled'], true) && ($ans = $this->answerRows($row))) {
-            $secs[] = ['title' => Text::_($P . 'MAIL_S_YOUR_ANSWERS'), 'stacked' => true, 'rows' => $ans];
+        if (!$guest && \in_array($kind, ['confirmed', 'request', 'rescheduled'], true) && ($ans = $this->answerRows($row, 300))) {
+            // the customer's own words, back to them: plain text (no addresses turned into links), notes cut at 300 characters
+            $secs[] = ['title' => Text::_($P . 'MAIL_S_YOUR_ANSWERS'), 'stacked' => true, 'plain' => true, 'rows' => $ans];
         }
 
         return [
@@ -4042,7 +4054,9 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
 
     /**
      * Calendar UID of the appointment. 0.33.0+: an HMAC of the booking id (the .ics travels by email and into other
-     * people's calendars: it must not contain the manage_token, which is a credential). Bookings made before 0.33.0
+     * people's calendars: the UID must not contain the manage_token, which is a credential). Note the link to move or cancel IS written,
+     * on purpose and by option, in the description of the Google event of a booking WITHOUT a guest (see gcalDescription): that calendar
+     * must be private. Bookings made before 0.33.0
      * (no fx_state) keep their old UID so their moved/cancelled updates still match the entry already in the calendar.
      */
     private function icsUid(object $row, string $host): string
@@ -4241,42 +4255,47 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
      */
     private function gcalDescription(object $row, string $meetUrl = ''): string
     {
-        $P    = 'PLG_SYSTEM_WEBGBOOKING_';
-        $name = $this->gcalText((string) ($row->event_name ?? ''), 120);
-        $name = $name !== '' ? $name : Text::_($P . 'ICS_SUMMARY');
-        $L    = [Text::sprintf($P . 'GCAL_D_TYPE', $name, $this->rowDuration($row))];
-        $ph   = $this->gcalText((string) ($row->customer_phone ?? ''), 40);
+        $P     = 'PLG_SYSTEM_WEBGBOOKING_';
+        $name  = $this->gcalText((string) ($row->event_name ?? ''), 120);
+        $name  = $name !== '' ? $name : Text::_($P . 'ICS_SUMMARY');
+        $guest = trim((string) ($row->guest_email ?? ''));
+        $L     = [Text::sprintf($P . 'GCAL_D_TYPE', $name, $this->rowDuration($row))];
+        $ph    = $this->gcalText((string) ($row->customer_phone ?? ''), 40);
 
+        // With a guest the description (which the guest reads in the invite) carries nothing personal of the customer: no phone number,
+        // notes or answers, and no link to move or cancel. What the guest needs is what the appointment is and how to join.
         if ($this->rowLocation($row) === 'phone') {
-            $L[] = Text::sprintf($P . 'LOC_PHONE_AT', $ph);
+            $L[] = $guest !== '' ? Text::_($P . 'GCAL_D_PHONE_CALL') : Text::sprintf($P . 'LOC_PHONE_AT', $ph);
         } else {
             $url = $meetUrl !== '' ? $meetUrl : (string) ($row->meeting_url ?? '');
             if ($url !== '' && self::httpUrlOk($url)) {
                 $L[] = Text::sprintf($P . 'GCAL_D_MEET', $url);
             }
-            if ($ph !== '') {
+            if ($ph !== '' && $guest === '') {
                 $L[] = Text::sprintf($P . 'GCAL_D_PHONE', $ph);
             }
         }
 
-        $notes = $this->gcalText((string) ($row->notes ?? ''));
-        if ($notes !== '') {
-            $L[] = Text::sprintf($P . 'GCAL_D_NOTES', $notes);
-        }
-        foreach ($this->customAnswers($row) as $a) {
-            $v = $this->gcalText($a['v'], 500);
-            if ($v !== '') {
-                $L[] = $this->gcalText($a['l'], 120) . ': ' . $v;
+        if ($guest === '') {
+            $notes = $this->gcalText((string) ($row->notes ?? ''));
+            if ($notes !== '') {
+                $L[] = Text::sprintf($P . 'GCAL_D_NOTES', $notes);
             }
-        }
-
-        $guest = trim((string) ($row->guest_email ?? ''));
-        if ($guest !== '') {
+            foreach ($this->customAnswers($row) as $a) {
+                $v = $this->gcalText($a['v'], 500);
+                if ($v !== '') {
+                    $L[] = $this->gcalText($a['l'], 120) . ': ' . $v;
+                }
+            }
+            // the link to move or cancel: option of the plugin (default yes). Whoever can read the calendar can use it, so the
+            // calendar that receives the appointments must stay private; it is never written when there is a guest.
+            if (!empty($row->manage_token) && (int) $this->params->get('gcal_manage_link', 1) === 1) {
+                $this->rootFrom($row);
+                $L[] = '';
+                $L[] = Text::sprintf($P . 'GCAL_D_MANAGE', $this->manageUrl($row));
+            }
+        } else {
             $L[] = Text::sprintf($P . 'GCAL_D_GUEST', $this->gcalText($guest, 200));
-        } elseif (!empty($row->manage_token)) {
-            $this->rootFrom($row);
-            $L[] = '';
-            $L[] = Text::sprintf($P . 'GCAL_D_MANAGE', $this->manageUrl($row));
         }
 
         return implode("\n", $L);
@@ -4287,7 +4306,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
     {
         $P = 'PLG_SYSTEM_WEBGBOOKING_';
         if ($this->rowLocation($row) === 'phone') {
-            return Text::sprintf($P . 'GCAL_LOC_PHONE', $this->gcalText((string) ($row->customer_phone ?? ''), 40));
+            return trim((string) ($row->guest_email ?? '')) !== '' ? Text::_($P . 'GCAL_LOC_PHONE_NONUM') : Text::sprintf($P . 'GCAL_LOC_PHONE', $this->gcalText((string) ($row->customer_phone ?? ''), 40));
         }
         $url = $meetUrl !== '' ? $meetUrl : (string) ($row->meeting_url ?? '');
 
@@ -4331,7 +4350,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
 
             $evName  = trim((string) ($row->event_name ?? ''));
             $summary = ($evName !== '' ? $evName : 'WebG Booking') . ' - ' . $row->customer_name;
-            if ($phone) {
+            if ($phone && empty($row->guest_email)) {
                 $summary .= ' (' . Text::sprintf('PLG_SYSTEM_WEBGBOOKING_GCAL_PHONE_TITLE', $row->customer_phone) . ')';
             }
 

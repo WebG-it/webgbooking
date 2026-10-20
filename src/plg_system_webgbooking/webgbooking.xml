@@ -200,6 +200,12 @@
                 <field name="host_name" type="text" default="" size="40" autocomplete="off"
                     label="PLG_SYSTEM_WEBGBOOKING_HOST_NAME_LABEL"
                     description="PLG_SYSTEM_WEBGBOOKING_HOST_NAME_DESC" />
+                <field name="gcal_manage_link" type="radio" default="1" layout="joomla.form.field.radio.switcher"
+                    label="PLG_SYSTEM_WEBGBOOKING_GCAL_MANAGE_LINK_LABEL"
+                    description="PLG_SYSTEM_WEBGBOOKING_GCAL_MANAGE_LINK_DESC">
+                    <option value="0">JNO</option>
+                    <option value="1">JYES</option>
+                </field>
                 <field name="mail_from_name" type="text" default="" size="40" autocomplete="off"
                     label="PLG_SYSTEM_WEBGBOOKING_MAIL_FROM_NAME_LABEL"
                     description="PLG_SYSTEM_WEBGBOOKING_MAIL_FROM_NAME_DESC" />

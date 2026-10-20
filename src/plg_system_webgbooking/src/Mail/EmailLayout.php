@@ -147,7 +147,7 @@ final class EmailLayout
      * @param array $m {
      *   lang: string, brand: {name, logo, logo_dark, color, button, footer, site_url}, preheader: string, title: string,
      *   lead: string[] (paragraphs), notices: [{text, tone: ok|info|warn}], summary: {rows: [[label, value|[text, url]]]}|null,
-     *   body_html: string (trusted), buttons: [{label, url, primary: bool}], others_label: string (a line above the quiet links), sections: [{title, stacked?: bool, rows: [[label, value]]}],
+     *   body_html: string (trusted), buttons: [{label, url, primary: bool}], others_label: string (a line above the quiet links), sections: [{title, stacked?: bool, plain?: bool (no links made from the text), rows: [[label, value]]}],
      *   signoff: string, footer_note: string }
      * @return array{html: string, text: string}
      */
@@ -260,9 +260,10 @@ final class EmailLayout
             foreach ($srows as $r) {
                 $v = (string) $r[1];
                 if (!empty($sec['stacked'])) {
+                    $val = !empty($sec['plain']) ? nl2br(self::e($v), false) : nl2br(self::linkify($v, $link), false);
                     // question in bold, the answer under it (one cell each)
                     $content .= '<tr><td class="t-head rule" style="padding:10px 0 2px 0;font-family:' . $F . ';font-size:14px;line-height:20px;font-weight:700;color:' . $headC . ';">' . self::e($r[0]) . '</td></tr>'
-                        . '<tr><td class="t-body rule" style="padding:0 0 10px 0;border-bottom:1px solid #e3e6ec;font-family:' . $F . ';font-size:15px;line-height:22px;color:' . $textC . ';">' . nl2br(self::linkify($v, $link), false) . '</td></tr>';
+                        . '<tr><td class="t-body rule" style="padding:0 0 10px 0;border-bottom:1px solid #e3e6ec;font-family:' . $F . ';font-size:15px;line-height:22px;color:' . $textC . ';">' . $val . '</td></tr>';
                     $text[] = $r[0] . ': ' . $v;
                     continue;
                 }

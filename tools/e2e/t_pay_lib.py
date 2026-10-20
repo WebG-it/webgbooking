@@ -67,10 +67,16 @@ def dbrow(i):
 
 def noredirect_get(url):
     u = urllib.parse.urlparse(url)
-    c = http.client.HTTPConnection(u.hostname, u.port, timeout=60)
-    c.request('GET', u.path + ('?' + u.query if u.query else ''))
-    r = c.getresponse()
-    return r.status, r.getheader('Location') or '', r.read().decode('utf-8', 'replace')
+    for attempt in range(4):                      # a GET can be repeated when the connection is reset (loaded PC)
+        try:
+            c = http.client.HTTPConnection(u.hostname, u.port, timeout=60)
+            c.request('GET', u.path + ('?' + u.query if u.query else ''))
+            r = c.getresponse()
+            return r.status, r.getheader('Location') or '', r.read().decode('utf-8', 'replace')
+        except (ConnectionError, OSError):
+            if attempt == 3:
+                raise
+            time.sleep(2)
 
 
 def stripe_calls(method=None, path=None):
