@@ -51,9 +51,17 @@
         <field name="avail_end" type="text" size="6" maxlength="5" filter="string" hint="18:00"
             label="COM_WEBGBOOKING_ET_F_AVAIL_END"
             description="COM_WEBGBOOKING_ET_F_AVAIL_DESC" />
-        <field name="avail_days" type="text" size="20" maxlength="40" filter="string" hint="1,2,3,4,5"
+        <field name="avail_days" type="checkboxes" multiple="true"
             label="COM_WEBGBOOKING_ET_F_AVAIL_DAYS"
-            description="COM_WEBGBOOKING_ET_F_AVAIL_DAYS_DESC" />
+            description="COM_WEBGBOOKING_ET_F_AVAIL_DAYS_DESC">
+            <option value="1">COM_WEBGBOOKING_DAY_1</option>
+            <option value="2">COM_WEBGBOOKING_DAY_2</option>
+            <option value="3">COM_WEBGBOOKING_DAY_3</option>
+            <option value="4">COM_WEBGBOOKING_DAY_4</option>
+            <option value="5">COM_WEBGBOOKING_DAY_5</option>
+            <option value="6">COM_WEBGBOOKING_DAY_6</option>
+            <option value="0">COM_WEBGBOOKING_DAY_0</option>
+        </field>
         <field name="avail_notice" type="text" size="6" maxlength="4" filter="string"
             label="COM_WEBGBOOKING_ET_F_AVAIL_NOTICE"
             description="COM_WEBGBOOKING_ET_F_AVAIL_NOTICE_DESC" />

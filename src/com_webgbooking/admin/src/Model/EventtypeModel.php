@@ -42,6 +42,17 @@ class EventtypeModel extends AdminModel
                 $data->price_currency = 'EUR';
             }
         }
+        // the days are stored as a string ("1,2,3,4,5", empty = the plugin's days); the check boxes want a list
+        $days = \is_array($data) ? ($data['avail_days'] ?? '') : ($data->avail_days ?? '');
+        if (!\is_array($days)) {
+            $days = preg_split('/[,\s;]+/', trim((string) $days), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+        }
+        $days = array_values(array_unique(array_map('strval', $days)));
+        if (\is_array($data)) {
+            $data['avail_days'] = $days;
+        } else {
+            $data->avail_days = $days;
+        }
 
         return $data;
     }
@@ -63,6 +74,15 @@ class EventtypeModel extends AdminModel
         if (empty($data['id']) && (int) ($data['ordering'] ?? 0) === 0) {
             $db = $this->getDatabase();
             $data['ordering'] = 1 + (int) $db->setQuery($db->getQuery(true)->select('MAX(' . $db->quoteName('ordering') . ')')->from($db->quoteName('#__webgbooking_eventtypes')))->loadResult();
+        }
+
+        // no box ticked posts nothing: that is "inherit the plugin's days", and must clear what was stored
+        $days = $data['avail_days'] ?? [];
+        if (\is_array($days)) {
+            // the table check refuses anything outside 0-6 (a hand-made post), the form only ever sends the seven values
+            $days = array_values(array_unique(array_map(static fn($d) => trim((string) $d), $days)));
+            sort($days);
+            $data['avail_days'] = implode(',', array_filter($days, static fn($d) => $d !== ''));
         }
 
         return parent::save($data);

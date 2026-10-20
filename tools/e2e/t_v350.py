@@ -267,7 +267,7 @@ SLUGS['paid'] = ins('un-esperto', 'Un esperto per un\'ora', description='Un\'ora
                     price_amount='49', price_currency='EUR', price_label='Un\'ora con un esperto')
 st, h, b = direct('/prenota/un-esperto')
 pcfg = dcfg(b)
-check('P1 paid page: price on the page and in the widget, place to choose', st == 200 and '49' in b and pcfg['price'] and '49' in pcfg['price']['text'] and pcfg['location'] == 'choice' and 'Google Meet or phone' in b, pcfg.get('price'))
+check('P1 paid page: price on the page and in the widget, place to choose', st == 200 and '49' in b and pcfg['price'] and '49' in pcfg['price']['text'] and pcfg['location'] == 'choice' and 'Google Meet, or I call you by phone' in b, pcfg.get('price'))
 jx('rm -f /tmp/gmock/log.jsonl; rm -f /tmp/mail/*.eml')
 r = book(None, day(D), '10:00', email='paga@example.invalid', name='Chi Paga', phone='3331112222', location='phone', cfg=pcfg)
 pid = last_id()

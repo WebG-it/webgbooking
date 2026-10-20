@@ -174,6 +174,9 @@ final class EventTypes
         foreach (self::ELEMENT_KEYS as $k) {
             $props[$k] = $t[$k];
         }
+        for ($d = 0; $d <= 6; $d++) {
+            $props['avail_day_' . $d] = false;   // the element's own day boxes never override the saved type
+        }
         if (trim((string) ($props['title'] ?? '')) === '') {
             $props['title'] = (string) $r->title;
             $props['_title_from_type'] = true;

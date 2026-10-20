@@ -1,15 +1,15 @@
-"""0.35.0: the elements configured by hand are rendered EXACTLY as before.
+"""0.35.1 (same check as 0.35.0, against the previous release): the elements configured by hand are rendered EXACTLY as before.
 Renders every test element (mock/configs.json: free, paid, with questions, staff, webhook, Brevo, hostile text ...) with the previous
 package and with the new one, in the same container, and compares what the page carries: the widget configuration, the content of the
 sealed form token and of the availability token (minus the time they were made), and the markup around them.
-Usage: python t_v350_same.py <port> <container-prefix> [old-zip] [new-zip]   (default old: dist/pkg_webgbooking-0.34.5.zip, new: the newest in dist/)
+Usage: python t_v350_same.py <port> <container-prefix> [old-zip] [new-zip]   (default old: dist/pkg_webgbooking-0.35.0.zip, new: the newest in dist/)
 Leaves the NEW package installed. Run it on a container where the new package is installed (redeploy.sh) and the old zip is in dist/."""
 import sys, os, re, json, html, glob, base64, tempfile, shutil
 from wgbtest import *
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
 args = [a for a in sys.argv[1:] if not a.startswith('--')]
-OLD = args[2] if len(args) > 2 else os.path.join(ROOT, 'dist', 'pkg_webgbooking-0.34.5.zip')
+OLD = args[2] if len(args) > 2 else os.path.join(ROOT, 'dist', 'pkg_webgbooking-0.35.0.zip')
 zips = sorted(glob.glob(os.path.join(ROOT, 'dist', 'pkg_webgbooking-*.zip')), key=lambda p: [int(x) for x in re.findall(r'\d+', os.path.basename(p))])
 NEW = args[3] if len(args) > 3 else zips[-1]
 OUT = tempfile.mkdtemp(prefix='wgb-same-')
@@ -60,6 +60,8 @@ def normalise(pages):
         def keep(m):
             c = json.loads(html.unescape(m.group(1)))
             c['form'] = 'F'
+            for k in ('locPhone', 'fPhoneNeeded', 'privacyHtml', 'phoneHint'):   # 0.35.1: the wording of the phone call and the privacy link changed on purpose
+                c.get('labels', {}).pop(k, None)
             e = ev_of(c['ev'])
             e.pop('iat', None)
             c['ev'] = e

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.35.1 (pacchetto, componente e plugin): la telefonata non si presta a equivoci, il consenso rimanda alla privacy, i giorni sono caselle
+
+Richieste di Marco dopo aver visto la pagina `/prenota/<slug>` (prove in `tools/e2e/t_v351.py`).
+
+1. **Telefonata: chi chiama e' sempre l'attivita'.** L'opzione si chiama "Ti chiamo io al telefono" (en-GB: "I will call you by phone"); quando e' scelta, sotto il campo Telefono compare "Ti chiamo io a questo numero all'orario scelto." (en-GB: "I will call you on this number at the chosen time."); il campo si chiama "Telefono (ti chiamo io a questo numero)". La riga del luogo nelle email, nei promemoria e nella pagina di gestione dice "Ti chiamo io al numero ...", il file .ics idem, il titolo della pagina diretta "Google Meet oppure ti chiamo io al telefono, a tua scelta". Schermata di conferma ed email gia' lo dicevano. Nessuna frase rivolta al cliente chiede di chiamare.
+2. **Consenso privacy con collegamento.** "Accetto la privacy policy" rimanda all'informativa in una scheda nuova (`target="_blank" rel="noopener noreferrer"`), nella pagina diretta e nell'elemento YOOtheme. L'indirizzo e' la nuova opzione del plugin "Indirizzo della privacy policy" (scheda *Aspetto delle email*); se e' vuota si usa l'indirizzo scritto nella riga del piede che nomina la privacy (su webg.it e' gia' quello), cosi' un sito che aggiorna lo ha senza toccare niente. Senza indirizzo valido la casella resta com'e': nessun collegamento rotto. Solo http e https. Il piede della pagina diretta rende i web address un collegamento vero (prima era testo semplice). Le pagine in cache hanno il vecchio modulo finche' non si svuota la cache.
+3. **Giorni della settimana a caselle.** Nel tipo di evento (scheda Durata e orari) le sette caselle con i nomi dei giorni (Lunedi' ... Domenica, en-GB Monday ... Sunday) al posto del campo "1,2,3,4,5"; nessuna casella spuntata = eredita i giorni di lavoro del plugin (scritto sotto il campo). I valori gia' salvati ("1,2,3,4,5" o vuoto) si leggono uguali: nessun sito perde la disponibilita'. Nell'elemento YOOtheme: sette caselle (`avail_day_0` ... `avail_day_6`); quelle spuntate vincono, altrimenti il vecchio campo di testo (rimasto, rinominato) si legge come prima. Elemento con tipo salvato: valgono sempre i giorni del tipo. Le opzioni del plugin (Giorni lavorativi) erano gia' caselle con i nomi.
+
 ## 0.35.0 (pacchetto, componente e plugin): il link diretto alla prenotazione e i tipi di evento
 
 Richiesta di Marco: mandare a un cliente un indirizzo che apre direttamente la prenotazione di un certo tipo di evento, come `calendly.com/mgalassi/<evento>`, senza che l'evento stia dentro un articolo. Prove in `tools/e2e/t_v350.py`.

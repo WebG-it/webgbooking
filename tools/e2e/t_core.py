@@ -45,7 +45,7 @@ cm = [decode_mail(mail_text(p)) for p in ms]
 cust = next((m for m in cm if 'mario@example.invalid' in m['rcpt']), None)
 check('customer email says "we call you at X", no Meet button', cust is not None and 'Ti chiamo al numero +39 333 123 4567' in cust['html'] or (cust is not None and 'I will call you on +39 333 123 4567' in cust['html']), cust and cust['html'][:300])
 check('customer email has no meet link / no Google Meet button', cust is not None and 'meet.google' not in cust['html'] and 'Join the video' not in cust['html'] and 'Partecipa alla videochiamata' not in cust['html'])
-check('ics: LOCATION is the call, DTEND 60 min after DTSTART', cust is not None and 'LOCATION:I call you on +39 333 123 4567' in cust['ics'].replace('\r', '') or (cust is not None and 'LOCATION:Ti chiamo' in cust['ics']), cust and cust['ics'])
+check('ics: LOCATION is the call, DTEND 60 min after DTSTART', cust is not None and 'LOCATION:I will call you on +39 333 123 4567' in cust['ics'].replace('\r', '') or (cust is not None and 'LOCATION:Ti chiamo' in cust['ics']), cust and cust['ics'])
 if cust:
     m1 = re.search(r'DTSTART:(\d{8}T\d{6})Z', cust['ics']); m2 = re.search(r'DTEND:(\d{8}T\d{6})Z', cust['ics'])
     a = datetime.datetime.strptime(m1.group(1), '%Y%m%dT%H%M%S'); b = datetime.datetime.strptime(m2.group(1), '%Y%m%dT%H%M%S')

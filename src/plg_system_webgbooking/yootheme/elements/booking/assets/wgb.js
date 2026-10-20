@@ -116,12 +116,12 @@
             +'<label class="uk-display-block"><input class="uk-radio wgb-f-loc" type="radio" name="wgb-loc" value="phone"'+(st.form.loc==='phone'?' checked':'')+'> '+esc(L.locPhone||'')+'</label></fieldset>');
         }
         var needPhone=effLoc()==='phone',phLbl=needPhone?(L.fPhoneNeeded||L.fPhone):L.fPhone;
-        h.push('<div class="uk-margin-small"><input class="uk-input wgb-f-phone" type="tel" autocomplete="tel"'+(needPhone?' required aria-required="true"':'')+' aria-label="'+esc(phLbl)+'" placeholder="'+esc(phLbl)+(needPhone?' *':'')+'" value="'+esc(st.form.phone)+'"></div>');
+        h.push('<div class="uk-margin-small"><input class="uk-input wgb-f-phone" type="tel" autocomplete="tel"'+(needPhone?' required aria-required="true"':'')+' aria-label="'+esc(phLbl)+'" placeholder="'+esc(phLbl)+(needPhone?' *':'')+'" value="'+esc(st.form.phone)+'">'+(needPhone&&L.phoneHint?'<div class="uk-text-meta uk-margin-small-top wgb-phone-hint">'+esc(L.phoneHint)+'</div>':'')+'</div>');
         if(cfg.allowGuest)h.push('<div class="uk-margin-small"><input class="uk-input wgb-f-guest" type="email" autocomplete="off" aria-label="'+esc(L.fGuest)+'" placeholder="'+esc(L.fGuest)+'" value="'+esc(st.form.guest||'')+'"></div>');
         h.push('<div class="uk-margin-small"><textarea class="uk-textarea wgb-f-notes" rows="3" aria-label="'+esc(L.fNotes)+'" placeholder="'+esc(L.fNotes)+'">'+esc(st.form.notes)+'</textarea></div>');
         h.push(cfHtml());
         if(cfg.showNewsletter)h.push('<label class="uk-margin-small uk-display-block"><input class="uk-checkbox wgb-f-news" type="checkbox"'+(st.form.news?' checked':'')+'> '+esc(L.fNewsletter)+'</label>');
-        h.push('<label class="uk-margin-small uk-display-block"><input class="uk-checkbox wgb-f-privacy" type="checkbox" aria-required="true"'+(st.form.privacy?' checked':'')+'> '+esc(L.privacy)+' <span class="wgb-req">*</span></label>');
+        h.push('<label class="uk-margin-small uk-display-block"><input class="uk-checkbox wgb-f-privacy" type="checkbox" aria-required="true"'+(st.form.privacy?' checked':'')+'> '+(L.privacyHtml||esc(L.privacy))+' <span class="wgb-req">*</span></label>');
         h.push('<input type="text" class="wgb-f-website" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute!important;left:-9999px;top:-9999px;height:1px;width:1px;opacity:0">');
         var enote=(effLoc()==='phone'&&L.emailNotePhone)?L.emailNotePhone:L.emailNote;if(enote)h.push('<div class="uk-text-meta uk-margin-small-top">'+esc(enote)+'</div>');
         if(cfg.price&&L.payNote)h.push('<div class="uk-text-meta uk-margin-small-top">'+esc(L.payNote.replace('%d',cfg.price.hold))+'</div>');

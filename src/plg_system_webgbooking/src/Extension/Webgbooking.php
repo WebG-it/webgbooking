@@ -37,7 +37,7 @@ use WebG\Plugin\System\Webgbooking\Mail\EmailLayout;
 final class Webgbooking extends CMSPlugin implements SubscriberInterface
 {
     /** Cache-buster for the bundled front-end assets (wgb.css/js, UIkit). Bump when those change. */
-    public const ASSET_VER = '0.35.0';
+    public const ASSET_VER = '0.35.1';
 
     protected $autoloadLanguage = true;
 

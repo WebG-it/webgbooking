@@ -16,6 +16,7 @@ namespace WebG\Plugin\System\Webgbooking\Booking;
 
 \defined('_JEXEC') or die;
 
+use WebG\Plugin\System\Webgbooking\Extension\Webgbooking;
 use WebG\Plugin\System\Webgbooking\Mail\EmailLayout;
 
 final class DirectPage
@@ -23,6 +24,26 @@ final class DirectPage
     private static function e($v): string
     {
         return htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
+    }
+
+    /** Escaped text where every plain http(s) address becomes a real link (new tab); nothing else is let through. */
+    private static function linkifyText(string $s): string
+    {
+        $parts = preg_split('#(https?://[^\s<>"\']+)#i', $s, -1, PREG_SPLIT_DELIM_CAPTURE) ?: [$s];
+        $out   = '';
+        foreach ($parts as $i => $p) {
+            if ($i % 2 === 1) {
+                $url   = rtrim($p, '.,;)');
+                $trail = substr($p, \strlen($url));
+                $out  .= Webgbooking::httpUrlOk($url)
+                    ? '<a href="' . self::e($url) . '" target="_blank" rel="noopener noreferrer">' . self::e($url) . '</a>' . self::e($trail)
+                    : self::e($p);
+            } else {
+                $out .= self::e($p);
+            }
+        }
+
+        return $out;
     }
 
     /** Plain text with blank lines between paragraphs and line breaks inside them. */
@@ -109,7 +130,7 @@ final class DirectPage
         $foot = '<p class="bk-f1">' . self::e($name) . '</p>';
         $ft   = trim((string) ($b['footer'] ?? ''));
         if ($ft !== '') {
-            $foot .= '<p class="bk-f2">' . nl2br(self::e($ft), false) . '</p>';
+            $foot .= '<p class="bk-f2">' . nl2br(self::linkifyText($ft), false) . '</p>';
         }
 
         return '<!DOCTYPE html><html lang="' . self::e(preg_replace('/[^a-zA-Z-]/', '', $lang) ?: 'en') . '"><head><meta charset="utf-8">'

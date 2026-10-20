@@ -34,6 +34,40 @@ final class WidgetConfig
         return new Registry(PluginHelper::getPlugin('system', 'webgbooking')->params ?? '');
     }
 
+    /**
+     * Address of the privacy policy: the "privacy_url" option, otherwise the web address on the footer line that
+     * mentions "privacy" (the footer text of the email brand, the same one the direct page shows). '' = no link.
+     */
+    public static function privacyUrl(Registry $pp): string
+    {
+        $own = trim((string) $pp->get('privacy_url', ''));
+        if ($own !== '') {
+            return Webgbooking::httpUrlOk($own) ? $own : '';
+        }
+        foreach (preg_split('/\R/', (string) $pp->get('mail_footer', '')) ?: [] as $line) {
+            if (stripos($line, 'privacy') !== false && preg_match('#https?://[^\s<>"\']+#i', $line, $m)) {
+                $u = rtrim($m[0], '.,;)');
+
+                return Webgbooking::httpUrlOk($u) ? $u : '';
+            }
+        }
+
+        return '';
+    }
+
+    /** The consent label with "privacy policy" as a link in a new tab; '' when no address is set (the plain label stays). */
+    public static function privacyHtml(Registry $pp): string
+    {
+        $url = self::privacyUrl($pp);
+        $txt = Text::_('PLG_SYSTEM_WEBGBOOKING_PRIVACY_LINKED');
+        if ($url === '' || substr_count($txt, '[') !== 1 || substr_count($txt, ']') !== 1) {
+            return '';
+        }
+        $h = htmlspecialchars($txt, ENT_QUOTES, 'UTF-8');
+
+        return str_replace(['[', ']'], ['<a href="' . htmlspecialchars($url, ENT_QUOTES, 'UTF-8') . '" target="_blank" rel="noopener noreferrer">', '</a>'], $h);
+    }
+
     private static function enum($v, array $ok, $def = '')
     {
         return \in_array($v, $ok, true) ? $v : $def;
@@ -113,7 +147,17 @@ final class WidgetConfig
         $availWs = $hhmm($props['avail_start'] ?? '');
         $availWe = $hhmm($props['avail_end'] ?? '');
         $availDays = null;
-        if (trim((string) ($props['avail_days'] ?? '')) !== '') {
+        // since 0.35.1 the element has one check box per day (avail_day_0 = Sunday ... avail_day_6 = Saturday); ticked boxes win,
+        // otherwise the old text field ("1,2,3,4,5") is read exactly as before. Nothing ticked and nothing typed = the plugin's days.
+        $ticked = [];
+        for ($d = 0; $d <= 6; $d++) {
+            if (!empty($props['avail_day_' . $d])) {
+                $ticked[] = $d;
+            }
+        }
+        if ($ticked) {
+            $availDays = $ticked;
+        } elseif (trim((string) ($props['avail_days'] ?? '')) !== '') {
             $availDays = array_values(array_unique(array_filter(array_map('intval', preg_split('/[,\s;]+/', trim((string) $props['avail_days']))), static fn($d) => $d >= 0 && $d <= 6)));
             $availDays = $availDays ?: null;
         }
@@ -323,6 +367,8 @@ final class WidgetConfig
                 'priceInvalid' => Text::_('PLG_SYSTEM_WEBGBOOKING_PRICE_INVALID'),
                 'calUnavailable' => Text::_('PLG_SYSTEM_WEBGBOOKING_CAL_UNAVAILABLE'),
                 'privacy'     => Text::_('PLG_SYSTEM_WEBGBOOKING_PRIVACY'),
+                'privacyHtml' => self::privacyHtml($pp),
+                'phoneHint'   => Text::_('PLG_SYSTEM_WEBGBOOKING_PHONE_HINT'),
                 'bookNow'     => Text::_('PLG_SYSTEM_WEBGBOOKING_BOOK_NOW'),
                 'required'    => Text::_('PLG_SYSTEM_WEBGBOOKING_REQUIRED'),
                 'demo'        => Text::_('PLG_SYSTEM_WEBGBOOKING_DEMO_NOTE'),

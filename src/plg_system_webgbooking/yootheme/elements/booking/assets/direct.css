@@ -30,6 +30,7 @@
 .bk-foot{padding:22px 24px 24px;background:var(--bk-foot-bg,#2d3142)}
 .bk-f1{margin:0 0 6px;font-size:14px;line-height:22px;font-weight:700;color:var(--bk-f1,#fff)}
 .bk-f2{margin:0;font-size:13px;line-height:21px;color:var(--bk-f2,#d5d7e3)}
+.bk-foot a{color:inherit;text-decoration:underline}
 .bk-foot-out{background:transparent;text-align:center;padding:20px 8px 4px}
 .bk-foot-out .bk-f1{color:var(--bk-f1)}
 .bk-foot-out .bk-f2{color:var(--bk-f2)}

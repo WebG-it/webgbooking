@@ -116,8 +116,50 @@ return [
             'description' => Text::_('PLG_SYSTEM_WEBGBOOKING_EL_OPTIONAL_E_G_19'),
             'type' => 'text',
         ],
-        'avail_days' => [
+        'avail_day_1' => [
             'label' => Text::_('PLG_SYSTEM_WEBGBOOKING_EL_DAYS_OF_THE_WEEK'),
+            'description' => Text::_('PLG_SYSTEM_WEBGBOOKING_EL_DAYS_BOXES_DESC'),
+            'type' => 'checkbox',
+            'text' => Text::_('PLG_SYSTEM_WEBGBOOKING_MON'),
+        ],
+        'avail_day_2' => [
+            'label' => '',
+            'description' => '',
+            'type' => 'checkbox',
+            'text' => Text::_('PLG_SYSTEM_WEBGBOOKING_TUE'),
+        ],
+        'avail_day_3' => [
+            'label' => '',
+            'description' => '',
+            'type' => 'checkbox',
+            'text' => Text::_('PLG_SYSTEM_WEBGBOOKING_WED'),
+        ],
+        'avail_day_4' => [
+            'label' => '',
+            'description' => '',
+            'type' => 'checkbox',
+            'text' => Text::_('PLG_SYSTEM_WEBGBOOKING_THU'),
+        ],
+        'avail_day_5' => [
+            'label' => '',
+            'description' => '',
+            'type' => 'checkbox',
+            'text' => Text::_('PLG_SYSTEM_WEBGBOOKING_FRI'),
+        ],
+        'avail_day_6' => [
+            'label' => '',
+            'description' => '',
+            'type' => 'checkbox',
+            'text' => Text::_('PLG_SYSTEM_WEBGBOOKING_SAT'),
+        ],
+        'avail_day_0' => [
+            'label' => '',
+            'description' => '',
+            'type' => 'checkbox',
+            'text' => Text::_('PLG_SYSTEM_WEBGBOOKING_SUN'),
+        ],
+        'avail_days' => [
+            'label' => Text::_('PLG_SYSTEM_WEBGBOOKING_EL_DAYS_LEGACY'),
             'description' => Text::_('PLG_SYSTEM_WEBGBOOKING_EL_OPTIONAL_NUMBERS_SEPARATED_BY'),
             'type' => 'text',
         ],
@@ -394,7 +436,7 @@ return [
                 ],
                 [
                     'title' => Text::_('PLG_SYSTEM_WEBGBOOKING_EL_EVENT'),
-                    'fields' => ['event_type', 'event_duration', 'event_buffer_before', 'event_buffer_after', 'event_location', 'avail_start', 'avail_end', 'avail_days', 'avail_notice', 'avail_window', 'price_amount', 'price_currency', 'price_label', 'redirect_url'],
+                    'fields' => ['event_type', 'event_duration', 'event_buffer_before', 'event_buffer_after', 'event_location', 'avail_start', 'avail_end', 'avail_day_1', 'avail_day_2', 'avail_day_3', 'avail_day_4', 'avail_day_5', 'avail_day_6', 'avail_day_0', 'avail_days', 'avail_notice', 'avail_window', 'price_amount', 'price_currency', 'price_label', 'redirect_url'],
                 ],
                 [
                     'title' => Text::_('PLG_SYSTEM_WEBGBOOKING_EL_FORM'),

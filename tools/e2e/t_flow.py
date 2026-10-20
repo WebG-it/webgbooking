@@ -52,7 +52,7 @@ bid = last_id(); tok = token_of(bid)
 other = book('half', D, '15:00', phone='0612345678', email='other@example.invalid', name='Altro')
 oid = last_id()
 page = Sess().get(manage_url(tok))
-check('A1 manage page shows the phone appointment and a signed ev token', 'Phone call to +39 333 000 1111' in page and '&quot;ev&quot;:&quot;' in page and '&quot;duration&quot;:60' in page, page[:200])
+check('A1 manage page shows the phone appointment and a signed ev token', 'I will call you on +39 333 000 1111' in page and '&quot;ev&quot;:&quot;' in page and '&quot;duration&quot;:60' in page, page[:200])
 mcount_before = len(mails()); jx('rm -f /tmp/gmock/log.jsonl')
 rs = Sess()
 def resched(tok_, date_, time_):
