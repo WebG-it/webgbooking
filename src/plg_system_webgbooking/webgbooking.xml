@@ -8,7 +8,7 @@
     <copyright>(C) 2026 Marco Galassi / WebG</copyright>
     <license>GNU General Public License version 2 or later</license>
     <licence>GNU General Public Licence version 2 or later (GPL-2.0-or-later)</licence>
-    <version>0.34.4</version>
+    <version>0.34.5</version>
     <description>PLG_SYSTEM_WEBGBOOKING_XML_DESCRIPTION</description>
     <scriptfile>script.php</scriptfile>
     <namespace path="src">WebG\Plugin\System\Webgbooking</namespace>
@@ -160,6 +160,24 @@
                 <field name="mail_footer_color" type="text" default="" size="10" hint="#rrggbb" autocomplete="off"
                     label="PLG_SYSTEM_WEBGBOOKING_MAIL_FOOTER_COLOR_LABEL"
                     description="PLG_SYSTEM_WEBGBOOKING_MAIL_FOOTER_COLOR_DESC" />
+                <field name="mail_logo_pos" type="list" default="left"
+                    label="PLG_SYSTEM_WEBGBOOKING_MAIL_LOGO_POS_LABEL"
+                    description="PLG_SYSTEM_WEBGBOOKING_MAIL_LOGO_POS_DESC">
+                    <option value="left">PLG_SYSTEM_WEBGBOOKING_MAIL_POS_LEFT</option>
+                    <option value="center">PLG_SYSTEM_WEBGBOOKING_MAIL_POS_CENTER</option>
+                </field>
+                <field name="mail_header_style" type="list" default="band"
+                    label="PLG_SYSTEM_WEBGBOOKING_MAIL_HEADER_STYLE_LABEL"
+                    description="PLG_SYSTEM_WEBGBOOKING_MAIL_HEADER_STYLE_DESC">
+                    <option value="band">PLG_SYSTEM_WEBGBOOKING_MAIL_HDR_BAND</option>
+                    <option value="rule">PLG_SYSTEM_WEBGBOOKING_MAIL_HDR_RULE</option>
+                </field>
+                <field name="mail_footer_out" type="list" default="0"
+                    label="PLG_SYSTEM_WEBGBOOKING_MAIL_FOOTER_OUT_LABEL"
+                    description="PLG_SYSTEM_WEBGBOOKING_MAIL_FOOTER_OUT_DESC">
+                    <option value="0">PLG_SYSTEM_WEBGBOOKING_MAIL_FOUT_CARD</option>
+                    <option value="1">PLG_SYSTEM_WEBGBOOKING_MAIL_FOUT_PAGE</option>
+                </field>
                 <field name="mail_footer" type="textarea" default="" rows="4" filter="string"
                     label="PLG_SYSTEM_WEBGBOOKING_MAIL_FOOTER_LABEL"
                     description="PLG_SYSTEM_WEBGBOOKING_MAIL_FOOTER_DESC" />

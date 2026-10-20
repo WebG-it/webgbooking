@@ -112,7 +112,7 @@
   "label": "Promemoria prima dell'appuntamento",
   "audience": "cliente",
   "group": "2 Promemoria e link",
-  "subject": "Promemoria: appuntamento il 20/10/2026 alle 03:11",
+  "subject": "Promemoria: appuntamento il 20/10/2026 alle 03:58",
   "rcpt": "luca.ferri@example.invalid",
   "attach_ics": false
  },
@@ -121,7 +121,7 @@
   "label": "Promemoria per l'ospite",
   "audience": "cliente",
   "group": "2 Promemoria e link",
-  "subject": "Promemoria: appuntamento il 20/10/2026 alle 03:11",
+  "subject": "Promemoria: appuntamento il 20/10/2026 alle 03:58",
   "rcpt": "ospite.promemoria@example.invalid",
   "attach_ics": false
  },

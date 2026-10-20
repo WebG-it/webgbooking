@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.34.5 (pacchetto, componente e plugin): la testata e il piede come nelle mail di Brevo
+
+Richiesta di Marco: per WebG la notifica deve sembrare quella di Brevo (prova in `tools/e2e/t_mail.py`, 8 controlli nuovi che falliscono sulla 0.34.4).
+
+1. **Posizione del logo** (sinistra o centro; predefinito sinistra): vale anche per il nome dell'attivita' quando non c'e' il logo.
+2. **Stile della testata** (fascia colorata in alto, predefinito, oppure filetto di 3 px sotto il logo a tutta larghezza del contenuto e nessuna fascia sopra). Con centro + filetto la conferma riproduce la mail personale ADV 1 di Brevo; titolo e riquadro restano come prima.
+3. **Posizione del piede**: dentro la scheda (predefinito, fascia colorata) oppure sotto la scheda, sul fondo pagina, centrato e in piccolo con testo scuro `#1b2a4a` (chiaro in modalita' scura, senza fascia propria). Valgono anche li' il taglio del testo contro i link automatici di Gmail e le regole di colore per i client.
+4. Valori non validi nelle tre opzioni ricadono sul predefinito. Confronti affiancati Brevo e nostra aggiornati in `tools/e2e/reports/email/webg/`.
+
 ## 0.34.4 (pacchetto, componente e plugin): rifiniture dalla prova reale in Gmail
 
 Tre difetti (più una rifinitura di aspetto) emersi installando la 0.34.3 su webg.it con il marchio WebG (prova in `tools/e2e/t_mail.py`, 8 controlli nuovi che falliscono sulla 0.34.3).

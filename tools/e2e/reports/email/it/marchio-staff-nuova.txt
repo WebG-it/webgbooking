@@ -12,9 +12,9 @@ Nome: Giulia Bianchi
 Email: giulia.bianchi@example.invalid
 Telefono: +39 333 123 4567
 Note: Prima consulenza.
-Prenotazione n.: #431
+Prenotazione n.: #441
 
-Apri nel backend: http://localhost:8086/administrator/index.php?option=com_webgbooking&view=booking&id=431
+Apri nel backend: http://localhost:8086/administrator/index.php?option=com_webgbooking&view=booking&id=441
 
 --
 wgbtest

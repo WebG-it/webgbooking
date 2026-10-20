@@ -34,7 +34,7 @@ use WebG\Plugin\System\Webgbooking\Mail\EmailLayout;
 final class Webgbooking extends CMSPlugin implements SubscriberInterface
 {
     /** Cache-buster for the bundled front-end assets (wgb.css/js, UIkit). Bump when those change. */
-    public const ASSET_VER = '0.34.4';
+    public const ASSET_VER = '0.34.5';
 
     protected $autoloadLanguage = true;
 
@@ -3157,6 +3157,9 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             'color'     => $accent,
             'button'    => EmailLayout::hex((string) $this->params->get('mail_button_color', ''), $accent),
             'footer'    => trim((string) $this->params->get('mail_footer', '')),
+            'logo_pos'     => $this->params->get('mail_logo_pos', 'left') === 'center' ? 'center' : 'left',
+            'header_style' => $this->params->get('mail_header_style', 'band') === 'rule' ? 'rule' : 'band',
+            'footer_out'   => (int) $this->params->get('mail_footer_out', 0) === 1,
             'line'         => EmailLayout::hex((string) $this->params->get('mail_line_color', ''), ''),
             'link'         => EmailLayout::hex((string) $this->params->get('mail_link_color', ''), ''),
             'text'         => EmailLayout::hex((string) $this->params->get('mail_text_color', ''), ''),

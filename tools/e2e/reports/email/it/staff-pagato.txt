@@ -6,15 +6,15 @@ Data: Sabato 31/10/2026
 Ora: 10:00 (CET, Europe/Rome)
 Durata: 30 minuti
 Dove: Google Meet (https://meet.google.com/abc-defg-hij)
-Pagamento: Pagato: 29,00 € (Stripe pi_mock_7e11d7).
+Pagamento: Pagato: 29,00 € (Stripe pi_mock_ab2c47).
 
 CLIENTE
 Nome: Marta Pagante
 Email: marta.pagante@example.invalid
 Telefono: +39 333 456 7890
-Prenotazione n.: #425
+Prenotazione n.: #435
 
-Apri nel backend: http://localhost:8086/administrator/index.php?option=com_webgbooking&view=booking&id=425
+Apri nel backend: http://localhost:8086/administrator/index.php?option=com_webgbooking&view=booking&id=435
 
 --
 wgbtest

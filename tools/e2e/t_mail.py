@@ -289,6 +289,45 @@ check('Y4b ...URLs stay whole, and the plain-text part keeps the text as written
 check('Y5 footer links keep a readable colour whatever the mail app does: rules for .footer a, Gmail (u + #body), Samsung, Apple data detectors, body id', all(x in hb for x in ('.footer a, .footer a:link, .footer a:visited { color:#ffffff !important', 'u + #body .footer a', '#MessageViewBody .footer a', 'a[x-apple-data-detectors]')) and '<body id="body"' in hb, '')
 tp.fresh()
 
+# ============================================================================ 8b. header style, logo position, footer outside the card (the look of the Brevo personal emails)
+print('--- 8b. header and footer layout')
+tp.fresh()
+jx('rm -f /tmp/mail/*.eml')
+opts(mail_logo='images/joomla_black.png', mail_color='#ee6c2d')
+book('def', day(D + 8), '09:00', email='hd0@example.invalid', name='Testata Predefinita')
+d0 = next((m for m in collect() if 'hd0@' in m['rcpt']), None)
+h0 = d0['html'] if d0 else ''
+check('V1 default (logo left, coloured band, footer in the card): band on top, no thin line, logo not centred, footer row inside the card', 'class="accent" height="5"' in h0 and 'border-top:3px solid' not in h0 and 'display:block;margin:0 auto;border:0' not in h0 and '<td class="px footer" style=' in h0 and 'fout' not in h0.split('</style>')[1], '')
+opts(mail_logo_pos='center', mail_header_style='rule')
+jx('rm -f /tmp/mail/*.eml')
+book('def', day(D + 8), '10:00', email='hd1@example.invalid', name='Testata Centro Filetto')
+d1 = next((m for m in collect() if 'hd1@' in m['rcpt']), None)
+h1 = d1['html'] if d1 else ''
+check('V2 centred logo with a thin line: logo centred, 3 px line in the main colour under it across the content width, NO band on top', d1 is not None and 'display:block;margin:0 auto;border:0' in h1 and 'class="px hdr-plate" align="center"' in h1 and 'border-top:3px solid #ee6c2d' in h1 and 'class="accent" height="5"' not in h1 and not structure_ok(d1), d1 and structure_ok(d1))
+check('V2b the line sits between the logo and the content, and the title keeps its box and button', h1.index('hdr-plate') < h1.index('border-top:3px solid #ee6c2d') < h1.index('<h1') and 'class="box"' in h1 and 'class="btn-a"' in h1, '')
+opts(mail_logo='')
+jx('rm -f /tmp/mail/*.eml')
+book('def', day(D + 8), '11:00', email='hd2@example.invalid', name='Testata Senza Logo')
+d2 = next((m for m in collect() if 'hd2@' in m['rcpt']), None)
+check('V2c without a logo the business name in the header follows the position too', d2 is not None and 'class="px hdr" align="center"' in d2['html'] and 'text-align:center;' in d2['html'], '')
+opts(mail_logo='images/joomla_black.png', mail_footer_out='1', mail_footer='Corso Taranto 62, 10154 Torino (TO)' + chr(92) + 'nP. IVA 12774610013')
+jx('rm -f /tmp/mail/*.eml')
+book('def', day(D + 8), '12:00', email='hd3@example.invalid', name='Piede Fuori')
+d3 = next((m for m in collect() if 'hd3@' in m['rcpt']), None)
+h3 = d3['html'] if d3 else ''
+body3 = h3.split('</style>')[1] if '</style>' in h3 else h3
+card_end = body3.index('</table>', body3.index('class="btn-a"'))
+check('V3 footer on the page background: it comes after the card, centred, in dark text on the light page, not inside the card', d3 is not None and body3.index('class="px footer fout"') > card_end and 'align="center" style="padding:20px 32px 4px 32px;text-align:center;"' in body3 and 'color:#1b2a4a' in body3 and '<tr><td class="px footer" style=' not in body3 and not structure_ok(d3), d3 and structure_ok(d3))
+check('V3b in dark mode the footer text is light and it has no band of its own', '.fout { background-color:transparent !important; }' in h3 and '.footer .f1, .footer a' in h3, '')
+check('V3c the text alternative and the zero-width cutting are the same as in the card', d3 is not None and 'Corso Taranto 62, 10154 Torino (TO)' in d3['text'] and chr(0x200B) not in d3['text'] and chr(0x200B) in h3, '')
+opts(mail_logo_pos='diagonal', mail_header_style='x', mail_footer_out='7')
+jx('rm -f /tmp/mail/*.eml')
+book('def', day(D + 8), '13:00', email='hd4@example.invalid', name='Testata Errata')
+d4 = next((m for m in collect() if 'hd4@' in m['rcpt']), None)
+h4b = d4['html'] if d4 else ''
+check('V4 invalid values of the three options fall back to left, band and footer in the card', d4 is not None and 'class="accent" height="5"' in h4b and 'align="center" style="padding:26px' not in h4b and '<td class="px footer" style=' in h4b, '')
+tp.fresh()
+
 # ============================================================================ 8. no empty style value in any email of this suite
 bad = [(m['subject'][:40], bad_styles(m['html'])) for m in ALL if bad_styles(m['html'])]
 check('Z1 across all %d emails of this suite (all kinds, all colour options) no style attribute holds an empty value such as "color:;"' % len(ALL), len(ALL) > 40 and not bad, bad[:3])

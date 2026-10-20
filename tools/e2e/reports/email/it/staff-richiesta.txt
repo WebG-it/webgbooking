@@ -11,9 +11,9 @@ Nome: Elena Gallo
 Email: elena.gallo@example.invalid
 Telefono: +39 340 111 2233
 Note: Preferirei il pomeriggio.
-Prenotazione n.: #421
+Prenotazione n.: #431
 
-Apri nel backend: http://localhost:8086/administrator/index.php?option=com_webgbooking&view=booking&id=421
+Apri nel backend: http://localhost:8086/administrator/index.php?option=com_webgbooking&view=booking&id=431
 
 --
 wgbtest

@@ -1,19 +1,19 @@
 Something needs your attention
 ==============================
-Stripe collected €29.00 from Carlo Tardivo (carlo.tardivo@example.invalid) for booking no. 439 on 27/10/2026 at 09:00, but the payment arrived after the hold expired and the slot was taken by someone else meanwhile. The booking is in status "Needs review": refund by hand from Stripe (ref. pi_mock_0ebe4a) or move it.
+Stripe collected €29.00 from Carlo Tardivo (carlo.tardivo@example.invalid) for booking no. 449 on 27/10/2026 at 09:00, but the payment arrived after the hold expired and the slot was taken by someone else meanwhile. The booking is in status "Needs review": refund by hand from Stripe (ref. pi_mock_bcfb4d) or move it.
 Service: Audit SEO
 Date: Tuesday 27/10/2026
 Time: 09:00 (CET, Europe/Rome)
 Duration: 30 minutes
 Where: Google Meet
-Payment: Paid: €29.00 (Stripe pi_mock_0ebe4a).
+Payment: Paid: €29.00 (Stripe pi_mock_bcfb4d).
 
 CUSTOMER
 Name: Carlo Tardivo
 Email: carlo.tardivo@example.invalid
-Booking no.: #439
+Booking no.: #449
 
-Open in the backend: http://localhost:8086/administrator/index.php?option=com_webgbooking&view=booking&id=439
+Open in the backend: http://localhost:8086/administrator/index.php?option=com_webgbooking&view=booking&id=449
 
 --
 wgbtest

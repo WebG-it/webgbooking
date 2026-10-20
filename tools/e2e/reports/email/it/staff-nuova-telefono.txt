@@ -11,9 +11,9 @@ CLIENTE
 Nome: Paolo Neri
 Email: paolo.neri@example.invalid
 Telefono: +39 347 555 0102
-Prenotazione n.: #420
+Prenotazione n.: #430
 
-Apri nel backend: http://localhost:8086/administrator/index.php?option=com_webgbooking&view=booking&id=420
+Apri nel backend: http://localhost:8086/administrator/index.php?option=com_webgbooking&view=booking&id=430
 
 --
 wgbtest

@@ -13,14 +13,14 @@ Un solo pacchetto installa **componente + plugin di sistema + plugin delle attiv
 
 1. Joomla → *Sistema → Installa → Installa da URL*, incolla:
    ```
-   https://raw.githubusercontent.com/WebG-it/webgbooking/main/dist/pkg_webgbooking-0.34.4.zip
+   https://raw.githubusercontent.com/WebG-it/webgbooking/main/dist/pkg_webgbooking-0.34.5.zip
    ```
 2. I plugin si **attivano da soli** e il pacchetto crea l'attività pianificata dei promemoria (ogni 5 minuti). YOOtheme Customizer → **Add Element** → gruppo **WebG** → **Booking**.
 3. Backend prenotazioni e connessione Google: **Componenti → WebG Booking**.
 
 Gli aggiornamenti successivi arrivano via **Sistema → Aggiorna** come **un unico "WebG Booking"** (clicca *Trova aggiornamenti*).
 
-## Cosa fa (0.34.4)
+## Cosa fa (0.34.5)
 - **Tipo di evento per elemento** (scheda *Event* dell'elemento): durata in minuti, tempo libero prima/dopo, luogo, pagina di ritorno. Più elementi nella stessa pagina o in pagine diverse funzionano insieme (es. "Riunione - 1 ora" e "Chiamata veloce"): disponibilità e validazione usano la durata dell'elemento, non un valore globale (che resta il predefinito se il campo è vuoto). Un appuntamento di 60 minuti blocca anche le fasce da 30 che lo toccano, con i suoi buffer.
 - **Luogo**: *Google Meet*, *Telefonata (ti chiamo io)* o *Scelta del cliente*. Con la telefonata il numero è obbligatorio (controllato dal server), l'evento Google nasce **senza Meet** con il numero nel titolo e nella descrizione, email e `.ics` dicono "ti chiamo al numero X". Il luogo si salva sulla prenotazione e compare in lista e dettaglio admin, export CSV/Excel, webhook e Google Sheet.
 - **Email con un layout unico** (cliente e staff): scheda professionale con riquadro dell'appuntamento, pulsanti, modalita' scura, versione testuale; logo, colore, piede e nome del mittente si impostano nelle opzioni del plugin (scheda *Aspetto delle email*). Il testo scritto nell'elemento va dentro il layout.

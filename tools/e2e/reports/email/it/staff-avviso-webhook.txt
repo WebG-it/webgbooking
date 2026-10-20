@@ -1,6 +1,6 @@
 Qualcosa richiede la tua attenzione
 ===================================
-Prenotazione n. 430: l'evento booking.created non è stato inviato al webhook. Motivo: il profilo di intestazioni "nonesiste" non esiste o non si riesce a decifrare (se la chiave segreta di Joomla è cambiata, reinseriscilo). Correggi l'elemento o il profilo di intestazioni; per questo non si riprova.
+Prenotazione n. 440: l'evento booking.created non è stato inviato al webhook. Motivo: il profilo di intestazioni "nonesiste" non esiste o non si riesce a decifrare (se la chiave segreta di Joomla è cambiata, reinseriscilo). Correggi l'elemento o il profilo di intestazioni; per questo non si riprova.
 Servizio: Hook profilo mancante
 Data: Martedì 03/11/2026
 Ora: 09:00 (CET, Europe/Rome)
@@ -10,9 +10,9 @@ Dove: Google Meet (https://meet.google.com/abc-defg-hij)
 CLIENTE
 Nome: Omar Sala
 Email: omar.sala@example.invalid
-Prenotazione n.: #430
+Prenotazione n.: #440
 
-Apri nel backend: http://localhost:8086/administrator/index.php?option=com_webgbooking&view=booking&id=430
+Apri nel backend: http://localhost:8086/administrator/index.php?option=com_webgbooking&view=booking&id=440
 
 --
 wgbtest

@@ -1,19 +1,19 @@
 Qualcosa richiede la tua attenzione
 ===================================
-Stripe ha incassato 29,00 € da Carlo Tardivo (carlo.tardivo@example.invalid) per la prenotazione n. 426 del 27/10/2026 alle 09:00, ma il pagamento è arrivato dopo la scadenza e la fascia nel frattempo è stata presa da un altro. La prenotazione è in stato "Da gestire": rimborsa a mano da Stripe (rif. pi_mock_bdd15e) oppure spostala.
+Stripe ha incassato 29,00 € da Carlo Tardivo (carlo.tardivo@example.invalid) per la prenotazione n. 436 del 27/10/2026 alle 09:00, ma il pagamento è arrivato dopo la scadenza e la fascia nel frattempo è stata presa da un altro. La prenotazione è in stato "Da gestire": rimborsa a mano da Stripe (rif. pi_mock_c22b5c) oppure spostala.
 Servizio: Audit SEO
 Data: Martedì 27/10/2026
 Ora: 09:00 (CET, Europe/Rome)
 Durata: 30 minuti
 Dove: Google Meet
-Pagamento: Pagato: 29,00 € (Stripe pi_mock_bdd15e).
+Pagamento: Pagato: 29,00 € (Stripe pi_mock_c22b5c).
 
 CLIENTE
 Nome: Carlo Tardivo
 Email: carlo.tardivo@example.invalid
-Prenotazione n.: #426
+Prenotazione n.: #436
 
-Apri nel backend: http://localhost:8086/administrator/index.php?option=com_webgbooking&view=booking&id=426
+Apri nel backend: http://localhost:8086/administrator/index.php?option=com_webgbooking&view=booking&id=436
 
 --
 wgbtest

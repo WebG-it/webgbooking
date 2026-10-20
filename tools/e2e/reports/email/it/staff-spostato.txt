@@ -13,9 +13,9 @@ Email: giulia.bianchi@example.invalid
 Telefono: +39 333 123 4567
 Ospite: marco.verdi@example.invalid
 Note: Vorrei capire se il sito attuale si puo aggiornare senza rifarlo da zero.
-Prenotazione n.: #419
+Prenotazione n.: #429
 
-Apri nel backend: http://localhost:8086/administrator/index.php?option=com_webgbooking&view=booking&id=419
+Apri nel backend: http://localhost:8086/administrator/index.php?option=com_webgbooking&view=booking&id=429
 
 --
 wgbtest

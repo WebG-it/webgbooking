@@ -1,6 +1,6 @@
 Qualcosa richiede la tua attenzione
 ===================================
-Prenotazione n. 429 (Irene Testa, irene.testa@example.invalid): il contatto non è stato salvato su Brevo. Motivo: la chiave API non è impostata nelle opzioni del plugin (scheda Integrazioni). Un nuovo tentativo non servirebbe: correggi l'impostazione, poi aggiungi il contatto a mano.
+Prenotazione n. 439 (Irene Testa, irene.testa@example.invalid): il contatto non è stato salvato su Brevo. Motivo: la chiave API non è impostata nelle opzioni del plugin (scheda Integrazioni). Un nuovo tentativo non servirebbe: correggi l'impostazione, poi aggiungi il contatto a mano.
 Servizio: Brevo sempre
 Data: Lunedì 02/11/2026
 Ora: 09:00 (CET, Europe/Rome)
@@ -10,13 +10,13 @@ Dove: Google Meet (https://meet.google.com/abc-defg-hij)
 CLIENTE
 Nome: Irene Testa
 Email: irene.testa@example.invalid
-Prenotazione n.: #429
+Prenotazione n.: #439
 
 RISPOSTE DEL MODULO
 Citta: Torino
 Progetto: Sito nuovo
 
-Apri nel backend: http://localhost:8086/administrator/index.php?option=com_webgbooking&view=booking&id=429
+Apri nel backend: http://localhost:8086/administrator/index.php?option=com_webgbooking&view=booking&id=439
 
 --
 wgbtest

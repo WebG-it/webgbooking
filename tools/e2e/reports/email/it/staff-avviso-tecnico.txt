@@ -1,6 +1,6 @@
 Qualcosa richiede la tua attenzione
 ===================================
-Prenotazione n. 424 (Anna Riva, anna.riva@example.invalid): non sono andati a buon fine questi passaggi: google. L'attività pianificata riprova da sola ogni pochi minuti, solo i passaggi mancanti.
+Prenotazione n. 434 (Anna Riva, anna.riva@example.invalid): non sono andati a buon fine questi passaggi: google. L'attività pianificata riprova da sola ogni pochi minuti, solo i passaggi mancanti.
 Servizio: Call Meet 30
 Data: Venerdì 30/10/2026
 Ora: 09:00 (CET, Europe/Rome)
@@ -10,9 +10,9 @@ Dove: Google Meet
 CLIENTE
 Nome: Anna Riva
 Email: anna.riva@example.invalid
-Prenotazione n.: #424
+Prenotazione n.: #434
 
-Apri nel backend: http://localhost:8086/administrator/index.php?option=com_webgbooking&view=booking&id=424
+Apri nel backend: http://localhost:8086/administrator/index.php?option=com_webgbooking&view=booking&id=434
 
 --
 wgbtest

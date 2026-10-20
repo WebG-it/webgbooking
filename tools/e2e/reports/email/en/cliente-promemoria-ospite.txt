@@ -3,7 +3,7 @@ An appointment you are invited to is coming up
 Hi,
 Reminder: Luca Ferri invited you to this appointment:
 Date: Tuesday 20/10/2026
-Time: 03:12 (CEST, Europe/Rome)
+Time: 03:59 (CEST, Europe/Rome)
 Duration: 30 minutes
 Where: Google Meet (https://meet.google.com/abc-defg-hij)
 

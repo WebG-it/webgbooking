@@ -167,11 +167,20 @@ final class EmailLayout
             $textC = '#1f2433';
         }
         $headC    = ($b['text'] ?? '') !== '' && $textC !== '#1f2433' ? $textC : '#14192b';
+        $center   = ($b['logo_pos'] ?? '') === 'center';
+        $rule     = ($b['header_style'] ?? '') === 'rule';
+        $footOut  = !empty($b['footer_out']);
         $footBg   = self::hex((string) ($b['footer_color'] ?? ''), '#2d3142');
         $footDark = self::contrast('#ffffff', $footBg) >= 4.5;
         $fc1      = $footDark ? '#ffffff' : '#111827';
         $fc2      = $footDark ? '#d5d7e3' : '#2a2f40';
         $fc3      = $footDark ? '#b6b9cc' : '#4a5066';
+        if ($footOut) {
+            // footer on the page background, outside the card (like the Brevo personal emails): dark text on the light page, light text on the dark page
+            $fc1 = '#1b2a4a';
+            $fc2 = '#3d4a63';
+            $fc3 = '#5b6074';
+        }
         $boxBg    = self::mix($accent, '#ffffff', 0.92);
         $boxLine  = self::mix($accent, '#ffffff', 0.55);
         $boxBgD   = self::mix($accent, '#1e2030', 0.82);
@@ -298,13 +307,14 @@ final class EmailLayout
         $logo     = trim((string) ($b['logo'] ?? ''));
         $logoDark = trim((string) ($b['logo_dark'] ?? ''));
         if ($logo !== '') {
-            $img    = static fn(string $src, string $cls): string => '<img src="' . self::e($src) . '" alt="' . self::e($name) . '" width="150" class="' . $cls . '" style="display:block;border:0;outline:none;text-decoration:none;max-width:60%;height:auto;">';
+            $margin = $center ? 'margin:0 auto;' : '';
+            $img    = static fn(string $src, string $cls): string => '<img src="' . self::e($src) . '" alt="' . self::e($name) . '" width="150" class="' . $cls . '" style="display:block;' . $margin . 'border:0;outline:none;text-decoration:none;max-width:60%;height:auto;">';
             $mark   = $img($logo, $logoDark !== '' ? 'logo-l' : 'logo-i') . ($logoDark !== '' ? '<div class="logo-d" style="display:none;max-height:0;overflow:hidden;mso-hide:all;">' . $img($logoDark, 'logo-di') . '</div>' : '');
             // a logo without a dark version keeps a white plate in dark mode (dark lettering on a dark card would vanish), as the Brevo templates do
-            $header = '<td class="px ' . ($logoDark !== '' ? 'hdr' : 'hdr-plate') . '" style="padding:26px 40px 18px 40px;background-color:#ffffff;background-image:linear-gradient(#ffffff,#ffffff);">' . ($siteUrl !== '' ? '<a href="' . self::e($siteUrl) . '" style="text-decoration:none;">' . $mark . '</a>' : $mark) . '</td>';
+            $header = '<td class="px ' . ($logoDark !== '' ? 'hdr' : 'hdr-plate') . '"' . ($center ? ' align="center"' : '') . ' style="padding:26px 40px ' . ($rule ? '20' : '18') . 'px 40px;background-color:#ffffff;background-image:linear-gradient(#ffffff,#ffffff);">' . ($siteUrl !== '' ? '<a href="' . self::e($siteUrl) . '" style="text-decoration:none;">' . $mark . '</a>' : $mark) . '</td>';
         } else {
             $label  = '<span class="t-head" style="font-family:' . $F . ';font-size:20px;line-height:26px;font-weight:700;color:' . $headC . ';">' . self::e($name) . '</span>';
-            $header = '<td class="px hdr" style="padding:26px 40px 18px 40px;">' . ($siteUrl !== '' ? '<a href="' . self::e($siteUrl) . '" style="text-decoration:none;">' . $label . '</a>' : $label) . '</td>';
+            $header = '<td class="px hdr"' . ($center ? ' align="center"' : '') . ' style="padding:26px 40px ' . ($rule ? '20' : '18') . 'px 40px;' . ($center ? 'text-align:center;' : '') . '">' . ($siteUrl !== '' ? '<a href="' . self::e($siteUrl) . '" style="text-decoration:none;">' . $label . '</a>' : $label) . '</td>';
         }
 
         // ---- footer
@@ -321,7 +331,9 @@ final class EmailLayout
             $flines[] = '<p class="f3" style="margin:0;font-family:' . $F . ';font-size:12px;line-height:19px;color:' . $fc3 . ';">' . self::e($note) . '</p>';
             $ftext[]  = $note;
         }
-        $footer = '<td class="px footer" style="padding:26px 40px 28px 40px;background-color:' . $footBg . ';' . ($footDark ? '' : 'border-top:1px solid #e3e6ec;') . '">' . implode('', $flines) . '</td>';
+        $footer = $footOut
+            ? '<td class="px footer fout" align="center" style="padding:20px 32px 4px 32px;text-align:center;">' . implode('', $flines) . '</td>'
+            : '<td class="px footer" style="padding:26px 40px 28px 40px;background-color:' . $footBg . ';' . ($footDark ? '' : 'border-top:1px solid #e3e6ec;') . '">' . implode('', $flines) . '</td>';
 
         $text[] = '';
         $text[] = '--';
@@ -361,6 +373,7 @@ final class EmailLayout
     .note-warn { background-color:#3a2a10 !important; border-color:#8a6420 !important; color:#ffdca3 !important; }
     .rule { border-color:#34374d !important; }
     .footer { background-color:#0f1017 !important; }
+    .fout { background-color:transparent !important; }
     .footer .f1, .footer a, .footer a:link, .footer a:visited, u + #body .footer a, #MessageViewBody .footer a { color:#ffffff !important; }
     .footer .f2 { color:#d5d7e3 !important; }
     .footer .f3 { color:#b6b9cc !important; }
@@ -395,11 +408,13 @@ final class EmailLayout
             . '<table role="presentation" class="bg-page" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f2f4f7;"><tr><td align="center" style="padding:20px 12px 32px 12px;">' . "\n"
             . '<!--[if mso]><table role="presentation" width="600" align="center" cellpadding="0" cellspacing="0" border="0"><tr><td><![endif]-->' . "\n"
             . '<table role="presentation" class="container card" width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px;max-width:100%;background-color:#ffffff;border-radius:10px;overflow:hidden;">' . "\n"
-            . '<tr><td class="accent" height="5" bgcolor="' . $line . '" style="height:5px;line-height:5px;font-size:0;background-color:' . $line . ';">&nbsp;</td></tr>' . "\n"
+            . ($rule ? '' : '<tr><td class="accent" height="5" bgcolor="' . $line . '" style="height:5px;line-height:5px;font-size:0;background-color:' . $line . ';">&nbsp;</td></tr>' . "\n")
             . '<tr>' . $header . '</tr>' . "\n"
-            . '<tr><td class="px" style="padding:8px 40px 30px 40px;">' . $content . '</td></tr>' . "\n"
-            . '<tr>' . $footer . '</tr>' . "\n"
+            . ($rule ? '<tr><td class="px" style="padding:0 40px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td class="accent" style="border-top:3px solid ' . $line . ';font-size:0;line-height:0;">&nbsp;</td></tr></table></td></tr>' . "\n" : '')
+            . '<tr><td class="px" style="padding:' . ($rule ? '24' : '8') . 'px 40px ' . ($footOut ? '28' : '30') . 'px 40px;">' . $content . '</td></tr>' . "\n"
+            . ($footOut ? '' : '<tr>' . $footer . '</tr>' . "\n")
             . '</table>' . "\n"
+            . ($footOut ? '<table role="presentation" class="container" width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px;max-width:100%;"><tr>' . $footer . '</tr></table>' . "\n" : '')
             . '<!--[if mso]></td></tr></table><![endif]-->' . "\n"
             . '</td></tr></table>' . "\n"
             . '</body></html>';
