@@ -44,7 +44,7 @@ class EventtypeTable extends Table
         }
         if (trim((string) $this->slug) === '' && (int) $this->listed !== 1 && !(int) $this->id) {
             // a secret event is protected only by its address: when the administrator did not choose one, it gets a part nobody can guess
-            $slug = substr($slug, 0, 72) . '-' . bin2hex(random_bytes(3));
+            $slug = substr($slug, 0, 63) . '-' . bin2hex(random_bytes(8));
         }
         $this->slug = $slug;
         $db = $this->getDbo();

@@ -15,7 +15,7 @@
         <downloads>
             <downloadurl type="full" format="zip">https://raw.githubusercontent.com/WebG-it/webgbooking/main/dist/pkg_webgbooking-0.35.0.zip</downloadurl>
         </downloads>
-        <sha256>8f109c017e853103470aca4f0e7265027093a08050a8107e86964eeb703e7c74</sha256>
+        <sha256>8e9ed26bff2192c65ffacabe487f83dd0fb912f0bb1d05321ca32731dfc2f62a</sha256>
         <tags>
             <tag>stable</tag>
         </tags>
