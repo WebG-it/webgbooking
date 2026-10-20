@@ -1,46 +1,23 @@
-Something needs your attention
-
-==============================
-
-Booking no. 488 (Irene Testa, irene.testa@example.invalid): the contact was not saved in Brevo. Reason: the API key is not set in the plugin options (Integrations tab). A retry would not help: fix the setting, then add the contact by hand.
-
-Service: Brevo sempre
-
-Date: Sunday 01/11/2026
-
-Time: 09:00 (CET, Europe/Rome)
-
-Duration: 30 minutes
-
-Where: Google Meet (https://meet.google.com/abc-defg-hij)
-
-
-
-CUSTOMER
-
-Name: Irene Testa
-
-Email: irene.testa@example.invalid
-
-Booking no.: #488
-
-
-
-ANSWERS TO THE FORM
-
-Citta: Torino
-
-Progetto: Sito nuovo
-
-
-
-Open in the backend: http://localhost:8086/administrator/index.php?option=com_webgbooking&view=booking&id=488
-
-
-
---
-
-wgbtest
-
-Notification from the booking system of wgbtest.
-
+Something needs your attention
+==============================
+Booking no. 442 (Irene Testa, irene.testa@example.invalid): the contact was not saved in Brevo. Reason: the API key is not set in the plugin options (Integrations tab). A retry would not help: fix the setting, then add the contact by hand.
+Service: Brevo sempre
+Date: Monday 02/11/2026
+Time: 09:00 (CET, Europe/Rome)
+Duration: 30 minutes
+Where: Google Meet (https://meet.google.com/abc-defg-hij)
+
+CUSTOMER
+Name: Irene Testa
+Email: irene.testa@example.invalid
+Booking no.: #442
+
+ANSWERS TO THE FORM
+Citta: Torino
+Progetto: Sito nuovo
+
+Open in the backend: http://localhost:8086/administrator/index.php?option=com_webgbooking&view=booking&id=442
+
+--
+wgbtest
+Notification from the booking system of wgbtest.

@@ -34,7 +34,7 @@ use WebG\Plugin\System\Webgbooking\Mail\EmailLayout;
 final class Webgbooking extends CMSPlugin implements SubscriberInterface
 {
     /** Cache-buster for the bundled front-end assets (wgb.css/js, UIkit). Bump when those change. */
-    public const ASSET_VER = '0.34.3';
+    public const ASSET_VER = '0.34.4';
 
     protected $autoloadLanguage = true;
 
@@ -3151,7 +3151,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
         $accent = EmailLayout::hex((string) $this->params->get('mail_color', ''), '#2b59c3');
 
         return [
-            'name'      => trim((string) $this->getApplication()->get('sitename', '')) ?: 'WebG Booking',
+            'name'      => trim((string) $this->params->get('mail_business_name', '')) ?: (trim((string) $this->getApplication()->get('sitename', '')) ?: 'WebG Booking'),
             'logo'      => $this->mediaUrl((string) $this->params->get('mail_logo', '')),
             'logo_dark' => $this->mediaUrl((string) $this->params->get('mail_logo_dark', '')),
             'color'     => $accent,
@@ -3411,7 +3411,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             'body_html'   => trim($bodyTpl) !== '' ? $this->renderTpl($bodyTpl, $row, $manageUrl, $dateFmt) : '',
             'sections'    => $this->mailStaffSections($row),
             'buttons'     => [['label' => Text::_($P . 'MAIL_BTN_BACKEND'), 'url' => $this->mailBackendUrl($row), 'primary' => true]],
-            'footer_note' => Text::sprintf($P . 'MAIL_STAFF_FOOTER', (string) $this->getApplication()->get('sitename', 'WebG Booking')),
+            'footer_note' => Text::sprintf($P . 'MAIL_STAFF_FOOTER', (string) ($this->mailBrand()['name'])),
         ];
     }
 
@@ -4084,7 +4084,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                 'title'       => Text::_($P . 'MAIL_TITLE_ALERT'),
                 'preheader'   => mb_substr($subject, 0, 120),
                 'lead'        => array_values(array_filter(array_map('trim', preg_split('/\n+/', $body) ?: []), static fn($l) => $l !== '')),
-                'footer_note' => Text::sprintf($P . 'MAIL_STAFF_FOOTER', (string) $this->getApplication()->get('sitename', 'WebG Booking')),
+                'footer_note' => Text::sprintf($P . 'MAIL_STAFF_FOOTER', (string) ($this->mailBrand()['name'])),
             ];
             if ($row !== null && isset($row->booking_date, $row->booking_time)) {
                 $lay['summary']  = ['rows' => $this->mailRows($row, 'staff')];

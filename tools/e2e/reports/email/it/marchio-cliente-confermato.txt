@@ -1,46 +1,23 @@
-Il tuo appuntamento è confermato
-
-================================
-
-Ciao Giulia Bianchi, il tuo appuntamento è confermato. Ecco i dettagli:
-
-In allegato trovi il file .ics: aprilo per aggiungere l'appuntamento al tuo calendario.
-
-Servizio: Call Meet 30
-
-Data: Martedì 03/11/2026
-
-Ora: 09:30 (CET, Europe/Rome)
-
-Durata: 30 minuti
-
-Dove: Google Meet (https://meet.google.com/abc-defg-hij)
-
-
-
-Partecipa alla videochiamata: https://meet.google.com/abc-defg-hij
-
-Aggiungi a Google Calendar: https://calendar.google.com/calendar/render?action=TEMPLATE&text=Call+Meet+30&dates=20261103T083000Z%2F20261103T090000Z&details=https%3A%2F%2Fmeet.google.com%2Fabc-defg-hij
-
-Modifica o annulla l'appuntamento: http://localhost:8086/index.php?option=com_ajax&group=system&plugin=webgbooking&format=html&action=manage&token=ESEMPIO
-
-
-
-A presto!
-
-
-
---
-
-wgbtest
-
-Studio Esempio S.r.l.
-
-Via Roma 1, 10121 Torino
-
-P.IVA 01234567890
-
-Informativa privacy: https://www.example.invalid/privacy
-
-Email inviata automaticamente. Se non hai richiesto tu questo appuntamento, ignora questo messaggio.
-
+Il tuo appuntamento è confermato
+================================
+Ciao Giulia Bianchi, il tuo appuntamento è confermato. Ecco i dettagli:
+In allegato trovi il file .ics: aprilo per aggiungere l'appuntamento al tuo calendario.
+Servizio: Call Meet 30
+Data: Mercoledì 04/11/2026
+Ora: 09:30 (CET, Europe/Rome)
+Durata: 30 minuti
+Dove: Google Meet (https://meet.google.com/abc-defg-hij)
+
+Partecipa alla videochiamata: https://meet.google.com/abc-defg-hij
+Aggiungi a Google Calendar: https://calendar.google.com/calendar/render?action=TEMPLATE&text=Call+Meet+30&dates=20261104T083000Z%2F20261104T090000Z&details=https%3A%2F%2Fmeet.google.com%2Fabc-defg-hij
+Modifica o annulla l'appuntamento: http://localhost:8086/index.php?option=com_ajax&group=system&plugin=webgbooking&format=html&action=manage&token=ESEMPIO
+
+A presto!
+
+--
+wgbtest
+Studio Esempio S.r.l.
+Via Roma 1, 10121 Torino
+P.IVA 01234567890
+Informativa privacy: https://www.example.invalid/privacy
+Email inviata automaticamente. Se non hai richiesto tu questo appuntamento, ignora questo messaggio.

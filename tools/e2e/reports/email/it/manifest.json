@@ -13,7 +13,7 @@
   "label": "Invito per l'ospite",
   "audience": "cliente",
   "group": "1 Prenotazione",
-  "subject": "Invito: appuntamento il 25/10/2026 alle 09:30",
+  "subject": "Invito: appuntamento il 26/10/2026 alle 09:30",
   "rcpt": "marco.verdi@example.invalid",
   "attach_ics": true
  },
@@ -22,7 +22,7 @@
   "label": "Nuova prenotazione",
   "audience": "staff",
   "group": "1 Prenotazione",
-  "subject": "Nuova prenotazione: 2026-10-25 alle 09:30",
+  "subject": "Nuova prenotazione: 26/10/2026 alle 09:30",
   "rcpt": "staff@wgbtest.invalid",
   "attach_ics": false
  },
@@ -31,7 +31,7 @@
   "label": "Appuntamento spostato",
   "audience": "cliente",
   "group": "1 Prenotazione",
-  "subject": "Appuntamento spostato: 25/10/2026 alle 11:00",
+  "subject": "Appuntamento spostato: 26/10/2026 alle 11:00",
   "rcpt": "giulia.bianchi@example.invalid",
   "attach_ics": true
  },
@@ -40,7 +40,7 @@
   "label": "Appuntamento spostato dal cliente",
   "audience": "staff",
   "group": "1 Prenotazione",
-  "subject": "Appuntamento spostato: 2026-10-25 alle 11:00",
+  "subject": "Appuntamento spostato: 26/10/2026 alle 11:00",
   "rcpt": "staff@wgbtest.invalid",
   "attach_ics": false
  },
@@ -58,7 +58,7 @@
   "label": "Appuntamento annullato dal cliente",
   "audience": "staff",
   "group": "1 Prenotazione",
-  "subject": "Appuntamento annullato: 2026-10-25 alle 11:00",
+  "subject": "Appuntamento annullato: 26/10/2026 alle 11:00",
   "rcpt": "staff@wgbtest.invalid",
   "attach_ics": false
  },
@@ -76,7 +76,7 @@
   "label": "Nuova prenotazione con telefonata",
   "audience": "staff",
   "group": "1 Prenotazione",
-  "subject": "Nuova prenotazione: 2026-10-26 alle 10:00",
+  "subject": "Nuova prenotazione: 27/10/2026 alle 10:00",
   "rcpt": "staff@wgbtest.invalid",
   "attach_ics": false
  },
@@ -94,7 +94,7 @@
   "label": "Nuova richiesta da confermare",
   "audience": "staff",
   "group": "1 Prenotazione",
-  "subject": "Nuova prenotazione: 2026-10-27 alle 15:00",
+  "subject": "Nuova prenotazione: 28/10/2026 alle 15:00",
   "rcpt": "staff@wgbtest.invalid",
   "attach_ics": false
  },
@@ -112,7 +112,7 @@
   "label": "Promemoria prima dell'appuntamento",
   "audience": "cliente",
   "group": "2 Promemoria e link",
-  "subject": "Promemoria: appuntamento il 19/10/2026 alle 19:53",
+  "subject": "Promemoria: appuntamento il 20/10/2026 alle 03:11",
   "rcpt": "luca.ferri@example.invalid",
   "attach_ics": false
  },
@@ -121,7 +121,7 @@
   "label": "Promemoria per l'ospite",
   "audience": "cliente",
   "group": "2 Promemoria e link",
-  "subject": "Promemoria: appuntamento il 19/10/2026 alle 19:53",
+  "subject": "Promemoria: appuntamento il 20/10/2026 alle 03:11",
   "rcpt": "ospite.promemoria@example.invalid",
   "attach_ics": false
  },
@@ -139,7 +139,7 @@
   "label": "Avviso tecnico per lo staff (passaggi non completati)",
   "audience": "staff",
   "group": "5 Avvisi tecnici",
-  "subject": "WebG Booking: prenotazione 2026-10-29 alle 09:00 con passaggi non completati",
+  "subject": "WebG Booking: prenotazione 30/10/2026 alle 09:00 con passaggi non completati",
   "rcpt": "staff@wgbtest.invalid",
   "attach_ics": false
  },
@@ -166,7 +166,7 @@
   "label": "Nuova prenotazione pagata",
   "audience": "staff",
   "group": "3 Prenotazione a pagamento",
-  "subject": "Nuova prenotazione: 2026-10-30 alle 10:00",
+  "subject": "Nuova prenotazione: 31/10/2026 alle 10:00",
   "rcpt": "staff@wgbtest.invalid",
   "attach_ics": false
  },
@@ -184,7 +184,7 @@
   "label": "Annullato dal cliente, da rimborsare",
   "audience": "staff",
   "group": "3 Prenotazione a pagamento",
-  "subject": "Appuntamento annullato: 2026-10-30 alle 10:00",
+  "subject": "Appuntamento annullato: 31/10/2026 alle 10:00",
   "rcpt": "staff@wgbtest.invalid",
   "attach_ics": false
  },
@@ -202,7 +202,7 @@
   "label": "Pagamento da verificare (soldi incassati, orario occupato)",
   "audience": "staff",
   "group": "4 Pagamento tardivo",
-  "subject": "DA GESTIRE: pagamento ricevuto, slot non valido (2026-10-26 alle 09:00)",
+  "subject": "DA GESTIRE: pagamento ricevuto, slot non valido (27/10/2026 alle 09:00)",
   "rcpt": "staff@wgbtest.invalid",
   "attach_ics": false
  },
@@ -220,7 +220,7 @@
   "label": "Avviso: contatto non salvato in Brevo",
   "audience": "staff",
   "group": "5 Avvisi tecnici",
-  "subject": "WebG Booking: una persona non e' stata aggiunta a Brevo",
+  "subject": "WebG Booking: una persona non è stata aggiunta a Brevo",
   "rcpt": "staff@wgbtest.invalid",
   "attach_ics": false
  },
@@ -229,7 +229,7 @@
   "label": "Avviso: webhook non configurato",
   "audience": "staff",
   "group": "5 Avvisi tecnici",
-  "subject": "WebG Booking: una chiamata al webhook NON e' stata inviata (configurazione)",
+  "subject": "WebG Booking: una chiamata al webhook NON è stata inviata (configurazione)",
   "rcpt": "staff@wgbtest.invalid",
   "attach_ics": false
  },
@@ -247,7 +247,7 @@
   "label": "Con logo, colore e piede di pagina propri: staff",
   "audience": "staff",
   "group": "6 Con il marchio del cliente",
-  "subject": "Nuova prenotazione: 2026-11-03 alle 09:30",
+  "subject": "Nuova prenotazione: 04/11/2026 alle 09:30",
   "rcpt": "staff@wgbtest.invalid",
   "attach_ics": false
  }

@@ -67,6 +67,18 @@ def structure_ok(m):
     return problems
 
 
+ALL = []
+
+
+def bad_styles(h):
+    """Every style attribute and style block of an email: no empty value (color:; or color:\"), no PHP leftovers."""
+    bad = []
+    for st in re.findall(r'style="([^"]*)"', h):
+        if re.search(r'(^|;)\s*[a-z-]+\s*:\s*(;|$)', st) or 'Array' in st or 'Notice' in st or 'Warning' in st:
+            bad.append(st[:90])
+    return bad
+
+
 def collect(addr_filter=None):
     out = []
     for pth in mails():
@@ -74,6 +86,7 @@ def collect(addr_filter=None):
         m = decode_mail(raw)
         m['raw'] = raw
         out.append(m)
+        ALL.append(m)
     return out
 
 
@@ -156,7 +169,7 @@ def contrast(a, b):
     return (max(la, lb) + 0.05) / (min(la, lb) + 0.05)
 links = re.findall(r'color:(#[0-9a-f]{6});text-decoration:underline', h.split('class="px footer"')[0])
 check('B3 an unreadable main colour (pale yellow) does not make unreadable links: every link colour reads at 4.5:1 on white', links and all(contrast(c, '#ffffff') >= 4.5 for c in links), links[:4])
-check('B4 the footer text is in the footer (lines kept, the address as a link), and the sender name is the one set in the options', 'Via Roma 1, 10100 Torino' in h and 'P.IVA 01234567890' in h and 'href="https://www.example.invalid/privacy"' in h and 'Studio Esempio' in bm['raw'][:1500], bm and bm['raw'][:600])
+check('B4 the footer text is in the footer (lines kept, the address as a link), and the sender name is the one set in the options', 'Via Roma 1, 10100 Torino' in h.replace(chr(0x200B), '') and 'P.IVA 01234567890' in h.replace(chr(0x200B), '') and 'href="https://www.example.invalid/privacy"' in h and 'Studio Esempio' in bm['raw'][:1500], bm and bm['raw'][:600])
 check('B5 the plain-text alternative has the footer text too', bm is not None and 'Via Roma 1' in bm['text'] and 'https://www.example.invalid/privacy' in bm['text'], bm and bm['text'][-300:])
 tp.fresh()
 jx('rm -f /tmp/mail/*.eml')
@@ -219,7 +232,7 @@ w2 = next((m for m in collect() if 'wg2@' in m['rcpt']), None)
 h2 = w2['html'] if w2 else ''
 lk = re.findall(r'color:(#[0-9a-f]{6});text-decoration:underline', h2.split('class="px footer"')[0])
 check('W5 a text colour that does not read on white is ignored, a link colour too pale is darkened until it reads', 'color:#eeeeee' not in h2.split('class="px footer"')[0] and lk and all(contrast(c, '#ffffff') >= 4.5 for c in lk), lk[:3])
-check('W6 a light footer background gets dark footer text and no dark-mode footer override', 'background-color:#f1f3f8;' in h2 and re.search(r'class="px footer".*?color:#111827', h2, re.S) is not None and '.footer { background-color:#0f1017' not in h2, '')
+check('W6 a light footer background gets dark footer text with a thin top border, and in dark mode still turns dark with light text', 'background-color:#f1f3f8;border-top:1px solid #e3e6ec;' in h2 and re.search(r'class="px footer".*?color:#111827', h2, re.S) is not None and '.footer { background-color:#0f1017' in h2 and '.footer .f1, .footer a' in h2 and 'class="f1"' in h2, '')
 opts(mail_text_color='red', mail_link_color='javascript:1', mail_footer_color='#12', mail_line_color='x', mail_color='', mail_button_color='')
 jx('rm -f /tmp/mail/*.eml')
 book('def', day(D + 6), '11:00', email='wg3@example.invalid', name='Palette Errata')
@@ -238,5 +251,46 @@ book('def', day(D + 6), '13:00', email='wg5@example.invalid', name='Palette Logo
 w5 = next((m for m in collect() if 'wg5@' in m['rcpt']), None)
 check('W8b ...with a dark version the header turns dark and the dark logo is shown', w5 is not None and 'class="px hdr"' in w5['html'] and 'logo-d' in w5['html'], '')
 tp.fresh()
+
+# ============================================================================ 7. paragraph colour, business name, footer that mail apps cannot turn into blue links
+print('--- 7. body colour, business name, footer')
+tp.fresh()
+jx('rm -f /tmp/mail/*.eml')
+book('def', day(D + 7), '09:00', email='bn0@example.invalid', name='Corpo Colore')
+b0 = next((m for m in collect() if 'bn0@' in m['rcpt']), None)
+h0 = b0['html'] if b0 else ''
+paras = re.findall(r'<p class="t-body" style="([^"]*)"', h0)
+check('Y1 every paragraph of the body has its text colour (the intro paragraphs used to come out as color:;)', len(paras) >= 2 and all(re.search(r'color:#[0-9a-f]{6};', x) for x in paras), paras[:3])
+opts(mail_text_color='#363650')
+jx('rm -f /tmp/mail/*.eml')
+book('def', day(D + 7), '10:00', email='bn1@example.invalid', name='Corpo Colore Due')
+b1m = next((m for m in collect() if 'bn1@' in m['rcpt']), None)
+paras = re.findall(r'<p class="t-body" style="([^"]*)"', b1m['html']) if b1m else []
+check('Y2 ...and it is the text colour of the options', len(paras) >= 2 and all('color:#363650;' in x for x in paras), paras[:3])
+opts(mail_text_color='', mail_business_name='WebG', mail_logo='images/joomla_black.png',
+     mail_footer='Corso Taranto 62, 10154 Torino (TO)' + chr(92) + 'nP. IVA 12774610013' + chr(92) + 'nPrivacy: https://www.webg.it/privacy.html')
+jx('rm -f /tmp/mail/*.eml')
+book('def', day(D + 7), '11:00', email='bn2@example.invalid', name='Nome Attivita')
+ms7 = collect()
+bn = next((m for m in ms7 if 'bn2@' in m['rcpt']), None)
+bs = next((m for m in ms7 if STAFF in m['rcpt'] and 'ooking' in m['subject']), None)
+hb = bn['html'] if bn else ''
+check('Y3 business name: the alt text of the logo and the first footer line use it (not the site name)', 'alt="WebG"' in hb and 'alt="wgbtest"' not in hb and re.search(r'font-weight:700;color:#ffffff;">WebG</p>', hb) is not None and '>wgbtest<' not in hb, '')
+check('Y3b ...in the staff email footer note too, and in the text alternative', bs is not None and 'booking system of WebG.' in bs['text'] and 'booking system of WebG.' in bs['html'], bs and bs['text'][-120:])
+opts(mail_logo='')
+jx('rm -f /tmp/mail/*.eml')
+book('def', day(D + 7), '12:00', email='bn3@example.invalid', name='Nome Senza Logo')
+bn3 = next((m for m in collect() if 'bn3@' in m['rcpt']), None)
+check('Y3c without a logo the header text is the business name', bn3 is not None and re.search(r'font-size:20px;line-height:26px;font-weight:700;color:#[0-9a-f]{6};">WebG</span>', bn3['html']) is not None, '')
+ft = hb.split('class="px footer"')[1] if 'class="px footer"' in hb else ''
+zw = chr(0x200B)
+check('Y4 footer text cut with zero-width spaces so Gmail and Apple Mail do not turn the address, phone or VAT number into links (reads the same)', zw in ft and 'Corso ' + zw + 'Taranto' in ft and '127' + zw + '746' in ft, ft[:200])
+check('Y4b ...URLs stay whole, and the plain-text part keeps the text as written (no invisible characters)', 'href="https://www.webg.it/privacy.html"' in ft and zw not in bn['text'] and 'Corso Taranto 62, 10154 Torino (TO)' in bn['text'], '')
+check('Y5 footer links keep a readable colour whatever the mail app does: rules for .footer a, Gmail (u + #body), Samsung, Apple data detectors, body id', all(x in hb for x in ('.footer a, .footer a:link, .footer a:visited { color:#ffffff !important', 'u + #body .footer a', '#MessageViewBody .footer a', 'a[x-apple-data-detectors]')) and '<body id="body"' in hb, '')
+tp.fresh()
+
+# ============================================================================ 8. no empty style value in any email of this suite
+bad = [(m['subject'][:40], bad_styles(m['html'])) for m in ALL if bad_styles(m['html'])]
+check('Z1 across all %d emails of this suite (all kinds, all colour options) no style attribute holds an empty value such as "color:;"' % len(ALL), len(ALL) > 40 and not bad, bad[:3])
 
 print('\nRESULT pass=%d fail=%d' % (RES['pass'], RES['fail']))

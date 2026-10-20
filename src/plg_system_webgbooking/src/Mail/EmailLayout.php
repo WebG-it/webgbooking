@@ -102,24 +102,38 @@ final class EmailLayout
     }
 
     /** Escaped text with its web addresses made into links. */
-    private static function linkify(string $s, string $color, string $class = 't-link'): string
+    private static function linkify(string $s, string $color, string $class = 't-link', bool $breakDetect = false): string
     {
+        $txt = $breakDetect ? static fn(string $t): string => self::e(self::breakDetect($t)) : static fn(string $t): string => self::e($t);
         $out = '';
         $pos = 0;
         if (preg_match_all('#https?://[^\s<>"]+#i', $s, $m, PREG_OFFSET_CAPTURE)) {
             foreach ($m[0] as [$url, $off]) {
-                $out .= self::e(substr($s, $pos, $off - $pos));
+                $out .= $txt(substr($s, $pos, $off - $pos));
                 $trail = '';
                 while ($url !== '' && strpos('.,;:)', substr($url, -1)) !== false) {
                     $trail = substr($url, -1) . $trail;
                     $url   = substr($url, 0, -1);
                 }
-                $out .= '<a href="' . self::e($url) . '" class="' . $class . '" style="color:' . $color . ';text-decoration:underline;">' . self::e($url) . '</a>' . self::e($trail);
+                $out .= '<a href="' . self::e($url) . '" class="' . $class . '" style="color:' . $color . ';text-decoration:underline;">' . self::e($url) . '</a>' . $txt($trail);
                 $pos  = $off + strlen($url) + strlen($trail);
             }
         }
 
-        return $out . self::e(substr($s, $pos));
+        return $out . $txt(substr($s, $pos));
+    }
+
+    /**
+     * Mail apps (Gmail, Apple Mail) turn anything that looks like an address, phone number or date into a blue link. In the footer that is
+     * unreadable on a dark background, so the text is cut with zero-width spaces after each word and inside long digit runs: it still
+     * reads the same and is no longer recognised. Only for the HTML; the plain-text part keeps the text as written.
+     */
+    private static function breakDetect(string $t): string
+    {
+        $zw = "\u{200B}";
+        $t  = (string) preg_replace('/(\d{3})(?=\d)/', '$1' . $zw, $t);
+
+        return str_replace(' ', ' ' . $zw, $t);
     }
 
     private static function space(int $h): string
@@ -169,7 +183,7 @@ final class EmailLayout
         $text     = [];
 
         // ---- pieces
-        $para = static function (string $s) use ($F): string {
+        $para = static function (string $s) use ($F, $textC): string {
             return '<p class="t-body" style="margin:0 0 14px 0;font-family:' . $F . ';font-size:16px;line-height:25px;color:' . $textC . ';">' . self::e($s) . '</p>';
         };
 
@@ -295,19 +309,19 @@ final class EmailLayout
 
         // ---- footer
         $flines = [];
-        $flines[] = '<p style="margin:0 0 6px 0;font-family:' . $F . ';font-size:14px;line-height:22px;font-weight:700;color:' . $fc1 . ';">' . self::e($name) . '</p>';
+        $flines[] = '<p class="f1" style="margin:0 0 6px 0;font-family:' . $F . ';font-size:14px;line-height:22px;font-weight:700;color:' . $fc1 . ';">' . self::e($name) . '</p>';
         $ftext    = [$name];
         $foot     = trim((string) ($b['footer'] ?? ''));
         if ($foot !== '') {
-            $flines[] = '<p style="margin:0 0 8px 0;font-family:' . $F . ';font-size:13px;line-height:21px;color:' . $fc2 . ';">' . nl2br(self::linkifyFooter($foot, $fc1), false) . '</p>';
+            $flines[] = '<p class="f2" style="margin:0 0 8px 0;font-family:' . $F . ';font-size:13px;line-height:21px;color:' . $fc2 . ';">' . nl2br(self::linkifyFooter($foot, $fc1), false) . '</p>';
             $ftext[]  = $foot;
         }
         $note = trim((string) ($m['footer_note'] ?? ''));
         if ($note !== '') {
-            $flines[] = '<p style="margin:0;font-family:' . $F . ';font-size:12px;line-height:19px;color:' . $fc3 . ';">' . self::e($note) . '</p>';
+            $flines[] = '<p class="f3" style="margin:0;font-family:' . $F . ';font-size:12px;line-height:19px;color:' . $fc3 . ';">' . self::e($note) . '</p>';
             $ftext[]  = $note;
         }
-        $footer = '<td class="px footer" style="padding:26px 40px 28px 40px;background-color:' . $footBg . ';">' . implode('', $flines) . '</td>';
+        $footer = '<td class="px footer" style="padding:26px 40px 28px 40px;background-color:' . $footBg . ';' . ($footDark ? '' : 'border-top:1px solid #e3e6ec;') . '">' . implode('', $flines) . '</td>';
 
         $text[] = '';
         $text[] = '--';
@@ -321,6 +335,9 @@ final class EmailLayout
   table, td { mso-table-lspace:0pt; mso-table-rspace:0pt; }
   img { -ms-interpolation-mode:bicubic; border:0; outline:none; text-decoration:none; }
   a { color:' . $link . '; }
+  .footer a, .footer a:link, .footer a:visited { color:' . $fc1 . ' !important; text-decoration:underline !important; }
+  u + #body .footer a, #MessageViewBody .footer a { color:' . $fc1 . ' !important; text-decoration:underline !important; }
+  a[x-apple-data-detectors], .footer a[x-apple-data-detectors] { color:inherit !important; text-decoration:none !important; font-size:inherit !important; font-family:inherit !important; font-weight:inherit !important; line-height:inherit !important; }
   .body-custom p { margin:0 0 14px 0; }
   @media only screen and (max-width:620px) {
     .container { width:100% !important; }
@@ -343,7 +360,10 @@ final class EmailLayout
     .note-ok { background-color:#16301f !important; border-color:#2f6b45 !important; color:#b9efcd !important; }
     .note-warn { background-color:#3a2a10 !important; border-color:#8a6420 !important; color:#ffdca3 !important; }
     .rule { border-color:#34374d !important; }
-' . ($footDark ? '    .footer { background-color:#0f1017 !important; }' : '') . '
+    .footer { background-color:#0f1017 !important; }
+    .footer .f1, .footer a, .footer a:link, .footer a:visited, u + #body .footer a, #MessageViewBody .footer a { color:#ffffff !important; }
+    .footer .f2 { color:#d5d7e3 !important; }
+    .footer .f3 { color:#b6b9cc !important; }
     .logo-l { display:none !important; }
     .logo-d { display:block !important; max-height:none !important; overflow:visible !important; }
   }
@@ -354,7 +374,7 @@ final class EmailLayout
   [data-ogsb] .bg-page { background-color:#14151d !important; }
   [data-ogsb] .card { background-color:#1e2030 !important; }
   [data-ogsb] .box, [data-ogsb] .note-box { background-color:' . $boxBgD . ' !important; }
-' . ($footDark ? '  [data-ogsb] .footer { background-color:#0f1017 !important; }' : '') . '';
+  [data-ogsb] .footer { background-color:#0f1017 !important; }';
 
         $html = '<!DOCTYPE html>' . "\n"
             . '<html lang="' . self::e($lang) . '" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">' . "\n"
@@ -370,7 +390,7 @@ final class EmailLayout
             . '<!--[if mso]><noscript><xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml></noscript><![endif]-->' . "\n"
             . '<style>' . "\n" . $css . "\n" . '</style>' . "\n"
             . '</head>' . "\n"
-            . '<body class="bg-page" style="margin:0;padding:0;background-color:#f2f4f7;font-family:' . $F . ';">' . "\n"
+            . '<body id="body" class="bg-page" style="margin:0;padding:0;background-color:#f2f4f7;font-family:' . $F . ';">' . "\n"
             . ($pre !== '' ? '<div style="display:none;font-size:1px;line-height:1px;max-height:0;max-width:0;overflow:hidden;opacity:0;mso-hide:all;">' . self::e($pre) . str_repeat('&#8199;&zwnj;', 40) . '</div>' . "\n" : '')
             . '<table role="presentation" class="bg-page" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f2f4f7;"><tr><td align="center" style="padding:20px 12px 32px 12px;">' . "\n"
             . '<!--[if mso]><table role="presentation" width="600" align="center" cellpadding="0" cellspacing="0" border="0"><tr><td><![endif]-->' . "\n"
@@ -390,6 +410,6 @@ final class EmailLayout
     /** Footer text: escaped, with web addresses as links in the footer colour. */
     private static function linkifyFooter(string $s, string $color = '#ffffff'): string
     {
-        return self::linkify($s, $color, 'f-link');
+        return self::linkify($s, $color, 'f-link', true);
     }
 }

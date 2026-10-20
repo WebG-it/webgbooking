@@ -276,5 +276,15 @@ tp.fresh()
 
 sql("UPDATE joom_extensions SET params=JSON_SET(params,'$.site','en-GB') WHERE element='com_languages'")
 jx('rm -rf /var/www/html/language/%s' % LANG if LANG != 'en-GB' else 'true')
+# every preview must be clean: no empty style value ("color:;"), no PHP leftovers
+_bad = []
+for _m in MAN:
+    if _m.get('missing'):
+        continue
+    _h = open(os.path.join(OUT, _m['slug'] + '.html'), encoding='utf-8').read()
+    for _st in re.findall(r'style="([^"]*)"', _h):
+        if re.search(r'(^|;)\s*[a-z-]+\s*:\s*(;|$)', _st) or 'Array' in _st or 'Warning' in _st or 'Notice' in _st:
+            _bad.append((_m['slug'], _st[:80]))
+print('STYLE CHECK:', 'ok, no empty value in %d previews' % len(MAN) if not _bad else 'PROBLEMS %s' % _bad[:5])
 json.dump(MAN, open(os.path.join(OUT, 'manifest.json'), 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
 print('PREVIEWS', len([m for m in MAN if not m.get('missing')]), 'saved,', len([m for m in MAN if m.get('missing')]), 'missing')

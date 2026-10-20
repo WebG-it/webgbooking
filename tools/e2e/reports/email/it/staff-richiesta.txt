@@ -1,40 +1,20 @@
-Nuova prenotazione
-
-==================
-
-È stato prenotato un nuovo appuntamento.
-
-Data: Martedì 27/10/2026
-
-Ora: 15:00 (CET, Europe/Rome)
-
-Durata: 30 minuti
-
-Dove: Google Meet (https://meet.google.com/abc-defg-hij)
-
-
-
-CLIENTE
-
-Nome: Elena Gallo
-
-Email: elena.gallo@example.invalid
-
-Telefono: +39 340 111 2233
-
-Note: Preferirei il pomeriggio.
-
-Prenotazione n.: #467
-
-
-
-Apri nel backend: http://localhost:8086/administrator/index.php?option=com_webgbooking&view=booking&id=467
-
-
-
---
-
-wgbtest
-
-Notifica del sistema di prenotazione di wgbtest.
-
+Nuova prenotazione
+==================
+È stato prenotato un nuovo appuntamento.
+Data: Mercoledì 28/10/2026
+Ora: 15:00 (CET, Europe/Rome)
+Durata: 30 minuti
+Dove: Google Meet (https://meet.google.com/abc-defg-hij)
+
+CLIENTE
+Nome: Elena Gallo
+Email: elena.gallo@example.invalid
+Telefono: +39 340 111 2233
+Note: Preferirei il pomeriggio.
+Prenotazione n.: #421
+
+Apri nel backend: http://localhost:8086/administrator/index.php?option=com_webgbooking&view=booking&id=421
+
+--
+wgbtest
+Notifica del sistema di prenotazione di wgbtest.

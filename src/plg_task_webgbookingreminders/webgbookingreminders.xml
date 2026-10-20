@@ -8,7 +8,7 @@
     <copyright>(C) 2026 Marco Galassi / WebG</copyright>
     <license>GNU General Public License version 2 or later</license>
     <licence>GNU General Public Licence version 2 or later (GPL-2.0-or-later)</licence>
-    <version>0.34.3</version>
+    <version>0.34.4</version>
     <description>PLG_TASK_WEBGBOOKINGREMINDERS_XML_DESCRIPTION</description>
     <namespace path="src">WebG\Plugin\Task\Webgbookingreminders</namespace>
     <languages folder="language">

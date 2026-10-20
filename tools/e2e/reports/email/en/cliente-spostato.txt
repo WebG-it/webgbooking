@@ -1,38 +1,19 @@
-Your appointment has been moved
-
-===============================
-
-Hi Giulia Bianchi, your appointment has been moved. Here are the new details:
-
-The attached .ics file lets you add the appointment to your calendar with one click.
-
-Service: Call Meet 30
-
-Date: Sunday 25/10/2026
-
-Time: 11:00 (CET, Europe/Rome)
-
-Duration: 30 minutes
-
-Where: Google Meet (https://meet.google.com/abc-defg-hij)
-
-
-
-Join the video call: https://meet.google.com/abc-defg-hij
-
-Add to Google Calendar: https://calendar.google.com/calendar/render?action=TEMPLATE&text=Call+Meet+30&dates=20261025T100000Z%2F20261025T103000Z&details=https%3A%2F%2Fmeet.google.com%2Fabc-defg-hij
-
-Change or cancel the appointment: http://localhost:8086/index.php?option=com_ajax&group=system&plugin=webgbooking&format=html&action=manage&token=ESEMPIO
-
-
-
-See you soon!
-
-
-
---
-
-wgbtest
-
-This email was sent automatically. If you did not request this appointment, please ignore it.
-
+Your appointment has been moved
+===============================
+Hi Giulia Bianchi, your appointment has been moved. Here are the new details:
+The attached .ics file lets you add the appointment to your calendar with one click.
+Service: Call Meet 30
+Date: Monday 26/10/2026
+Time: 11:00 (CET, Europe/Rome)
+Duration: 30 minutes
+Where: Google Meet (https://meet.google.com/abc-defg-hij)
+
+Join the video call: https://meet.google.com/abc-defg-hij
+Add to Google Calendar: https://calendar.google.com/calendar/render?action=TEMPLATE&text=Call+Meet+30&dates=20261026T100000Z%2F20261026T103000Z&details=https%3A%2F%2Fmeet.google.com%2Fabc-defg-hij
+Change or cancel the appointment: http://localhost:8086/index.php?option=com_ajax&group=system&plugin=webgbooking&format=html&action=manage&token=ESEMPIO
+
+See you soon!
+
+--
+wgbtest
+This email was sent automatically. If you did not request this appointment, please ignore it.

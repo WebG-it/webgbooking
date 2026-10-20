@@ -1,38 +1,19 @@
-Qualcosa richiede la tua attenzione
-
-===================================
-
-Prenotazione n. 476: l'evento booking.created non e' stato inviato al webhook. Motivo: il profilo di intestazioni "nonesiste" non esiste o non si riesce a decifrare (se la chiave segreta di Joomla è cambiata, reinseriscilo). Correggi l'elemento o il profilo di intestazioni; per questo non si riprova.
-
-Servizio: Hook profilo mancante
-
-Data: Lunedì 02/11/2026
-
-Ora: 09:00 (CET, Europe/Rome)
-
-Durata: 30 minuti
-
-Dove: Google Meet (https://meet.google.com/abc-defg-hij)
-
-
-
-CLIENTE
-
-Nome: Omar Sala
-
-Email: omar.sala@example.invalid
-
-Prenotazione n.: #476
-
-
-
-Apri nel backend: http://localhost:8086/administrator/index.php?option=com_webgbooking&view=booking&id=476
-
-
-
---
-
-wgbtest
-
-Notifica del sistema di prenotazione di wgbtest.
-
+Qualcosa richiede la tua attenzione
+===================================
+Prenotazione n. 430: l'evento booking.created non è stato inviato al webhook. Motivo: il profilo di intestazioni "nonesiste" non esiste o non si riesce a decifrare (se la chiave segreta di Joomla è cambiata, reinseriscilo). Correggi l'elemento o il profilo di intestazioni; per questo non si riprova.
+Servizio: Hook profilo mancante
+Data: Martedì 03/11/2026
+Ora: 09:00 (CET, Europe/Rome)
+Durata: 30 minuti
+Dove: Google Meet (https://meet.google.com/abc-defg-hij)
+
+CLIENTE
+Nome: Omar Sala
+Email: omar.sala@example.invalid
+Prenotazione n.: #430
+
+Apri nel backend: http://localhost:8086/administrator/index.php?option=com_webgbooking&view=booking&id=430
+
+--
+wgbtest
+Notifica del sistema di prenotazione di wgbtest.

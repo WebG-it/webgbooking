@@ -13,7 +13,7 @@
   "label": "Invito per l'ospite",
   "audience": "cliente",
   "group": "1 Prenotazione",
-  "subject": "Invitation: appointment on 25/10/2026 at 09:30",
+  "subject": "Invitation: appointment on 26/10/2026 at 09:30",
   "rcpt": "marco.verdi@example.invalid",
   "attach_ics": true
  },
@@ -22,7 +22,7 @@
   "label": "Nuova prenotazione",
   "audience": "staff",
   "group": "1 Prenotazione",
-  "subject": "New booking: 2026-10-25 at 09:30",
+  "subject": "New booking: 26/10/2026 at 09:30",
   "rcpt": "staff@wgbtest.invalid",
   "attach_ics": false
  },
@@ -31,7 +31,7 @@
   "label": "Appuntamento spostato",
   "audience": "cliente",
   "group": "1 Prenotazione",
-  "subject": "Appointment moved: 25/10/2026 at 11:00",
+  "subject": "Appointment moved: 26/10/2026 at 11:00",
   "rcpt": "giulia.bianchi@example.invalid",
   "attach_ics": true
  },
@@ -40,7 +40,7 @@
   "label": "Appuntamento spostato dal cliente",
   "audience": "staff",
   "group": "1 Prenotazione",
-  "subject": "Appointment moved: 2026-10-25 at 11:00",
+  "subject": "Appointment moved: 26/10/2026 at 11:00",
   "rcpt": "staff@wgbtest.invalid",
   "attach_ics": false
  },
@@ -58,7 +58,7 @@
   "label": "Appuntamento annullato dal cliente",
   "audience": "staff",
   "group": "1 Prenotazione",
-  "subject": "Appointment cancelled: 2026-10-25 at 11:00",
+  "subject": "Appointment cancelled: 26/10/2026 at 11:00",
   "rcpt": "staff@wgbtest.invalid",
   "attach_ics": false
  },
@@ -76,7 +76,7 @@
   "label": "Nuova prenotazione con telefonata",
   "audience": "staff",
   "group": "1 Prenotazione",
-  "subject": "New booking: 2026-10-26 at 10:00",
+  "subject": "New booking: 27/10/2026 at 10:00",
   "rcpt": "staff@wgbtest.invalid",
   "attach_ics": false
  },
@@ -94,7 +94,7 @@
   "label": "Nuova richiesta da confermare",
   "audience": "staff",
   "group": "1 Prenotazione",
-  "subject": "New booking: 2026-10-27 at 15:00",
+  "subject": "New booking: 28/10/2026 at 15:00",
   "rcpt": "staff@wgbtest.invalid",
   "attach_ics": false
  },
@@ -112,7 +112,7 @@
   "label": "Promemoria prima dell'appuntamento",
   "audience": "cliente",
   "group": "2 Promemoria e link",
-  "subject": "Reminder: appointment on 19/10/2026 at 19:54",
+  "subject": "Reminder: appointment on 20/10/2026 at 03:12",
   "rcpt": "luca.ferri@example.invalid",
   "attach_ics": false
  },
@@ -121,7 +121,7 @@
   "label": "Promemoria per l'ospite",
   "audience": "cliente",
   "group": "2 Promemoria e link",
-  "subject": "Reminder: appointment on 19/10/2026 at 19:54",
+  "subject": "Reminder: appointment on 20/10/2026 at 03:12",
   "rcpt": "ospite.promemoria@example.invalid",
   "attach_ics": false
  },
@@ -139,7 +139,7 @@
   "label": "Avviso tecnico per lo staff (passaggi non completati)",
   "audience": "staff",
   "group": "5 Avvisi tecnici",
-  "subject": "WebG Booking: booking 2026-10-29 at 09:00 has steps that did not complete",
+  "subject": "WebG Booking: booking 30/10/2026 at 09:00 has steps that did not complete",
   "rcpt": "staff@wgbtest.invalid",
   "attach_ics": false
  },
@@ -166,7 +166,7 @@
   "label": "Nuova prenotazione pagata",
   "audience": "staff",
   "group": "3 Prenotazione a pagamento",
-  "subject": "New booking: 2026-10-30 at 10:00",
+  "subject": "New booking: 31/10/2026 at 10:00",
   "rcpt": "staff@wgbtest.invalid",
   "attach_ics": false
  },
@@ -184,7 +184,7 @@
   "label": "Annullato dal cliente, da rimborsare",
   "audience": "staff",
   "group": "3 Prenotazione a pagamento",
-  "subject": "Appointment cancelled: 2026-10-30 at 10:00",
+  "subject": "Appointment cancelled: 31/10/2026 at 10:00",
   "rcpt": "staff@wgbtest.invalid",
   "attach_ics": false
  },
@@ -202,7 +202,7 @@
   "label": "Pagamento da verificare (soldi incassati, orario occupato)",
   "audience": "staff",
   "group": "4 Pagamento tardivo",
-  "subject": "TO REVIEW: payment received, slot not valid (2026-10-26 at 09:00)",
+  "subject": "TO REVIEW: payment received, slot not valid (27/10/2026 at 09:00)",
   "rcpt": "staff@wgbtest.invalid",
   "attach_ics": false
  },
@@ -247,7 +247,7 @@
   "label": "Con logo, colore e piede di pagina propri: staff",
   "audience": "staff",
   "group": "6 Con il marchio del cliente",
-  "subject": "New booking: 2026-11-03 at 09:30",
+  "subject": "New booking: 04/11/2026 at 09:30",
   "rcpt": "staff@wgbtest.invalid",
   "attach_ics": false
  }

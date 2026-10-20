@@ -21,8 +21,8 @@ tp.fresh()
 sql("UPDATE joom_extensions SET params=JSON_SET(params,'$.site','it-IT') WHERE element='com_languages'")
 sql("UPDATE joom_extensions SET params=JSON_SET(params,"
     "'$.mail_logo','images/yootheme/webg/logo_webg.png#joomlaImage://local-images/yootheme/webg/logo_webg.png?width=400&height=180',"
-    "'$.mail_color','#ee6c2d','$.mail_line_color','#fda079','$.mail_link_color','#b34a16','$.mail_button_color','#fd9265',"
-    "'$.mail_text_color','#363650','$.mail_footer_color','#363650','$.mail_footer','%s','$.mail_from_name','Marco Galassi, WebG') "
+    "'$.mail_color','#ee6c2d','$.mail_line_color','','$.mail_link_color','#b34a16','$.mail_button_color','#fd9265',"
+    "'$.mail_business_name','WebG','$.mail_text_color','#363650','$.mail_footer_color','#f2f4f7','$.mail_footer','%s','$.mail_from_name','Marco Galassi, WebG') "
     "WHERE element='webgbooking' AND folder='system'" % footer)
 
 

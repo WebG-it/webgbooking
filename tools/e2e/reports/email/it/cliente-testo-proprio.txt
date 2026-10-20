@@ -1,46 +1,23 @@
-
-
-Il tuo appuntamento è confermato
-
-================================
-
-In allegato trovi il file .ics: aprilo per aggiungere l'appuntamento al tuo calendario.
-
-Servizio: Predefinito modificato
-
-Data: Domenica 08/11/2026
-
-Ora: 09:00 (CET, Europe/Rome)
-
-Durata: 30 minuti
-
-Dove: Google Meet (https://meet.google.com/abc-defg-hij)
-
-Ciao Sara Conti,
-
-il tuo appuntamento è confermato per il 08/11/2026 alle 09:00.
-
-Partecipa alla videochiamata (https://meet.google.com/abc-defg-hij)
-
-
-
-In allegato trovi il file .ics per aggiungerlo al tuo calendario.
-
-Modifica o annulla l'appuntamento (http://localhost:8086/index.php?option=com_ajax&group=system&plugin=webgbooking&format=html&action=manage&token=ESEMPIO)
-
-Ti aspettiamo!
-
-Aggiungi a Google Calendar: https://calendar.google.com/calendar/render?action=TEMPLATE&text=Predefinito+modificato&dates=20261108T080000Z%2F20261108T083000Z&details=https%3A%2F%2Fmeet.google.com%2Fabc-defg-hij
-
-
-
-A presto!
-
-
-
---
-
-wgbtest
-
-Email inviata automaticamente. Se non hai richiesto tu questo appuntamento, ignora questo messaggio.
-
+
+Il tuo appuntamento è confermato
+================================
+In allegato trovi il file .ics: aprilo per aggiungere l'appuntamento al tuo calendario.
+Servizio: Predefinito modificato
+Data: Lunedì 09/11/2026
+Ora: 09:00 (CET, Europe/Rome)
+Durata: 30 minuti
+Dove: Google Meet (https://meet.google.com/abc-defg-hij)
+Ciao Sara Conti,
+il tuo appuntamento è confermato per il 09/11/2026 alle 09:00.
+Partecipa alla videochiamata (https://meet.google.com/abc-defg-hij)
+
+In allegato trovi il file .ics per aggiungerlo al tuo calendario.
+Modifica o annulla l'appuntamento (http://localhost:8086/index.php?option=com_ajax&group=system&plugin=webgbooking&format=html&action=manage&token=ESEMPIO)
+Ti aspettiamo!
+Aggiungi a Google Calendar: https://calendar.google.com/calendar/render?action=TEMPLATE&text=Predefinito+modificato&dates=20261109T080000Z%2F20261109T083000Z&details=https%3A%2F%2Fmeet.google.com%2Fabc-defg-hij
+
+A presto!
+
+--
+wgbtest
+Email inviata automaticamente. Se non hai richiesto tu questo appuntamento, ignora questo messaggio.

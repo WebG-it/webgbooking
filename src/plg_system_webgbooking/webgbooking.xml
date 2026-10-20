@@ -8,7 +8,7 @@
     <copyright>(C) 2026 Marco Galassi / WebG</copyright>
     <license>GNU General Public License version 2 or later</license>
     <licence>GNU General Public Licence version 2 or later (GPL-2.0-or-later)</licence>
-    <version>0.34.3</version>
+    <version>0.34.4</version>
     <description>PLG_SYSTEM_WEBGBOOKING_XML_DESCRIPTION</description>
     <scriptfile>script.php</scriptfile>
     <namespace path="src">WebG\Plugin\System\Webgbooking</namespace>
@@ -133,6 +133,9 @@
                 <field type="note" name="mail_note" class="alert alert-info"
                     label="PLG_SYSTEM_WEBGBOOKING_MAIL_FIELDSET"
                     description="PLG_SYSTEM_WEBGBOOKING_MAIL_NOTE" />
+                <field name="mail_business_name" type="text" default="" size="40" autocomplete="off"
+                    label="PLG_SYSTEM_WEBGBOOKING_MAIL_BUSINESS_NAME_LABEL"
+                    description="PLG_SYSTEM_WEBGBOOKING_MAIL_BUSINESS_NAME_DESC" />
                 <field name="mail_logo" type="media" default=""
                     label="PLG_SYSTEM_WEBGBOOKING_MAIL_LOGO_LABEL"
                     description="PLG_SYSTEM_WEBGBOOKING_MAIL_LOGO_DESC" />

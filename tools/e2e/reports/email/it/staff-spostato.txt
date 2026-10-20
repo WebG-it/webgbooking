@@ -1,44 +1,22 @@
-Appuntamento spostato
-
-=====================
-
-Il cliente ha spostato questo appuntamento (era il 2026-10-25 alle 09:30). Nuovi dettagli:
-
-Servizio: Call Meet 30
-
-Data: Domenica 25/10/2026
-
-Ora: 11:00 (CET, Europe/Rome)
-
-Durata: 30 minuti
-
-Dove: Google Meet (https://meet.google.com/abc-defg-hij)
-
-
-
-CLIENTE
-
-Nome: Giulia Bianchi
-
-Email: giulia.bianchi@example.invalid
-
-Telefono: +39 333 123 4567
-
-Ospite: marco.verdi@example.invalid
-
-Note: Vorrei capire se il sito attuale si puo aggiornare senza rifarlo da zero.
-
-Prenotazione n.: #465
-
-
-
-Apri nel backend: http://localhost:8086/administrator/index.php?option=com_webgbooking&view=booking&id=465
-
-
-
---
-
-wgbtest
-
-Notifica del sistema di prenotazione di wgbtest.
-
+Appuntamento spostato
+=====================
+Il cliente ha spostato questo appuntamento (era il 26/10/2026 alle 09:30). Nuovi dettagli:
+Servizio: Call Meet 30
+Data: Lunedì 26/10/2026
+Ora: 11:00 (CET, Europe/Rome)
+Durata: 30 minuti
+Dove: Google Meet (https://meet.google.com/abc-defg-hij)
+
+CLIENTE
+Nome: Giulia Bianchi
+Email: giulia.bianchi@example.invalid
+Telefono: +39 333 123 4567
+Ospite: marco.verdi@example.invalid
+Note: Vorrei capire se il sito attuale si puo aggiornare senza rifarlo da zero.
+Prenotazione n.: #419
+
+Apri nel backend: http://localhost:8086/administrator/index.php?option=com_webgbooking&view=booking&id=419
+
+--
+wgbtest
+Notifica del sistema di prenotazione di wgbtest.

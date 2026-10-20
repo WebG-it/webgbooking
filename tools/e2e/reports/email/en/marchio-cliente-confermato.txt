@@ -1,46 +1,23 @@
-Your appointment is confirmed
-
-=============================
-
-Hi Giulia Bianchi, your appointment is confirmed. Here are the details:
-
-The attached .ics file lets you add the appointment to your calendar with one click.
-
-Service: Call Meet 30
-
-Date: Tuesday 03/11/2026
-
-Time: 09:30 (CET, Europe/Rome)
-
-Duration: 30 minutes
-
-Where: Google Meet (https://meet.google.com/abc-defg-hij)
-
-
-
-Join the video call: https://meet.google.com/abc-defg-hij
-
-Add to Google Calendar: https://calendar.google.com/calendar/render?action=TEMPLATE&text=Call+Meet+30&dates=20261103T083000Z%2F20261103T090000Z&details=https%3A%2F%2Fmeet.google.com%2Fabc-defg-hij
-
-Change or cancel the appointment: http://localhost:8086/index.php?option=com_ajax&group=system&plugin=webgbooking&format=html&action=manage&token=ESEMPIO
-
-
-
-See you soon!
-
-
-
---
-
-wgbtest
-
-Studio Esempio S.r.l.
-
-Via Roma 1, 10121 Torino
-
-P.IVA 01234567890
-
-Informativa privacy: https://www.example.invalid/privacy
-
-This email was sent automatically. If you did not request this appointment, please ignore it.
-
+Your appointment is confirmed
+=============================
+Hi Giulia Bianchi, your appointment is confirmed. Here are the details:
+The attached .ics file lets you add the appointment to your calendar with one click.
+Service: Call Meet 30
+Date: Wednesday 04/11/2026
+Time: 09:30 (CET, Europe/Rome)
+Duration: 30 minutes
+Where: Google Meet (https://meet.google.com/abc-defg-hij)
+
+Join the video call: https://meet.google.com/abc-defg-hij
+Add to Google Calendar: https://calendar.google.com/calendar/render?action=TEMPLATE&text=Call+Meet+30&dates=20261104T083000Z%2F20261104T090000Z&details=https%3A%2F%2Fmeet.google.com%2Fabc-defg-hij
+Change or cancel the appointment: http://localhost:8086/index.php?option=com_ajax&group=system&plugin=webgbooking&format=html&action=manage&token=ESEMPIO
+
+See you soon!
+
+--
+wgbtest
+Studio Esempio S.r.l.
+Via Roma 1, 10121 Torino
+P.IVA 01234567890
+Informativa privacy: https://www.example.invalid/privacy
+This email was sent automatically. If you did not request this appointment, please ignore it.

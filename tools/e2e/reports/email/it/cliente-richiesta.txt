@@ -1,36 +1,18 @@
-Abbiamo ricevuto la tua richiesta
-
-=================================
-
-Ciao Elena Gallo, abbiamo registrato la tua richiesta di appuntamento. Ecco i dettagli:
-
-In allegato trovi il file .ics: aprilo per aggiungere l'appuntamento al tuo calendario.
-
-Data: Martedì 27/10/2026
-
-Ora: 15:00 (CET, Europe/Rome)
-
-Durata: 30 minuti
-
-Dove: Google Meet (https://meet.google.com/abc-defg-hij)
-
-
-
-Partecipa alla videochiamata: https://meet.google.com/abc-defg-hij
-
-Aggiungi a Google Calendar: https://calendar.google.com/calendar/render?action=TEMPLATE&text=wgbtest&dates=20261027T140000Z%2F20261027T143000Z&details=https%3A%2F%2Fmeet.google.com%2Fabc-defg-hij
-
-Modifica o annulla l'appuntamento: http://localhost:8086/index.php?option=com_ajax&group=system&plugin=webgbooking&format=html&action=manage&token=ESEMPIO
-
-
-
-A presto!
-
-
-
---
-
-wgbtest
-
-Email inviata automaticamente. Se non hai richiesto tu questo appuntamento, ignora questo messaggio.
-
+Abbiamo ricevuto la tua richiesta
+=================================
+Ciao Elena Gallo, abbiamo registrato la tua richiesta di appuntamento. Ecco i dettagli:
+In allegato trovi il file .ics: aprilo per aggiungere l'appuntamento al tuo calendario.
+Data: Mercoledì 28/10/2026
+Ora: 15:00 (CET, Europe/Rome)
+Durata: 30 minuti
+Dove: Google Meet (https://meet.google.com/abc-defg-hij)
+
+Partecipa alla videochiamata: https://meet.google.com/abc-defg-hij
+Aggiungi a Google Calendar: https://calendar.google.com/calendar/render?action=TEMPLATE&text=wgbtest&dates=20261028T140000Z%2F20261028T143000Z&details=https%3A%2F%2Fmeet.google.com%2Fabc-defg-hij
+Modifica o annulla l'appuntamento: http://localhost:8086/index.php?option=com_ajax&group=system&plugin=webgbooking&format=html&action=manage&token=ESEMPIO
+
+A presto!
+
+--
+wgbtest
+Email inviata automaticamente. Se non hai richiesto tu questo appuntamento, ignora questo messaggio.

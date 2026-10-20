@@ -12,9 +12,9 @@ Nome: Giulia Bianchi
 Email: giulia.bianchi@example.invalid
 Telefono: +39 333 123 4567
 Note: Vorrei capire se il sito attuale si puo aggiornare senza rifarlo da zero.
-Prenotazione n.: #453
+Prenotazione n.: #445
 
-Apri nel backend: http://localhost:8086/administrator/index.php?option=com_webgbooking&view=booking&id=453
+Apri nel backend: http://localhost:8086/administrator/index.php?option=com_webgbooking&view=booking&id=445
 
 --
 WebG

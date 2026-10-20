@@ -1,32 +1,16 @@
-Il tuo appuntamento si avvicina
-
-===============================
-
-Ciao Luca Ferri, ti ricordiamo il tuo appuntamento. Ecco i dettagli:
-
-Data: Lunedì 19/10/2026
-
-Ora: 19:53 (CEST, Europe/Rome)
-
-Durata: 30 minuti
-
-Dove: Google Meet (https://meet.google.com/abc-defg-hij)
-
-
-
-Partecipa alla videochiamata: https://meet.google.com/abc-defg-hij
-
-Modifica o annulla l'appuntamento: http://localhost:8086/index.php?option=com_ajax&group=system&plugin=webgbooking&format=html&action=manage&token=ESEMPIO
-
-
-
-A presto!
-
-
-
---
-
-wgbtest
-
-Email inviata automaticamente. Se non hai richiesto tu questo appuntamento, ignora questo messaggio.
-
+Il tuo appuntamento si avvicina
+===============================
+Ciao Luca Ferri, ti ricordiamo il tuo appuntamento. Ecco i dettagli:
+Data: Martedì 20/10/2026
+Ora: 03:11 (CEST, Europe/Rome)
+Durata: 30 minuti
+Dove: Google Meet (https://meet.google.com/abc-defg-hij)
+
+Partecipa alla videochiamata: https://meet.google.com/abc-defg-hij
+Modifica o annulla l'appuntamento: http://localhost:8086/index.php?option=com_ajax&group=system&plugin=webgbooking&format=html&action=manage&token=ESEMPIO
+
+A presto!
+
+--
+wgbtest
+Email inviata automaticamente. Se non hai richiesto tu questo appuntamento, ignora questo messaggio.

@@ -1,10 +1,10 @@
 Payment received, but the time is no longer available
 =====================================================
 Hi Carlo Tardivo,
-We received your payment of €29.00 for Monday 26/10/2026 at 09:00, but that time is no longer available, so we cannot confirm the appointment. We will refund the full amount (it can take a few days to show on your card) or write to you to agree a new time. You can also choose another date and time right away with the link below.
+We received your payment of €29.00 for Tuesday 27/10/2026 at 09:00, but that time is no longer available, so we cannot confirm the appointment. We will refund the full amount (it can take a few days to show on your card) or write to you to agree a new time. You can also choose another date and time right away with the link below.
 Payment received: €29.00. The receipt comes from Stripe.
 Service: Audit SEO
-Date: Monday 26/10/2026
+Date: Tuesday 27/10/2026
 Time: 09:00 (CET, Europe/Rome)
 Duration: 30 minutes
 Where: Google Meet

@@ -1,38 +1,19 @@
-
-
-Il tuo appuntamento è confermato
-
-================================
-
-Ciao Anna Riva, il tuo appuntamento è confermato. Ecco i dettagli:
-
-In allegato trovi il file .ics: aprilo per aggiungere l'appuntamento al tuo calendario.
-
-Ti mando il link della videochiamata a breve, in una seconda email.
-
-Servizio: Call Meet 30
-
-Data: Giovedì 29/10/2026
-
-Ora: 09:00 (CET, Europe/Rome)
-
-Durata: 30 minuti
-
-Dove: Google Meet
-
-Aggiungi a Google Calendar: https://calendar.google.com/calendar/render?action=TEMPLATE&text=Call+Meet+30&dates=20261029T080000Z%2F20261029T083000Z&details=
-
-Modifica o annulla l'appuntamento: http://localhost:8086/index.php?option=com_ajax&group=system&plugin=webgbooking&format=html&action=manage&token=ESEMPIO
-
-
-
-A presto!
-
-
-
---
-
-wgbtest
-
-Email inviata automaticamente. Se non hai richiesto tu questo appuntamento, ignora questo messaggio.
-
+
+Il tuo appuntamento è confermato
+================================
+Ciao Anna Riva, il tuo appuntamento è confermato. Ecco i dettagli:
+In allegato trovi il file .ics: aprilo per aggiungere l'appuntamento al tuo calendario.
+Ti mando il link della videochiamata a breve, in una seconda email.
+Servizio: Call Meet 30
+Data: Venerdì 30/10/2026
+Ora: 09:00 (CET, Europe/Rome)
+Durata: 30 minuti
+Dove: Google Meet
+Aggiungi a Google Calendar: https://calendar.google.com/calendar/render?action=TEMPLATE&text=Call+Meet+30&dates=20261030T080000Z%2F20261030T083000Z&details=
+Modifica o annulla l'appuntamento: http://localhost:8086/index.php?option=com_ajax&group=system&plugin=webgbooking&format=html&action=manage&token=ESEMPIO
+
+A presto!
+
+--
+wgbtest
+Email inviata automaticamente. Se non hai richiesto tu questo appuntamento, ignora questo messaggio.

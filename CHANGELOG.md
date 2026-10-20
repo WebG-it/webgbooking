@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.34.4 (pacchetto, componente e plugin): rifiniture dalla prova reale in Gmail
+
+Tre difetti (più una rifinitura di aspetto) emersi installando la 0.34.3 su webg.it con il marchio WebG (prova in `tools/e2e/t_mail.py`, 8 controlli nuovi che falliscono sulla 0.34.3).
+
+1. **Colore del testo vuoto nei paragrafi**: le frasi sotto il titolo ("Ciao ..., il tuo appuntamento e' confermato", "In allegato trovi il file .ics...") uscivano con `color:;` perche' la funzione che le scrive non riceveva la variabile del colore del testo (introdotta con le opzioni di colore). Ora la riceve. Il test controlla che nessun attributo `style` di nessuna delle email (tutti i tipi, tutte le opzioni di colore) abbia un valore vuoto, e `email_previews.py` fa lo stesso controllo su tutte le anteprime.
+2. **Il piede non diventa piu' un link blu in Gmail e Apple Mail**: il testo del piede (indirizzo, telefono, partita IVA) e' spezzato con spazi a larghezza zero dopo ogni parola e dentro i numeri lunghi, cosi' le app non lo riconoscono come indirizzo (si legge uguale; gli indirizzi web restano interi e la parte testuale dell'email non ha caratteri invisibili). In piu' regole di colore esplicite per i collegamenti del piede (`.footer a`, Gmail `u + #body`, Samsung `#MessageViewBody`) e per i collegamenti generati da Apple (`x-apple-data-detectors`).
+3. **Nome dell'attivita'**: nuova opzione in *Aspetto delle email* (vuoto = nome del sito Joomla), usata per il testo in alto senza logo, per il testo alternativo del logo, per la prima riga del piede e per la nota in fondo alle email dello staff.
+4. **Piede chiaro possibile, e sempre scuro in modalita' scura**: Marco vedeva "blu" nelle notifiche WebG rispetto alle mail di Brevo, dove il piede delle mail personali (ADV) e' chiaro e senza fondo. Ora con uno sfondo del piede chiaro (es. `#f2f4f7`) il testo e i collegamenti del piede diventano scuri, con un filetto sopra; in modalita' scura il piede diventa comunque `#0f1017` con testo chiaro (prima solo se il fondo era scuro). Valori WebG aggiornati nella scheda KB: riga e bordo `#ee6c2d`, piede `#f2f4f7`. Confronti affiancati Brevo e nostra in `tools/e2e/reports/email/webg/confronto-*.png`.
+
 ## 0.34.3 (pacchetto, componente e plugin): chi paga tardi lo sa subito, e le email hanno un layout degno
 
 Requisito di Marco: "seleziono una data, vado a dormire, nel frattempo non e' piu' disponibile, il giorno dopo riprendo la scheda e pago: mi deve dire no". Prove in `tools/e2e/t_v343.py` (e `t_v342.py` per la diagnostica).

@@ -1,30 +1,15 @@
-Il tuo appuntamento è stato annullato
-
-=====================================
-
-Ciao Giulia Bianchi,
-
-Il tuo appuntamento del 25/10/2026 alle 11:00 è stato annullato.
-
-Servizio: Call Meet 30
-
-Data: Domenica 25/10/2026
-
-Ora: 11:00 (CET, Europe/Rome)
-
-Durata: 30 minuti
-
-Dove: Google Meet (https://meet.google.com/abc-defg-hij)
-
-
-
-A presto!
-
-
-
---
-
-wgbtest
-
-Email inviata automaticamente. Se non hai richiesto tu questo appuntamento, ignora questo messaggio.
-
+Il tuo appuntamento è stato annullato
+=====================================
+Ciao Giulia Bianchi,
+Il tuo appuntamento del 26/10/2026 alle 11:00 è stato annullato.
+Servizio: Call Meet 30
+Data: Lunedì 26/10/2026
+Ora: 11:00 (CET, Europe/Rome)
+Durata: 30 minuti
+Dove: Google Meet (https://meet.google.com/abc-defg-hij)
+
+A presto!
+
+--
+wgbtest
+Email inviata automaticamente. Se non hai richiesto tu questo appuntamento, ignora questo messaggio.

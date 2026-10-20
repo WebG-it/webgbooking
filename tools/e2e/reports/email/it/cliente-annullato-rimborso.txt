@@ -1,34 +1,17 @@
-Il tuo appuntamento è stato annullato
-
-=====================================
-
-Ciao Marta Pagante,
-
-Il tuo appuntamento del 30/10/2026 alle 10:00 è stato annullato.
-
-Ti rimborseremo l'importo pagato (29,00 €).
-
-Servizio: Audit SEO
-
-Data: Venerdì 30/10/2026
-
-Ora: 10:00 (CET, Europe/Rome)
-
-Durata: 30 minuti
-
-Dove: Google Meet (https://meet.google.com/abc-defg-hij)
-
-Pagamento: 29,00 €
-
-
-
-A presto!
-
-
-
---
-
-wgbtest
-
-Email inviata automaticamente. Se non hai richiesto tu questo appuntamento, ignora questo messaggio.
-
+Il tuo appuntamento è stato annullato
+=====================================
+Ciao Marta Pagante,
+Il tuo appuntamento del 31/10/2026 alle 10:00 è stato annullato.
+Ti rimborseremo l'importo pagato (29,00 €).
+Servizio: Audit SEO
+Data: Sabato 31/10/2026
+Ora: 10:00 (CET, Europe/Rome)
+Durata: 30 minuti
+Dove: Google Meet (https://meet.google.com/abc-defg-hij)
+Pagamento: 29,00 €
+
+A presto!
+
+--
+wgbtest
+Email inviata automaticamente. Se non hai richiesto tu questo appuntamento, ignora questo messaggio.

@@ -1,38 +1,19 @@
-Something needs your attention
-
-==============================
-
-Booking no. 489: the event booking.created was not sent to the webhook. Reason: the header profile "nonesiste" does not exist or cannot be decrypted (if the Joomla secret changed, enter it again). Fix the element or the header profile; nothing is retried for this.
-
-Service: Hook profilo mancante
-
-Date: Monday 02/11/2026
-
-Time: 09:00 (CET, Europe/Rome)
-
-Duration: 30 minutes
-
-Where: Google Meet (https://meet.google.com/abc-defg-hij)
-
-
-
-CUSTOMER
-
-Name: Omar Sala
-
-Email: omar.sala@example.invalid
-
-Booking no.: #489
-
-
-
-Open in the backend: http://localhost:8086/administrator/index.php?option=com_webgbooking&view=booking&id=489
-
-
-
---
-
-wgbtest
-
-Notification from the booking system of wgbtest.
-
+Something needs your attention
+==============================
+Booking no. 443: the event booking.created was not sent to the webhook. Reason: the header profile "nonesiste" does not exist or cannot be decrypted (if the Joomla secret changed, enter it again). Fix the element or the header profile; nothing is retried for this.
+Service: Hook profilo mancante
+Date: Tuesday 03/11/2026
+Time: 09:00 (CET, Europe/Rome)
+Duration: 30 minutes
+Where: Google Meet (https://meet.google.com/abc-defg-hij)
+
+CUSTOMER
+Name: Omar Sala
+Email: omar.sala@example.invalid
+Booking no.: #443
+
+Open in the backend: http://localhost:8086/administrator/index.php?option=com_webgbooking&view=booking&id=443
+
+--
+wgbtest
+Notification from the booking system of wgbtest.
