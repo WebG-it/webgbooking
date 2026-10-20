@@ -99,7 +99,8 @@ for i, (t, em_, loc) in enumerate([('09:00', 'a1@example.invalid', 'meet'), ('12
 lst = adm.get(BASE + '/administrator/index.php?option=com_webgbooking&view=bookings')
 check('C2 admin list renders with Location column and the phone', 'Location' in lst and 'Phone call' in lst and 'Google Meet' in lst and 'Fatal error' not in lst and 'Warning:' not in lst, ('Location' in lst, 'Phone call' in lst, 'Google Meet' in lst, 'Fatal error' in lst, 'Warning:' in lst))
 det = adm.get(BASE + '/administrator/index.php?option=com_webgbooking&view=booking&id=%d' % ids[1])
-check('C3 admin detail shows duration, location, event, reminders', '60 min' in det and 'Phone call' in det and 'Riunione - 1 ora' in det and 'planned before' in det, re.sub('<[^>]+>', ' ', det)[-600:])
+dtxt = re.sub(r'\s+', ' ', re.sub('<[^>]+>', ' ', det))
+check('C3 admin detail (0.35.2 layout) shows duration, location, event, the Call button and the scheduled reminders as dates', '60 min' in dtxt and 'Phone call' in dtxt and 'Riunione - 1 ora' in dtxt and 'href="tel:+393337770001"' in det and 'Reminder scheduled' in dtxt and 'planned before' not in dtxt, dtxt[-600:])
 
 mcount_before = len(mails()); jx('rm -f /tmp/gmock/log.jsonl')
 tokf = re.findall(r'<input type="hidden" name="([0-9a-f]{32})" value="1"', lst)[0]

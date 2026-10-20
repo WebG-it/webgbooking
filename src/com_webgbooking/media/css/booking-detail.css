@@ -1,0 +1,135 @@
+/* WebG Booking: admin booking detail. Uses Bootstrap 5 / Atum variables only, so light and dark follow the template. */
+.wgb-bk {
+    /* Atum exposes --body-bg, --body-color, --border-color, --primary and flips them in dark mode; the --bs-* names are the fallback */
+    --wgb-gap: 1rem;
+    --wgb-ink: var(--body-color, var(--wgb-ink));
+    --wgb-line: var(--border-color, var(--bs-border-color, #dee2e6));
+    --wgb-muted: color-mix(in srgb, var(--wgb-ink) 68%, transparent);
+    --wgb-surface: var(--body-bg, var(--bs-body-bg, #fff));
+    --wgb-soft: color-mix(in srgb, var(--wgb-ink) 6%, transparent);
+    --wgb-accent: var(--primary, var(--wgb-accent));
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--wgb-gap);
+    max-width: 1100px;
+    padding: 1rem;
+    color: var(--wgb-ink);
+}
+
+:root[data-bs-theme="dark"] .wgb-bk,
+:root[data-color-scheme="dark"] .wgb-bk {
+    --wgb-surface: color-mix(in srgb, var(--wgb-ink) 5%, var(--body-bg, #1b2330));
+}
+
+.wgb-bk-col { display: contents; }
+.wgb-bk-customer { order: 1; }
+.wgb-bk-answers { order: 2; }
+.wgb-bk-pay { order: 3; }
+.wgb-bk-history { order: 4; }
+.wgb-bk-tech { order: 5; }
+
+.wgb-bk-hero,
+.wgb-bk-card {
+    background: var(--wgb-surface);
+    border: 1px solid var(--wgb-line);
+    border-radius: var(--bs-border-radius, .25rem);
+    min-width: 0;
+}
+
+.wgb-bk-hero { padding: 1.5rem 1.5rem 1.75rem; }
+.wgb-bk-card { padding: 1.25rem 1.5rem; }
+
+.wgb-bk-eyebrow {
+    margin: 0 0 .25rem;
+    font-size: .875rem;
+    font-weight: 600;
+    letter-spacing: .02em;
+    color: var(--wgb-muted);
+}
+
+.wgb-bk-name {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .5rem .75rem;
+    margin: 0;
+    font-size: 1.75rem;
+    line-height: 1.2;
+    overflow-wrap: anywhere;
+}
+
+.wgb-bk-status { font-size: .8125rem; font-weight: 600; padding: .4em .7em; }
+
+.wgb-bk-when { margin: .75rem 0 0; font-size: 1.25rem; font-weight: 500; }
+.wgb-bk-meta { margin: .25rem 0 0; color: var(--wgb-muted); }
+
+.wgb-bk-cta { margin-top: 1.25rem; }
+.wgb-bk-btn { display: inline-flex; align-items: center; gap: .6rem; justify-content: center; }
+.wgb-bk-btn-sub { font-weight: 400; opacity: .9; }
+.wgb-bk-note {
+    margin: 0;
+    padding: .65rem .9rem;
+    background: var(--wgb-soft);
+    border: 1px dashed var(--wgb-line);
+    border-radius: var(--bs-border-radius, .25rem);
+    color: var(--wgb-muted);
+}
+
+.wgb-bk-card h3 { margin: 0 0 .75rem; font-size: 1rem; font-weight: 700; }
+
+.wgb-bk-dl, .wgb-bk-qa { margin: 0; }
+.wgb-bk-row { display: grid; grid-template-columns: minmax(0, 1fr); gap: .1rem; padding: .6rem 0; border-top: 1px solid var(--wgb-line); }
+.wgb-bk-row:first-child { border-top: 0; padding-top: 0; }
+.wgb-bk-row dt { font-weight: 400; font-size: .8125rem; color: var(--wgb-muted); }
+.wgb-bk-dl-tech .wgb-bk-row { grid-template-columns: minmax(0, 11rem) minmax(0, 1fr); gap: .25rem 1rem; }
+.wgb-bk-row dd { margin: 0; overflow-wrap: anywhere; }
+
+.wgb-bk-qa-item { padding: .6rem 0; border-top: 1px solid var(--wgb-line); }
+.wgb-bk-qa-item:first-child { border-top: 0; padding-top: 0; }
+.wgb-bk-qa-item dt { font-weight: 700; }
+.wgb-bk-qa-item dd { margin: .2rem 0 0; max-width: 70ch; overflow-wrap: anywhere; }
+
+.wgb-bk-timeline { list-style: none; margin: 0; padding: 0; position: relative; }
+.wgb-bk-tl-item { position: relative; display: flex; flex-wrap: wrap; justify-content: space-between; gap: .1rem 1rem; padding: 0 0 1rem 1.5rem; }
+.wgb-bk-tl-item:last-child { padding-bottom: 0; }
+.wgb-bk-tl-item::before { content: ""; position: absolute; left: 0; top: .45rem; width: .6rem; height: .6rem; border-radius: 50%; background: var(--wgb-accent); }
+.wgb-bk-tl-item::after { content: ""; position: absolute; left: calc(.3rem - .5px); top: 1.2rem; bottom: -.1rem; width: 1px; background: var(--wgb-line); }
+.wgb-bk-tl-item:last-child::after { display: none; }
+.wgb-bk-tl-item.is-future::before { background: var(--wgb-surface); border: 2px solid var(--wgb-accent); box-sizing: border-box; }
+.wgb-bk-tl-item.is-future .wgb-bk-tl-what { color: var(--wgb-muted); }
+.wgb-bk-tl-what { flex: 1 1 14rem; min-width: 0; }
+.wgb-bk-tl-when { color: var(--wgb-muted); font-size: .875rem; white-space: nowrap; }
+.wgb-bk-tag { display: inline-block; margin-left: .35rem; padding: .05rem .45rem; border: 1px solid var(--wgb-line); border-radius: 1rem; font-size: .75rem; }
+
+.wgb-bk-tech { padding: 0; }
+.wgb-bk-tech > summary { cursor: pointer; padding: .9rem 1.5rem; font-weight: 600; color: var(--wgb-muted); }
+.wgb-bk-tech > summary:hover { color: var(--wgb-ink); }
+.wgb-bk-tech > summary:focus-visible { outline: 2px solid var(--wgb-accent); outline-offset: -2px; border-radius: var(--bs-border-radius, .25rem); }
+.wgb-bk-tech[open] > summary { border-bottom: 1px solid var(--wgb-line); }
+.wgb-bk-dl-tech { padding: 1rem 1.5rem 1.25rem; }
+.wgb-bk-fx { margin: .35rem 0 0; padding-left: 1.1rem; }
+.wgb-bk-tech code { overflow-wrap: anywhere; }
+
+@media (min-width: 992px) {
+    .wgb-bk { grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); align-items: start; }
+    .wgb-bk-hero, .wgb-bk-tech { grid-column: 1 / -1; }
+    .wgb-bk-col { display: flex; flex-direction: column; gap: var(--wgb-gap); min-width: 0; }
+    .wgb-bk-col-main { grid-column: 1; }
+    .wgb-bk-col-side { grid-column: 2; }
+    .wgb-bk-customer, .wgb-bk-answers, .wgb-bk-pay, .wgb-bk-history { order: 0; }
+    .wgb-bk-tech { order: 9; }
+}
+
+@media (max-width: 575.98px) {
+    .wgb-bk { padding: .75rem; }
+    .wgb-bk-hero { padding: 1.1rem; }
+    .wgb-bk-card { padding: 1rem; }
+    .wgb-bk-name { font-size: 1.5rem; }
+    .wgb-bk-btn { display: flex; width: 100%; }
+    .wgb-bk-dl-tech .wgb-bk-row { grid-template-columns: minmax(0, 1fr); gap: .1rem; }
+    .wgb-bk-tl-when { white-space: normal; }
+    .wgb-bk-tech > summary { padding: .9rem 1rem; }
+    .wgb-bk-dl-tech { padding: 1rem; }
+}
+
+.wgb-bk-nowrap { white-space: nowrap; }
