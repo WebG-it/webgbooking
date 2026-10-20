@@ -5,6 +5,14 @@ from html.parser import HTMLParser
 import t_pay_lib as tp
 from t_pay_lib import SK, WHSEC, R
 from wgbtest import *
+import datetime as _dt
+
+
+def swhen(iso):
+    """the date as the staff subject writes it: '28 Oct 2026' (en-GB test site)"""
+    d = _dt.date.fromisoformat(iso)
+    return '%d %s %d' % (d.day, ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.month - 1], d.year)
+
 
 reset_env()
 tp.fresh()
@@ -99,7 +107,7 @@ r = book('brevo1', day(D), '09:00', email='cust1@example.invalid', name='Cliente
 b1 = last_id(); tok1 = sql("SELECT manage_token FROM joom_webgbooking_bookings WHERE id=%d" % b1)
 all_mail = collect()
 cust = next((m for m in all_mail if 'cust1@' in m['rcpt']), None)
-stf = next((m for m in all_mail if STAFF in m['rcpt'] and 'ooking' in m['subject']), None)
+stf = next((m for m in all_mail if STAFF in m['rcpt'] and re.match(r'^(New Event|Nuovo evento):', m['subject'])), None)
 for name, m in (('customer confirmation', cust), ('staff new booking', stf)):
     check('M1 %s: complete structure (viewport, colour schemes, dark and mobile CSS, 600 px, preheader, lang, no script/on*, safe links, plain text alternative)' % name, m is not None and not structure_ok(m), m and structure_ok(m))
 check('M2 the customer email has title, appointment box (service, date with weekday, time with zone, duration, where), main button, footer', cust is not None and all(x in cust['html'] for x in ('Your appointment is confirmed', 'Europe/Rome', 'Join the video call', 'This email was sent automatically')) and re.search(r'(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday) \d\d/\d\d/\d{4}', txt(cust['html'])) is not None and '30 minutes' in cust['html'], cust and txt(cust['html'])[:300])
@@ -117,8 +125,8 @@ cancelled = collect()
 rs = [m for m in moved if 'cust1@' in m['rcpt']]
 rstaff = [m for m in moved if STAFF in m['rcpt']]
 kinds = {'customer rescheduled': rs[0] if rs else None, 'staff moved': rstaff[0] if rstaff else None}
-cc = [m for m in cancelled if 'cust1@' in m['rcpt'] and 'ancelled' in m['subject']]
-cs = [m for m in cancelled if STAFF in m['rcpt'] and 'ancelled' in m['subject']]
+cc = [m for m in cancelled if 'cust1@' in m['rcpt'] and re.search(r'ancelled|anceled|nnullato', m['subject'])]
+cs = [m for m in cancelled if STAFF in m['rcpt'] and re.search(r'ancelled|anceled|nnullato', m['subject'])]
 kinds['customer cancelled'] = cc[-1] if cc else None
 kinds['staff cancelled'] = cs[-1] if cs else None
 for name, m in kinds.items():
@@ -193,18 +201,18 @@ tp.fresh()
 jx('rm -f /tmp/mail/*.eml')
 book('def', day(D + 5), '09:00', email='sd1@example.invalid', name='Data Oggetto')
 sb = last_id(); stok = sql("SELECT manage_token FROM joom_webgbooking_bookings WHERE id=%d" % sb)
-sm = next((m for m in collect() if STAFF in m['rcpt'] and 'ooking' in m['subject']), None)
-check('D1 the staff subject of a new booking has the date as 28/10/2026 (site order), not 2026-10-28', sm is not None and dmy(day(D + 5)) in sm['subject'] and day(D + 5) not in sm['subject'], sm and sm['subject'])
+sm = next((m for m in collect() if STAFF in m['rcpt'] and re.match(r'^(New Event|Nuovo evento):', m['subject'])), None)
+check('D1 the staff subject of a new booking has the date as "28 Oct 2026" (day, month name, year: no ISO order)', sm is not None and swhen(day(D + 5)) in sm['subject'] and day(D + 5) not in sm['subject'], sm and sm['subject'])
 sql("UPDATE joom_webgbooking_bookings SET updated=DATE_SUB(UTC_TIMESTAMP(), INTERVAL 5 MINUTE) WHERE id=%d" % sb)
 jx('rm -f /tmp/mail/*.eml')
 Sess().post(AJAX + '&action=reschedule', {'action': 'reschedule', 'token': stok, 'date': day(D + 5), 'time': '11:00'})
 mv = next((m for m in collect() if STAFF in m['rcpt']), None)
-check('D2 the staff subject of a moved appointment and the previous slot in its text use the same order', mv is not None and dmy(day(D + 5)) in mv['subject'] and dmy(day(D + 5)) in mv['html'] and day(D + 5) not in mv['subject'], mv and mv['subject'])
+check('D2 the staff subject of a moved appointment and the previous slot in its text use the same order', mv is not None and swhen(day(D + 5)) in mv['subject'] and dmy(day(D + 5)) in mv['html'] and day(D + 5) not in mv['subject'], mv and mv['subject'])
 sql("UPDATE joom_webgbooking_bookings SET updated=DATE_SUB(UTC_TIMESTAMP(), INTERVAL 5 MINUTE) WHERE id=%d" % sb)
 jx('rm -f /tmp/mail/*.eml')
 Sess().post(BASE + '/index.php?option=com_ajax&group=system&plugin=webgbooking&format=html&action=cancel', {'token': stok})
 cx = next((m for m in collect() if STAFF in m['rcpt']), None)
-check('D3 the staff subject of a cancelled appointment too', cx is not None and dmy(day(D + 5)) in cx['subject'] and day(D + 5) not in cx['subject'], cx and cx['subject'])
+check('D3 the staff subject of a cancelled appointment too', cx is not None and swhen(day(D + 5)) in cx['subject'] and day(D + 5) not in cx['subject'], cx and cx['subject'])
 
 # ============================================================================ 6. the colours of a brand look (the WebG newsletter palette)
 print('--- 6. brand colours')
@@ -273,7 +281,7 @@ jx('rm -f /tmp/mail/*.eml')
 book('def', day(D + 7), '11:00', email='bn2@example.invalid', name='Nome Attivita')
 ms7 = collect()
 bn = next((m for m in ms7 if 'bn2@' in m['rcpt']), None)
-bs = next((m for m in ms7 if STAFF in m['rcpt'] and 'ooking' in m['subject']), None)
+bs = next((m for m in ms7 if STAFF in m['rcpt'] and re.match(r'^(New Event|Nuovo evento):', m['subject'])), None)
 hb = bn['html'] if bn else ''
 check('Y3 business name: the alt text of the logo and the first footer line use it (not the site name)', 'alt="WebG"' in hb and 'alt="wgbtest"' not in hb and re.search(r'font-weight:700;color:#ffffff;">WebG</p>', hb) is not None and '>wgbtest<' not in hb, '')
 check('Y3b ...in the staff email footer note too, and in the text alternative', bs is not None and 'booking system of WebG.' in bs['text'] and 'booking system of WebG.' in bs['html'], bs and bs['text'][-120:])

@@ -110,7 +110,7 @@ dels = [l for l in gm_log() if l['method'] == 'DELETE']
 check('C5 bulk cancel deleted both Google events', len(dels) == 2, dels)
 mm = [decode_mail(mail_text(p)) for p in mails()[mcount_before:]]
 check('C6 each customer got the cancellation email (HTML + ics CANCEL)', sorted(m['rcpt'] for m in mm if 'METHOD:CANCEL' in m['ics']) and len([m for m in mm if 'METHOD:CANCEL' in m['ics']]) == 2, [m['rcpt'] for m in mm])
-check('C7 staff NOT mailed for an admin cancellation', not any('staff@wgbtest.invalid' in m['rcpt'] for m in mm), [m['rcpt'] for m in mm])
+check('C7 an admin cancellation tells the staff too (a trace: "cancelled by you from the panel"), once per booking', sum('staff@wgbtest.invalid' in m['rcpt'] for m in mm) == 2, [m['rcpt'] for m in mm])
 check('C8 admin sees what happened (messages)', ('Cancellation emails sent to 2' in txt or 'cancellation email' in txt.lower()) and 'Google Calendar events removed' in txt, txt[txt.find('booking'):][:400] if 'booking' in txt else txt[-400:])
 # idempotence: cancelling again must not send mail
 mcount_before = len(mails()); jx('rm -f /tmp/gmock/log.jsonl')
@@ -122,13 +122,13 @@ dh = adm.get(BASE + '/administrator/index.php?option=com_webgbooking&view=bookin
 tokd = re.findall(r'<input type="hidden" name="([0-9a-f]{32})" value="1"', dh)[0]
 check('C10 detail page has a Cancel button', 'booking.cancel' in dh, '')
 out = post_multi(adm, BASE + '/administrator/index.php?option=com_webgbooking&view=booking&id=%d' % ids[2], [('task', 'booking.cancel'), ('id', str(ids[2])), ('boxchecked', '0'), ('option', 'com_webgbooking'), (tokd, '1')])
-check('C11 single cancel from the detail page works (DB, Google, email)', row(ids[2])['status'] == 'cancelled' and len([l for l in gm_log() if l['method'] == 'DELETE']) == 1 and len(mails()) == mcount_before + 1, (row(ids[2])['status'], len(mails()) - mcount_before))
+check('C11 single cancel from the detail page works (DB, Google, email)', row(ids[2])['status'] == 'cancelled' and len([l for l in gm_log() if l['method'] == 'DELETE']) == 1 and len(mails()) == mcount_before + 2, (row(ids[2])['status'], len(mails()) - mcount_before))
 # upgrade-era row (only the old 0.30.0 columns, no google event, no phone), seeded here so the suite needs nothing left over
 sql("INSERT INTO joom_webgbooking_bookings (created,booking_date,booking_time,customer_name,customer_email,status,manage_token) VALUES (NOW(),'%s','10:00','Vecchio Cliente','old@example.invalid','confirmed','oldtoken0000000000000000000000aa')" % day(14))
 OLD = last_id()
 mcount_before = len(mails())
 out = post_multi(adm, BASE + '/administrator/index.php?option=com_webgbooking&view=bookings', [('task', 'booking.cancel'), ('boxchecked', '1'), ('option', 'com_webgbooking'), (tokf, '1'), ('cid[]', str(OLD))])
-check('C12 row created by 0.30.0 (NULL new columns) cancels fine, customer mailed, no Google call', row(OLD)['status'] == 'cancelled' and len(mails()) == mcount_before + 1, (row(OLD)['status'], len(mails()) - mcount_before))
+check('C12 row created by 0.30.0 (NULL new columns) cancels fine, customer mailed and the staff gets a trace, no Google call', row(OLD)['status'] == 'cancelled' and len(mails()) == mcount_before + 2, (row(OLD)['status'], len(mails()) - mcount_before))
 csv = adm.get(BASE + '/administrator/index.php?option=com_webgbooking&task=exportcsv&' + tokf + '=1')
 check('C13 CSV export has Location/Duration/Event columns appended', csv.splitlines()[0].endswith('Custom,Location,Duration,Event') or 'Location,Duration,Event' in csv.splitlines()[0], csv[:200])
 

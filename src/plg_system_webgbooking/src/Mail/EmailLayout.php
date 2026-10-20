@@ -147,7 +147,7 @@ final class EmailLayout
      * @param array $m {
      *   lang: string, brand: {name, logo, logo_dark, color, button, footer, site_url}, preheader: string, title: string,
      *   lead: string[] (paragraphs), notices: [{text, tone: ok|info|warn}], summary: {rows: [[label, value|[text, url]]]}|null,
-     *   body_html: string (trusted), buttons: [{label, url, primary: bool}], sections: [{title, rows: [[label, value]]}],
+     *   body_html: string (trusted), buttons: [{label, url, primary: bool}], others_label: string (a line above the quiet links), sections: [{title, stacked?: bool, rows: [[label, value]]}],
      *   signoff: string, footer_note: string }
      * @return array{html: string, text: string}
      */
@@ -259,6 +259,13 @@ final class EmailLayout
             $text[] = mb_strtoupper((string) ($sec['title'] ?? ''));
             foreach ($srows as $r) {
                 $v = (string) $r[1];
+                if (!empty($sec['stacked'])) {
+                    // question in bold, the answer under it (one cell each)
+                    $content .= '<tr><td class="t-head rule" style="padding:10px 0 2px 0;font-family:' . $F . ';font-size:14px;line-height:20px;font-weight:700;color:' . $headC . ';">' . self::e($r[0]) . '</td></tr>'
+                        . '<tr><td class="t-body rule" style="padding:0 0 10px 0;border-bottom:1px solid #e3e6ec;font-family:' . $F . ';font-size:15px;line-height:22px;color:' . $textC . ';">' . nl2br(self::linkify($v, $link), false) . '</td></tr>';
+                    $text[] = $r[0] . ': ' . $v;
+                    continue;
+                }
                 $content .= '<tr><td class="stack t-muted rule" valign="top" style="padding:8px 14px 8px 0;width:140px;border-bottom:1px solid #e3e6ec;font-family:' . $F . ';font-size:13px;line-height:20px;color:#5b6074;">' . self::e($r[0]) . '</td>'
                     . '<td class="stack t-body rule" valign="top" style="padding:8px 0;border-bottom:1px solid #e3e6ec;font-family:' . $F . ';font-size:15px;line-height:22px;color:' . $textC . ';">' . nl2br(self::linkify($v, $link), false) . '</td></tr>';
                 $text[] = $r[0] . ': ' . $v;
@@ -290,7 +297,13 @@ final class EmailLayout
                 $links[] = '<a href="' . self::e($x['url']) . '" class="t-link" style="color:' . $link . ';font-weight:700;text-decoration:underline;">' . self::e($x['label']) . '</a>';
                 $text[]  = $x['label'] . ': ' . $x['url'];
             }
-            $content .= '<p style="margin:' . ($primary !== null ? '18' : '6') . 'px 0 0 0;text-align:center;font-family:' . $F . ';font-size:15px;line-height:24px;">' . implode('<span class="t-muted" style="color:#5b6074;">&nbsp;&nbsp;&middot;&nbsp;&nbsp;</span>', $links) . '</p>';
+            $lbl = trim((string) ($m['others_label'] ?? ''));
+            if ($lbl !== '') {
+                $content .= '<p class="t-muted" style="margin:18px 0 0 0;text-align:center;font-family:' . $F . ';font-size:14px;line-height:22px;color:#5b6074;">' . self::e($lbl) . '</p>';
+                $text[] = '';
+                $text[] = $lbl;
+            }
+            $content .= '<p style="margin:' . ($lbl !== '' ? '2' : ($primary !== null ? '18' : '6')) . 'px 0 0 0;text-align:center;font-family:' . $F . ';font-size:15px;line-height:24px;">' . implode('<span class="t-muted" style="color:#5b6074;">&nbsp;&nbsp;&middot;&nbsp;&nbsp;</span>', $links) . '</p>';
             if ($primary === null) {
                 array_unshift($text, '');
             }

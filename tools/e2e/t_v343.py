@@ -220,9 +220,9 @@ for cfgname in ('legacyc', 'legacyc2'):
     jx('rm -f /tmp/mail/*.eml')
     book(cfgname, day(D + 13), '09:00', email='%s@example.invalid' % cfgname, name='Vecchio Testo')
     cm = mails_to('%s@example.invalid' % cfgname)
-    sm = [m for m in mails_to(STAFF) if 'ooking' in m['subject'] or 'renotazione' in m['subject']]
+    sm = [m for m in mails_to(STAFF) if re.match(r'^(New Event|Nuovo evento):', m['subject'])]
     check('O1 %s: the old Italian default saved by the builder is treated as empty: the customer gets the current translated default (not the fixed Italian text)' % cfgname, cm and 'In allegato' not in cm[0]['html'] and 'is confirmed' in cm[0]['html'], cm and txt(cm[0]['html'])[:160])
-    check('O2 %s: and the staff gets the current default (not "Nuova prenotazione:" in fixed Italian)' % cfgname, sm and 'Nuova prenotazione:' not in sm[0]['html'] and 'Name' in sm[0]['html'], sm and txt(sm[0]['html'])[:160])
+    check('O2 %s: and the staff gets the current default (not "Nuova prenotazione:" in fixed Italian)' % cfgname, sm and 'Nuova prenotazione:' not in sm[0]['html'] and ('Invitee' in sm[0]['html'] or 'Name' in sm[0]['html']), sm and txt(sm[0]['html'])[:160])
     sql("DELETE FROM joom_webgbooking_bookings WHERE customer_email='%s@example.invalid'" % cfgname)
 jx('rm -f /tmp/mail/*.eml')
 book('legacyedit', day(D + 14), '09:00', email='legacyedit@example.invalid', name='Testo Modificato')

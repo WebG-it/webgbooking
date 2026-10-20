@@ -68,6 +68,19 @@ final class WidgetConfig
         return str_replace(['[', ']'], ['<a href="' . htmlspecialchars($url, ENT_QUOTES, 'UTF-8') . '" target="_blank" rel="noopener noreferrer">', '</a>'], $h);
     }
 
+    /** The zone of the site (the one the server computes slots in), validated. */
+    public static function siteTzId(): string
+    {
+        $tz = (string) (Factory::getApplication()->get('offset') ?: date_default_timezone_get());
+        try {
+            new \DateTimeZone($tz);
+        } catch (\Throwable $e) {
+            $tz = 'UTC';
+        }
+
+        return $tz;
+    }
+
     private static function enum($v, array $ok, $def = '')
     {
         return \in_array($v, $ok, true) ? $v : $def;
@@ -341,6 +354,7 @@ final class WidgetConfig
             'minNotice' => $evCfg['nt'] ?? (int) $pp->get('min_notice', 2),
             'window'    => $evCfg['wn'] ?? (int) $pp->get('window_days', 30),
             'ajaxUrl'   => Uri::root(true) . '/index.php?option=com_ajax&group=system&plugin=webgbooking&format=json',
+            'siteTz'    => self::siteTzId(),   // the zone the server works in; the page shows the visitor's own and sends both
             'labels'    => [
                 'stepDay'     => Text::_('PLG_SYSTEM_WEBGBOOKING_STEP_DAY'),
                 'stepTime'    => Text::_('PLG_SYSTEM_WEBGBOOKING_STEP_TIME'),
@@ -369,6 +383,7 @@ final class WidgetConfig
                 'privacy'     => Text::_('PLG_SYSTEM_WEBGBOOKING_PRIVACY'),
                 'privacyHtml' => self::privacyHtml($pp),
                 'phoneHint'   => Text::_('PLG_SYSTEM_WEBGBOOKING_PHONE_HINT'),
+                'tzLabel'     => Text::_('PLG_SYSTEM_WEBGBOOKING_TZ_LABEL'),
                 'bookNow'     => Text::_('PLG_SYSTEM_WEBGBOOKING_BOOK_NOW'),
                 'required'    => Text::_('PLG_SYSTEM_WEBGBOOKING_REQUIRED'),
                 'demo'        => Text::_('PLG_SYSTEM_WEBGBOOKING_DEMO_NOTE'),

@@ -150,7 +150,7 @@ jx('rm -f /tmp/mail/*.eml; rm -f /tmp/gmock/log.jsonl')
 out = post_pairs(adm, BASE + '/administrator/index.php?option=com_webgbooking&view=bookings', [('task', 'booking.cancel'), ('boxchecked', '1'), ('option', 'com_webgbooking'), (tokf, '1'), ('cid[]', str(a2))])
 txt = re.sub(r'<[^>]+>', ' ', out)
 mm = [decode_mail(mail_text(p)) for p in mails()]
-check('A13 admin cancelling a PAID booking: warning to refund by hand from Stripe; staff not mailed; customer mailed', ('PAID' in txt and 'Stripe' in txt) and not any('staff@' in m['rcpt'] for m in mm) and any('adm2@' in m['rcpt'] for m in mm), txt[-300:])
+check('A13 admin cancelling a PAID booking: warning to refund by hand from Stripe; staff gets the trace; customer mailed', ('PAID' in txt and 'Stripe' in txt) and any('staff@' in m['rcpt'] for m in mm) and any('adm2@' in m['rcpt'] for m in mm), txt[-300:])
 lst2 = adm.get(BASE + '/administrator/index.php?option=com_webgbooking&view=bookings&filter[status]=')
 check('A13b cancelled-but-paid shows "refund by hand" in the list', 'refund by hand' in lst2 or 'rimborsare a mano' in lst2, '')
 # cancelling an UNPAID hold: quiet release (no email, no refund message)

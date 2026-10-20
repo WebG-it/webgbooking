@@ -163,6 +163,8 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
         $privacy = (int) $input->post->getInt('privacy', 0);
         $guest   = trim($input->post->getString('guest', ''));
         $guest   = ($guest !== '' && filter_var($guest, FILTER_VALIDATE_EMAIL)) ? $guest : '';
+        $custTz  = $this->cleanTz($input->post->getString('tz', ''));
+        $shownTs = (int) $input->post->getInt('ts', 0);
 
         // Honeypot: bots fill the hidden field. Pretend success and drop the submission.
         if (trim((string) $input->post->getString('website', '')) !== '') {
@@ -174,6 +176,10 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $date) || !preg_match('/^\d{2}:\d{2}$/', $time)
         ) {
             $this->respond(['ok' => false, 'message' => Text::_('PLG_SYSTEM_WEBGBOOKING_BOOK_ERR')]);
+        }
+
+        if (!$this->instantMatches($date, $time, $shownTs)) {
+            $this->respond(['ok' => false, 'message' => Text::_('PLG_SYSTEM_WEBGBOOKING_TIME_MISMATCH')]);
         }
 
         // Per-element ACTIONS + custom-field DEFINITIONS + EVENT TYPE (HMAC-verified: signed by the server
@@ -347,6 +353,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                         'source_url'      => $this->sourceUrl($actions, $input),
                         'meeting_url'     => $loc === 'phone' ? '' : trim((string) $this->params->get('meeting_url', '')),
                         'guest_email'     => $guest,
+                        'customer_tz'     => $custTz !== '' ? $custTz : null,
                         'manage_token'    => bin2hex(random_bytes(16)),
                         'google_event_id' => '',
                         'custom_data'     => $customData,
@@ -3268,12 +3275,14 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
     private function notifyCustomer(object $row, bool $reschedule, $mf, string $manageUrl, string $dateFmt): void
     {
         $ics      = $this->buildIcs($row, $reschedule ? 'REQUEST' : 'PUBLISH');
+        $cv       = $this->custView($row);                 // date and time as the customer sees them (their zone)
+        $dateFmt  = $this->rowDateFmt($cv);
 
         // ---- Customer email action (and invited guest). Skipped if the action is off. ----
         if ($reschedule || ($row->_custOn ?? true)) {
             $isRequest = false;
             if ($reschedule) {
-                $subject = self::fillTpl(Text::_('PLG_SYSTEM_WEBGBOOKING_RESCHEDULE_EMAIL_SUBJECT'), ['{name}' => $row->customer_name, '{date}' => $dateFmt, '{time}' => $row->booking_time]);
+                $subject = $this->custSubject($cv, 'rescheduled');
                 $bodyTpl = '';
             } else {
                 $elSub      = (string) ($row->emailSubjectTpl ?? '');
@@ -3283,7 +3292,10 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                 }
                 $isRequest  = (string) ($row->status ?? '') === 'pending';
                 $subjectTpl = $elSub !== '' ? $elSub : (trim((string) $this->params->get('email_subject', '')) ?: Text::_($isRequest ? 'PLG_SYSTEM_WEBGBOOKING_EMAIL_CUSTOMER_SUBJECT_REQUEST' : 'PLG_SYSTEM_WEBGBOOKING_EMAIL_CUSTOMER_SUBJECT'));
-                $subject    = self::fillTpl($subjectTpl, ['{name}' => $row->customer_name, '{date}' => $dateFmt, '{time}' => $row->booking_time]);
+                $ownSubject = $elSub !== '' || trim((string) $this->params->get('email_subject', '')) !== '';
+                $subject    = ($ownSubject || $isRequest)
+                    ? self::fillTpl($subjectTpl, ['{name}' => $row->customer_name, '{date}' => $dateFmt, '{time}' => $cv->booking_time])
+                    : $this->custSubject($cv, 'confirmed');
                 $bodyTpl    = $elBody !== '' ? $elBody : trim((string) $this->params->get('email_body', ''));
             }
             $this->sendLayout($mf, $row->customer_email, $subject, $this->customerMail($row, $reschedule ? 'rescheduled' : ($isRequest ? 'request' : 'confirmed'), $manageUrl, $dateFmt, $bodyTpl), $ics);
@@ -3298,7 +3310,8 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             return;
         }
         $icsGuest = $this->buildIcs($row, $reschedule ? 'REQUEST' : 'PUBLISH', true);
-        $gSubject = self::fillTpl(Text::_('PLG_SYSTEM_WEBGBOOKING_EMAIL_GUEST_SUBJECT'), ['{name}' => $row->customer_name, '{date}' => $dateFmt, '{time}' => $row->booking_time]);
+        $gv       = $this->custView($row);
+        $gSubject = self::fillTpl(Text::_('PLG_SYSTEM_WEBGBOOKING_EMAIL_GUEST_SUBJECT'), ['{name}' => $row->customer_name, '{date}' => $this->rowDateFmt($gv), '{time}' => $gv->booking_time]);
         $this->sendLayout($mf, $row->guest_email, $gSubject, $this->customerMail($row, 'guest', '', $dateFmt), $icsGuest);
     }
 
@@ -3344,8 +3357,8 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
         }
         $sSubTpl = (string) ($row->_staffSubject ?? '');
         $sSub    = $moved
-            ? Text::sprintf('PLG_SYSTEM_WEBGBOOKING_EMAIL_ADMIN_SUBJECT_MOVED', $this->shortDate((string) $row->booking_date), $row->booking_time)
-            : ($sSubTpl !== '' ? self::fillTpl($sSubTpl, ['{name}' => $row->customer_name, '{date}' => $dateFmt, '{time}' => $row->booking_time]) : Text::sprintf('PLG_SYSTEM_WEBGBOOKING_EMAIL_ADMIN_SUBJECT', $this->shortDate((string) $row->booking_date), $row->booking_time));
+            ? $this->staffSubject($row, 'moved')
+            : ($sSubTpl !== '' ? self::fillTpl($sSubTpl, ['{name}' => $row->customer_name, '{date}' => $dateFmt, '{time}' => $row->booking_time]) : $this->staffSubject($row, 'new'));
         $sBody = $moved ? '' : (string) ($row->_staffBody ?? '');
         if (self::isLegacyDefaultBody($sBody)) {
             $sBody = '';
@@ -3429,12 +3442,223 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
     }
 
     /** Date for subjects and alerts in the order of the site language (28/10/2026; 10/28/2026 only for US English), instead of the stored 2026-10-28. */
+    /** What the appointment is called in the subjects: the event's name, else "Appointment". */
+    private function eventLabel(object $row): string
+    {
+        $n = trim((string) ($row->event_name ?? ''));
+
+        return $n !== '' ? $n : Text::_('PLG_SYSTEM_WEBGBOOKING_ICS_SUMMARY');
+    }
+
+    /** Who the customer meets: the option "organiser name", else the sender name of the emails, else the business name. */
+    private function hostName(): string
+    {
+        $h = trim((string) $this->params->get('host_name', ''));
+        if ($h === '') {
+            $h = trim((string) $this->params->get('mail_from_name', ''));
+        }
+
+        return $h !== '' ? $h : (string) ($this->mailBrand()['name'] ?? '');
+    }
+
+    /** "10:30 Tue, 20 Oct 2026" (it-IT: "10:30 mar, 20 ott 2026"): date and time of the row as written in a subject. */
+    private function shortWhen(object $row): string
+    {
+        try {
+            $dt  = new \DateTime($row->booking_date . ' ' . $row->booking_time . ':00');
+            $dow = mb_substr(Text::_('PLG_SYSTEM_WEBGBOOKING_MAIL_DAY_' . $dt->format('w')), 0, 3);
+            $dow = $this->langTag() === 'it-IT' ? mb_strtolower($dow) : $dow;
+
+            return $dt->format('H:i') . ' ' . $dow . ', ' . $dt->format('j') . ' ' . Text::_('PLG_SYSTEM_WEBGBOOKING_MAIL_MONTH_' . $dt->format('n')) . ' ' . $dt->format('Y');
+        } catch (\Throwable $e) {
+            return (string) $row->booking_date . ' ' . (string) $row->booking_time;
+        }
+    }
+
+    /** Subject of a notice to the staff: "New Event: <name> - <when> - <event>". $kind: new | moved | cancelled | cancelled_admin | confirmed_admin. */
+    private function staffSubject(object $row, string $kind): string
+    {
+        $keys = ['new' => 'SUBJ_STAFF_NEW', 'moved' => 'SUBJ_STAFF_MOVED', 'cancelled' => 'SUBJ_STAFF_CANCELLED', 'cancelled_admin' => 'SUBJ_STAFF_CANCELLED_ADMIN', 'confirmed_admin' => 'SUBJ_STAFF_CONFIRMED_ADMIN'];
+
+        return Text::sprintf('PLG_SYSTEM_WEBGBOOKING_' . ($keys[$kind] ?? 'SUBJ_STAFF_NEW'), (string) $row->customer_name, $this->shortWhen($row), $this->eventLabel($row));
+    }
+
+    /** Subject of the default customer emails: "Confirmed: <event> with <host> on <day> at <time>". $v is the row as the customer sees it (custView). */
+    private function custSubject(object $v, string $kind): string
+    {
+        $keys = ['confirmed' => 'SUBJ_CUST_CONFIRMED', 'rescheduled' => 'SUBJ_CUST_RESCHEDULED', 'cancelled' => 'SUBJ_CUST_CANCELLED'];
+        $day  = $this->mailDay((string) $v->booking_date);
+        $day  = $this->langTag() === 'it-IT' ? mb_strtolower($day) : $day;
+
+        return Text::sprintf('PLG_SYSTEM_WEBGBOOKING_' . ($keys[$kind] ?? 'SUBJ_CUST_CONFIRMED'), $this->eventLabel($v), $this->hostName(), $day, (string) $v->booking_time);
+    }
+
+    /** The appointment's place for the staff: a Meet link, or the number to call. */
+    private function staffWhere(object $row): array
+    {
+        if ($this->rowLocation($row) === 'phone') {
+            return [Text::_('PLG_SYSTEM_WEBGBOOKING_MAIL_L_WHERE'), Text::sprintf('PLG_SYSTEM_WEBGBOOKING_MAIL_WHERE_PHONE_STAFF', (string) $row->customer_phone)];
+        }
+        $url = (string) ($row->meeting_url ?? '');
+
+        return [Text::_('PLG_SYSTEM_WEBGBOOKING_MAIL_L_WHERE'), $url !== '' ? [Text::_('PLG_SYSTEM_WEBGBOOKING_MAIL_WHERE_MEET_STAFF'), $url] : Text::_('PLG_SYSTEM_WEBGBOOKING_LOC_MEET')];
+    }
+
+    /** Rows of the staff notice, in the order of the Calendly one: event, invitee, email, guests, when, zone, place. */
+    private function staffRows(object $row): array
+    {
+        $P    = 'PLG_SYSTEM_WEBGBOOKING_';
+        $rows = [[Text::_($P . 'MAIL_L_EVENT_TYPE'), $this->eventLabel($row)], [Text::_($P . 'MAIL_L_INVITEE'), (string) $row->customer_name]];
+        $rows[] = [Text::_($P . 'MAIL_L_INVITEE_EMAIL'), [(string) $row->customer_email, 'mailto:' . $row->customer_email]];
+        if (!empty($row->guest_email)) {
+            $rows[] = [Text::_($P . 'MAIL_L_EXTRA_GUESTS'), (string) $row->guest_email];
+        }
+        $rows[] = [Text::_($P . 'MAIL_L_WHEN'), $this->mailDay((string) $row->booking_date) . ', ' . $this->mailTime($row)];
+        $rows[] = [Text::_($P . 'MAIL_L_DURATION'), Text::sprintf($P . 'MAIL_DURATION_VALUE', $this->rowDuration($row))];
+        $rows[] = $this->staffWhere($row);
+        if (($tzl = $this->customerTzLine($row)) !== '') {
+            $rows[] = [Text::_($P . 'MAIL_L_CUSTOMER_TZ'), $tzl];
+        }
+        if (($row->payment_status ?? '') === 'paid' && (int) ($row->amount_cents ?? 0) > 0) {
+            $amt    = self::formatAmount((int) $row->amount_cents, (string) $row->currency, $this->langTag());
+            $rows[] = [Text::_($P . 'MAIL_L_PAYMENT'), Text::sprintf($P . 'STAFF_PAID_LINE', $amt, (string) ($row->stripe_payment_intent ?? ''))];
+        }
+        $rows[] = [Text::_($P . 'MAIL_L_BOOKING'), '#' . (int) $row->id];
+
+        return $rows;
+    }
+
+    /** The questions the customer answered, as bold question + answer: phone, the form's questions, the notes. */
+    private function answerRows(object $row): array
+    {
+        $P  = 'PLG_SYSTEM_WEBGBOOKING_';
+        $ar = [];
+        if (trim((string) $row->customer_phone) !== '') {
+            $ar[] = [Text::_($P . 'MAIL_L_PHONE_NUMBER'), (string) $row->customer_phone];
+        }
+        foreach ($this->customAnswers($row) as $it) {
+            $ar[] = [$it['l'], $it['v']];
+        }
+        if (trim((string) $row->notes) !== '') {
+            $ar[] = [Text::_($P . 'MAIL_L_NOTES'), (string) $row->notes];
+        }
+
+        return $ar;
+    }
+
+    /** Send the staff a trace of something done from the panel (the mailbox keeps a record of everything). */
+    private function sendStaffTrace(object $row, string $kind): void
+    {
+        try {
+            $mf  = Factory::getContainer()->get(MailerFactoryInterface::class);
+            $this->rootFrom($row);
+            $tos = $this->staffRecipients($row);
+            if (!$tos) {
+                return;
+            }
+            $this->sendLayout($mf, $tos, $this->staffSubject($row, $kind), $this->staffMail($row, $kind, $this->manageUrl($row), $this->rowDateFmt($row)));
+        } catch (\Throwable $e) {
+        }
+    }
+
     private function shortDate(string $date): string
     {
         try {
             return (new \DateTime($date))->format($this->langTag() === 'en-US' ? 'm/d/Y' : 'd/m/Y');
         } catch (\Throwable $e) {
             return $date;
+        }
+    }
+
+    /** A time zone identifier from the browser, accepted only when PHP knows it ('' otherwise). */
+    private function cleanTz(string $tz): string
+    {
+        $tz = trim($tz);
+        if ($tz === '' || \strlen($tz) > 64 || !preg_match('#^[A-Za-z0-9_+\-/]+$#', $tz)) {
+            return '';
+        }
+        try {
+            new \DateTimeZone($tz);
+        } catch (\Throwable $e) {
+            return '';
+        }
+
+        return $tz;
+    }
+
+    /**
+     * The booking page sends the exact instant it showed ("ts", unix seconds) next to the date and time in the SITE zone that the server
+     * works with. They must be the same instant: a mismatch means the browser and the server disagree on the zone rules (or the request
+     * was altered), and the customer would see a different time than the one that is booked.
+     */
+    private function instantMatches(string $date, string $time, int $ts): bool
+    {
+        if ($ts <= 0) {
+            return true;
+        }
+        try {
+            $at = (new \DateTime($date . ' ' . $time . ':00', new \DateTimeZone($this->siteTz())))->getTimestamp();
+        } catch (\Throwable $e) {
+            return false;
+        }
+
+        return abs($at - $ts) <= 60;
+    }
+
+    /** The customer's zone when they chose one that differs from the site zone, else ''. */
+    private function customerTz(object $row): string
+    {
+        $c = $this->cleanTz((string) ($row->customer_tz ?? ''));
+
+        return ($c !== '' && $c !== $this->siteTz()) ? $c : '';
+    }
+
+    /**
+     * What the customer (or the guest) sees: the same booking with date and time written in THEIR zone (when they chose one), and `_tz` naming it.
+     * Only for what is shown. Instants (.ics, Google, calendar link, reminders due) always come from the original row, in the site zone.
+     */
+    private function custView(object $row): object
+    {
+        $c = $this->customerTz($row);
+        if ($c === '') {
+            return $row;
+        }
+        try {
+            $dt = (new \DateTime($row->booking_date . ' ' . $row->booking_time . ':00', new \DateTimeZone($this->siteTz())))->setTimezone(new \DateTimeZone($c));
+        } catch (\Throwable $e) {
+            return $row;
+        }
+        $v               = clone $row;
+        $v->booking_date = $dt->format('Y-m-d');
+        $v->booking_time = $dt->format('H:i');
+        $v->_tz          = $c;
+
+        return $v;
+    }
+
+    /** "dd/mm/YYYY" of a row as shown (site zone, or the customer's for a view made by custView). */
+    private function rowDateFmt(object $row): string
+    {
+        try {
+            return (new \DateTime((string) $row->booking_date))->format('d/m/Y');
+        } catch (\Throwable $e) {
+            return (string) $row->booking_date;
+        }
+    }
+
+    /** For the staff: where the customer is and what time it is there ("America/New_York: 04:30 (EDT)"), '' when the customer is in the site zone. */
+    private function customerTzLine(object $row): string
+    {
+        $c = $this->customerTz($row);
+        if ($c === '') {
+            return '';
+        }
+        try {
+            $dt = (new \DateTime($row->booking_date . ' ' . $row->booking_time . ':00', new \DateTimeZone($this->siteTz())))->setTimezone(new \DateTimeZone($c));
+
+            return Text::sprintf('PLG_SYSTEM_WEBGBOOKING_MAIL_TZ_LINE', $c, $dt->format('H:i'), $dt->format('T'), $this->mailDay($dt->format('Y-m-d')));
+        } catch (\Throwable $e) {
+            return $c;
         }
     }
 
@@ -3454,7 +3678,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
     private function mailTime(object $row): string
     {
         try {
-            $tz = new \DateTimeZone($this->siteTz());
+            $tz = new \DateTimeZone((string) ($row->_tz ?? '') !== '' ? (string) $row->_tz : $this->siteTz());
             $dt = new \DateTime($row->booking_date . ' ' . $row->booking_time . ':00', $tz);
 
             return $row->booking_time . ' (' . $dt->format('T') . ', ' . $tz->getName() . ')';
@@ -3473,6 +3697,9 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
         }
         $rows[] = [Text::_('PLG_SYSTEM_WEBGBOOKING_MAIL_L_DATE'), $this->mailDay((string) $row->booking_date)];
         $rows[] = [Text::_('PLG_SYSTEM_WEBGBOOKING_MAIL_L_TIME'), $this->mailTime($row)];
+        if ($who === 'staff' && ($tzl = $this->customerTzLine($row)) !== '') {
+            $rows[] = [Text::_('PLG_SYSTEM_WEBGBOOKING_MAIL_L_CUSTOMER_TZ'), $tzl];
+        }
         $rows[] = [Text::_('PLG_SYSTEM_WEBGBOOKING_MAIL_L_DURATION'), Text::sprintf('PLG_SYSTEM_WEBGBOOKING_MAIL_DURATION_VALUE', $this->rowDuration($row))];
         if ($this->rowLocation($row) === 'phone') {
             $rows[] = [Text::_('PLG_SYSTEM_WEBGBOOKING_MAIL_L_WHERE'), $who === 'guest' ? Text::_('PLG_SYSTEM_WEBGBOOKING_MAIL_WHERE_PHONE') : Text::sprintf('PLG_SYSTEM_WEBGBOOKING_LOC_PHONE_AT', (string) $row->customer_phone)];
@@ -3557,6 +3784,10 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
     private function customerMail(object $row, string $kind, string $manageUrl, string $dateFmt, string $bodyTpl = ''): array
     {
         $P      = 'PLG_SYSTEM_WEBGBOOKING_';
+        $calUrl = $this->mailCalendarUrl($row);            // instants: from the original row
+        $orig   = $row;
+        $row    = $this->custView($row);                   // what is written: date and time in the customer's zone
+        $dateFmt = $this->rowDateFmt($row);
         $guest  = \in_array($kind, ['guest', 'guest_reminder'], true);
         $custom = trim($bodyTpl) !== '';
         $hello  = Text::_($P . 'EMAIL_HELLO') . ($guest ? ',' : ' ' . $row->customer_name . ',');
@@ -3585,7 +3816,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                     $lead[] = Text::sprintf($P . 'EMAIL_GUEST_REMINDER_INTRO', $row->customer_name);
                     break;
                 default:
-                    $lead[] = $hello . ' ' . Text::_($P . 'EMAIL_CONFIRMED');
+                    $lead[] = $hello . ' ' . Text::sprintf($P . 'EMAIL_CONFIRMED_HOST', $this->hostName());
             }
         }
         if (\in_array($kind, ['confirmed', 'request', 'rescheduled', 'guest'], true)) {
@@ -3609,10 +3840,17 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             $buttons[] = ['label' => Text::_($P . 'EMAIL_MEET_BTN'), 'url' => (string) $row->meeting_url, 'primary' => true];
         }
         if (\in_array($kind, ['confirmed', 'request', 'rescheduled', 'guest'], true)) {
-            $buttons[] = ['label' => Text::_($P . 'MAIL_BTN_CALENDAR'), 'url' => $this->mailCalendarUrl($row)];
+            $buttons[] = ['label' => Text::_($P . 'MAIL_BTN_CALENDAR'), 'url' => $calUrl];
         }
+        $change = false;
         if (!$guest && $kind !== 'link' && !self::hasPlaceholder($bodyTpl, ['{cancel_block}', '{cancel_url}'])) {
-            $buttons[] = ['label' => Text::_($P . 'EMAIL_MANAGE_LINK'), 'url' => $manageUrl];
+            $buttons[] = ['label' => Text::_($P . 'BTN_RESCHEDULE'), 'url' => $manageUrl . '#reschedule'];
+            $buttons[] = ['label' => Text::_($P . 'BTN_CANCEL'), 'url' => $manageUrl . '#cancel'];
+            $change    = true;
+        }
+        $secs = [];
+        if (!$guest && \in_array($kind, ['confirmed', 'request', 'rescheduled'], true) && ($ans = $this->answerRows($row))) {
+            $secs[] = ['title' => Text::_($P . 'MAIL_S_YOUR_ANSWERS'), 'stacked' => true, 'rows' => $ans];
         }
 
         return [
@@ -3621,6 +3859,8 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             'lead'        => $lead,
             'notices'     => $notices,
             'summary'     => ['rows' => $this->mailRows($row, $guest ? 'guest' : 'customer')],
+            'sections'    => $secs,
+            'others_label' => $change ? Text::_($P . 'CHANGE_Q') : '',
             'body_html'   => $custom ? $this->renderTpl($bodyTpl, $row, $manageUrl, $dateFmt) : '',
             'buttons'     => $buttons,
             'signoff'     => Text::_($P . 'EMAIL_SIGNOFF'),
@@ -3638,11 +3878,15 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             $title = Text::_($P . 'MAIL_TITLE_STAFF_MOVED');
             $lead  = [Text::sprintf($P . 'EMAIL_ADMIN_MOVED_INTRO', $this->shortDate((string) ($row->_prevDate ?? '')), (string) ($row->_prevTime ?? ''))];
         } elseif ($kind === 'cancelled') {
-            $title = Text::_($P . 'MAIL_TITLE_STAFF_CANCELLED');
-            $lead  = [Text::sprintf($P . 'CANCEL_ADMIN_BODY', $this->shortDate((string) $row->booking_date), $row->booking_time, $row->customer_name, $row->customer_email)];
+            $byAdmin = !empty($row->_byAdmin);
+            $title   = Text::_($P . ($byAdmin ? 'MAIL_TITLE_STAFF_CANCELLED_ADMIN' : 'MAIL_TITLE_STAFF_CANCELLED'));
+            $lead    = [Text::sprintf($P . ($byAdmin ? 'CANCEL_ADMIN_BODY_BY_ADMIN' : 'CANCEL_ADMIN_BODY'), $this->shortDate((string) $row->booking_date), $row->booking_time, $row->customer_name, $row->customer_email)];
             if ($paid) {
                 $notices[] = ['tone' => 'warn', 'text' => Text::sprintf($P . 'CANCEL_REFUND_STAFF', self::formatAmount((int) $row->amount_cents, (string) $row->currency, $this->langTag()), (string) ($row->stripe_payment_intent ?? ''))];
             }
+        } elseif ($kind === 'confirmed_admin') {
+            $title = Text::_($P . 'MAIL_TITLE_STAFF_CONFIRMED_ADMIN');
+            $lead  = [Text::_($P . 'MAIL_STAFF_LEAD_CONFIRMED_ADMIN')];
         } else {
             $title = Text::_($P . 'MAIL_TITLE_STAFF_NEW');
             $lead  = [Text::_($P . ($paid ? 'MAIL_STAFF_LEAD_NEW_PAID' : 'MAIL_STAFF_LEAD_NEW'))];
@@ -3653,9 +3897,9 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             'preheader'   => Text::sprintf($P . 'MAIL_PRE_STAFF', $row->customer_name, $this->mailDay((string) $row->booking_date), $row->booking_time),
             'lead'        => $lead,
             'notices'     => $notices,
-            'summary'     => ['rows' => $this->mailRows($row, 'staff')],
+            'summary'     => ['rows' => $this->staffRows($row)],
             'body_html'   => trim($bodyTpl) !== '' ? $this->renderTpl($bodyTpl, $row, $manageUrl, $dateFmt) : '',
-            'sections'    => $this->mailStaffSections($row),
+            'sections'    => ($ans = $this->answerRows($row)) ? [['title' => Text::_($P . 'MAIL_S_QUESTIONS'), 'stacked' => true, 'rows' => $ans]] : [],
             'buttons'     => [['label' => Text::_($P . 'MAIL_BTN_BACKEND'), 'url' => $this->mailBackendUrl($row), 'primary' => true]],
             'footer_note' => Text::sprintf($P . 'MAIL_STAFF_FOOTER', (string) ($this->mailBrand()['name'])),
         ];
@@ -3826,6 +4070,9 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             $host   = parse_url(Uri::root(), PHP_URL_HOST) ?: 'webg';
             $esc    = fn($s) => str_replace(["\\", "\r", "\n", ',', ';'], ['\\\\', '', '\\n', '\\,', '\\;'], (string) $s);
             $evName = trim((string) ($row->event_name ?? ''));
+            // for a customer in another zone the description says the time in their zone (the calendar app already shows it in the device's zone)
+            $cvv     = $this->custView($row);
+            $icsWhen = (!empty($cvv->_tz) && $method !== 'CANCEL') ? "\n" . $this->mailDay((string) $cvv->booking_date) . ' ' . $this->mailTime($cvv) : '';
 
             $lines = [
                 'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//WebG Booking//IT', 'CALSCALE:GREGORIAN', 'METHOD:' . $method,
@@ -3839,10 +4086,10 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
 
             if ($this->rowLocation($row) === 'phone') {
                 $call = $forGuest ? Text::_('PLG_SYSTEM_WEBGBOOKING_ICS_PHONE_GUEST') : Text::sprintf('PLG_SYSTEM_WEBGBOOKING_ICS_PHONE', (string) ($row->customer_phone ?? ''));
-                $lines[] = 'DESCRIPTION:' . $esc($call);
+                $lines[] = 'DESCRIPTION:' . $esc($call . $icsWhen);
                 $lines[] = 'LOCATION:' . $esc($call);
             } elseif (!empty($row->meeting_url)) {
-                $lines[] = 'DESCRIPTION:' . $esc($row->meeting_url);
+                $lines[] = 'DESCRIPTION:' . $esc((string) $row->meeting_url . $icsWhen);
                 $lines[] = 'LOCATION:' . $esc($row->meeting_url);
                 $lines[] = 'URL:' . $esc($row->meeting_url);
             }
@@ -4565,11 +4812,9 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             );
         }
 
-        $dateFmt = $row->booking_date;
-        try {
-            $dateFmt = (new \DateTime($row->booking_date))->format('d/m/Y');
-        } catch (\Throwable $ex) {
-        }
+        $mv      = $this->custView($row);               // the date and time as this customer sees them (their zone)
+        $dateFmt = $this->rowDateFmt($mv);
+        $timeTxt = !empty($mv->_tz) ? $this->mailTime($mv) : (string) $mv->booking_time;
 
         if ($this->rowLocation($row) === 'phone') {
             $meet = '<tr><td>' . $e(Text::_('PLG_SYSTEM_WEBGBOOKING_LOCATION')) . '</td><td>' . $e(Text::sprintf('PLG_SYSTEM_WEBGBOOKING_LOC_PHONE_AT', (string) $row->customer_phone)) . '</td></tr>';
@@ -4598,7 +4843,9 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             'ev'      => self::signEv($this->eventFromRow($row), (string) $this->getApplication()->get('secret')),
             'duration' => $this->rowDuration($row),
             'ajaxUrl' => Uri::root(true) . '/index.php?option=com_ajax&group=system&plugin=webgbooking&format=json',
+            'siteTz'  => $this->siteTz(),
             'labels'  => [
+                'tzLabel'   => Text::_('PLG_SYSTEM_WEBGBOOKING_TZ_LABEL'),
                 'stepTime'  => Text::_('PLG_SYSTEM_WEBGBOOKING_STEP_TIME'),
                 'noSlots'   => Text::_('PLG_SYSTEM_WEBGBOOKING_NO_SLOTS'),
                 'back'      => Text::_('PLG_SYSTEM_WEBGBOOKING_BACK'),
@@ -4618,17 +4865,17 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
         $body = '<h1>' . $e(Text::_('PLG_SYSTEM_WEBGBOOKING_MANAGE_TITLE')) . '</h1>'
             . '<p class="muted">' . $e(Text::_('PLG_SYSTEM_WEBGBOOKING_MANAGE_INTRO')) . '</p>'
             . '<table>'
-            . '<tr><td>' . $e(Text::_('PLG_SYSTEM_WEBGBOOKING_EMAIL_LABEL_DATE')) . '</td><td>' . $e($dateFmt) . '</td></tr>'
-            . '<tr><td>' . $e(Text::_('PLG_SYSTEM_WEBGBOOKING_EMAIL_LABEL_TIME')) . '</td><td>' . $e($row->booking_time) . '</td></tr>'
+            . '<tr><td>' . $e(Text::_('PLG_SYSTEM_WEBGBOOKING_EMAIL_LABEL_DATE')) . '</td><td id="wgb-m-date">' . $e($dateFmt) . '</td></tr>'
+            . '<tr><td>' . $e(Text::_('PLG_SYSTEM_WEBGBOOKING_EMAIL_LABEL_TIME')) . '</td><td id="wgb-m-time">' . $e($timeTxt) . '</td></tr>'
             . '<tr><td>' . $e(Text::_('PLG_SYSTEM_WEBGBOOKING_FIELD_NAME')) . '</td><td>' . $e($row->customer_name) . '</td></tr>'
             . $meet
             . '</table>'
             . ($this->paidLocked($row)
                 ? '<hr><p class="muted">' . $e(Text::sprintf('PLG_SYSTEM_WEBGBOOKING_PAID_LOCKED', max(0, (int) $this->params->get('paid_cancel_hours', 24)))) . '</p>'
-                : '<h2>' . $e(Text::_('PLG_SYSTEM_WEBGBOOKING_MANAGE_RESCHEDULE_TITLE')) . '</h2>'
+                : '<h2 id="reschedule">' . $e(Text::_('PLG_SYSTEM_WEBGBOOKING_MANAGE_RESCHEDULE_TITLE')) . '</h2>'
                 . '<div class="wgb-booking" data-wgb="' . $cfgAttr . '"></div>'
                 . '<hr>'
-                . '<form method="post" action="' . $e($cancelAction) . '">'
+                . '<form method="post" id="cancel" action="' . $e($cancelAction) . '">'
                 . '<input type="hidden" name="token" value="' . $e($row->manage_token) . '">'
                 . '<button type="submit" class="btn btn-danger">' . $e(Text::_('PLG_SYSTEM_WEBGBOOKING_MANAGE_CANCEL_BTN')) . '</button>'
                 . '</form>');
@@ -4740,6 +4987,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             $row->emailSubjectTpl = (string) ($cc['subject'] ?? '');
             $row->emailBodyTpl    = (string) ($cc['body'] ?? '');
             $mail = $row->_custOn ? $this->notify($row, false, 'customer') : 'off';
+            $this->sendStaffTrace($row, 'confirmed_admin');
             $this->fireHook($row, 'booking.confirmed', ['confirmed_by' => 'staff']);
 
             return ['status' => 'ok', 'mail' => $mail];
@@ -4851,9 +5099,14 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
         $token = $input->post->getString('token', '');
         $date  = $input->post->getString('date', '');
         $time  = $input->post->getString('time', '');
+        $custTz  = $this->cleanTz($input->post->getString('tz', ''));
+        $shownTs = (int) $input->post->getInt('ts', 0);
 
         if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date) || !preg_match('/^\d{2}:\d{2}$/', $time)) {
             $this->respond(['ok' => false, 'message' => Text::_('PLG_SYSTEM_WEBGBOOKING_BOOK_ERR')]);
+        }
+        if (!$this->instantMatches($date, $time, $shownTs)) {
+            $this->respond(['ok' => false, 'message' => Text::_('PLG_SYSTEM_WEBGBOOKING_TIME_MISMATCH')]);
         }
 
         $row = $this->bookingByToken($token);
@@ -4919,6 +5172,10 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                         'updated'      => Factory::getDate()->toSql(),
                         'seq'          => $seq,
                     ];
+                    if ($custTz !== '') {
+                        $changes->customer_tz = $custTz;
+                        $row->customer_tz     = $custTz;
+                    }
                     if (\is_array($plan)) {
                         // The appointment moved: reminders start over for the new time.
                         $changes->reminders_sent = (string) json_encode($this->pastOffsets($plan, $newTs, $now));
@@ -4945,7 +5202,14 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             $this->notify($row, true);
             $this->fireHook($row, 'booking.rescheduled', ['previous_date' => $prevDate, 'previous_time' => $prevTime]);
 
-            $this->respond(['ok' => true, 'message' => Text::_('PLG_SYSTEM_WEBGBOOKING_RESCHEDULE_OK')]);
+            $rv = $this->custView($row);
+            $this->respond([
+                'ok'      => true,
+                'message' => Text::_('PLG_SYSTEM_WEBGBOOKING_RESCHEDULE_OK'),
+                // the page header follows the move at once (it used to show the old date and time until a reload)
+                'date'    => $this->rowDateFmt($rv),
+                'time'    => !empty($rv->_tz) ? $this->mailTime($rv) : (string) $rv->booking_time,
+            ]);
         } catch (\Throwable $e) {
             $this->respond(['ok' => false, 'message' => Text::_('PLG_SYSTEM_WEBGBOOKING_BOOK_ERR')]);
         }
@@ -5011,12 +5275,17 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             } catch (\Throwable $e) {
             }
 
-            if (!$byAdmin && $tos) {
+            // The staff gets the notice also when the cancellation was done from the panel: the mailbox keeps a trace of everything.
+            if ($tos) {
                 try {
-                    $this->sendLayout($mf, $tos, Text::sprintf($P . 'CANCEL_ADMIN_SUBJECT', $this->shortDate((string) $row->booking_date), $row->booking_time), $this->staffMail($row, 'cancelled', $this->manageUrl($row), $dateFmt));
+                    $row->_byAdmin = $byAdmin;
+                    $this->sendLayout($mf, $tos, $this->staffSubject($row, $byAdmin ? 'cancelled_admin' : 'cancelled'), $this->staffMail($row, 'cancelled', $this->manageUrl($row), $dateFmt));
                 } catch (\Throwable $e) {
                 }
             }
+
+            $cv      = $this->custView($row);
+            $dateFmt = $this->rowDateFmt($cv);
 
             $notices = [];
             if (!$byAdmin && ($row->payment_status ?? '') === 'paid' && (int) ($row->amount_cents ?? 0) > 0) {
@@ -5025,15 +5294,15 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             $back = !empty($row->source_url) && preg_match('#^https?://#i', (string) $row->source_url) ? (string) $row->source_url : '';
             $m = [
                 'title'       => Text::_($P . 'MAIL_TITLE_CANCELLED'),
-                'preheader'   => Text::sprintf($P . 'MAIL_PRE_APPT', $this->mailDay((string) $row->booking_date), $row->booking_time),
-                'lead'        => [Text::_($P . 'EMAIL_HELLO') . ' ' . $row->customer_name . ',', Text::sprintf($byAdmin ? $P . 'CANCEL_BY_STAFF_BODY' : $P . 'CANCEL_CUSTOMER_LINE', $dateFmt, $row->booking_time)],
+                'preheader'   => Text::sprintf($P . 'MAIL_PRE_APPT', $this->mailDay((string) $cv->booking_date), $cv->booking_time),
+                'lead'        => [Text::_($P . 'EMAIL_HELLO') . ' ' . $row->customer_name . ',', Text::sprintf($byAdmin ? $P . 'CANCEL_BY_STAFF_BODY' : $P . 'CANCEL_CUSTOMER_LINE', $dateFmt, $cv->booking_time)],
                 'notices'     => $notices,
-                'summary'     => ['rows' => $this->mailRows($row, 'customer')],
+                'summary'     => ['rows' => $this->mailRows($cv, 'customer')],
                 'buttons'     => $back !== '' ? [['label' => Text::_($P . 'MAIL_BTN_REBOOK'), 'url' => $back, 'primary' => true]] : [],
                 'signoff'     => Text::_($P . 'EMAIL_SIGNOFF'),
                 'footer_note' => Text::_($P . 'EMAIL_FOOTER'),
             ];
-            $this->sendLayout($mf, $row->customer_email, Text::_($P . 'CANCEL_CUSTOMER_SUBJECT'), $m, $this->buildIcs($row, 'CANCEL'), 'CANCEL');
+            $this->sendLayout($mf, $row->customer_email, $this->custSubject($cv, 'cancelled'), $m, $this->buildIcs($row, 'CANCEL'), 'CANCEL');
             $sent = true;
         } catch (\Throwable $e) {
         }
@@ -5181,8 +5450,9 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                 $this->rootHint = (string) $plan['root'];
             }
             $manageUrl = $this->manageUrl($row, (string) ($plan['root'] ?? ''));
-            $dateFmt   = (new \DateTime($row->booking_date))->format('d/m/Y');
-            $tags      = ['{name}' => $row->customer_name, '{date}' => $dateFmt, '{time}' => $row->booking_time];
+            $rv        = $this->custView($row);
+            $dateFmt   = $this->rowDateFmt($rv);
+            $tags      = ['{name}' => $row->customer_name, '{date}' => $dateFmt, '{time}' => $rv->booking_time];
 
             $subjectTpl = (string) ($plan['subject'] ?? '');
             if ($subjectTpl === '') {

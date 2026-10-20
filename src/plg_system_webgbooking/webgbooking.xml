@@ -197,6 +197,9 @@
                 <field name="privacy_url" type="text" default="" size="60" autocomplete="off"
                     label="PLG_SYSTEM_WEBGBOOKING_PRIVACY_URL_LABEL"
                     description="PLG_SYSTEM_WEBGBOOKING_PRIVACY_URL_DESC" />
+                <field name="host_name" type="text" default="" size="40" autocomplete="off"
+                    label="PLG_SYSTEM_WEBGBOOKING_HOST_NAME_LABEL"
+                    description="PLG_SYSTEM_WEBGBOOKING_HOST_NAME_DESC" />
                 <field name="mail_from_name" type="text" default="" size="40" autocomplete="off"
                     label="PLG_SYSTEM_WEBGBOOKING_MAIL_FROM_NAME_LABEL"
                     description="PLG_SYSTEM_WEBGBOOKING_MAIL_FROM_NAME_DESC" />

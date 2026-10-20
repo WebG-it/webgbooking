@@ -88,6 +88,7 @@ return new class () implements InstallerScriptInterface {
                 . $db->quoteName('fx_last') . ' DATETIME NULL,'
                 . $db->quoteName('avail_cfg') . ' TEXT NULL,'
                 . $db->quoteName('ip_hash') . ' VARCHAR(32) NULL,'
+                . $db->quoteName('customer_tz') . ' VARCHAR(64) NULL,'
                 . $db->quoteName('staff_to') . ' VARCHAR(500) NULL,'
                 . $db->quoteName('hook_cfg') . ' TEXT NULL,'
                 . $db->quoteName('cust_cfg') . ' MEDIUMTEXT NULL,'
@@ -131,6 +132,8 @@ return new class () implements InstallerScriptInterface {
                 'fx_last'               => 'DATETIME NULL',
                 'avail_cfg'             => 'TEXT NULL',
                 'ip_hash'               => 'VARCHAR(32) NULL',
+                // 0.35.2: the time zone the customer chose on the booking page (names the time in their emails, reminders and .ics)
+                'customer_tz'           => 'VARCHAR(64) NULL',
                 // 0.33.2: the element's staff recipient(s), so reschedule / cancel / alerts reach the same people as the booking
                 'staff_to'              => 'VARCHAR(500) NULL',
                 // 0.34.0: where the element's webhook points (name of the header profile, no secret), for the later events
