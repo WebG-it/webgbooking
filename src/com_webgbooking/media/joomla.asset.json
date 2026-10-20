@@ -6,6 +6,11 @@
   "license": "GPL-2.0-or-later",
   "assets": [
     {
+      "name": "com_webgbooking.booking-detail",
+      "type": "style",
+      "uri": "com_webgbooking/booking-detail.css"
+    },
+    {
       "name": "com_webgbooking.copylink",
       "type": "script",
       "uri": "com_webgbooking/copylink.js",
