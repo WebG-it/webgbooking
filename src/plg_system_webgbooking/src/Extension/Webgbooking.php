@@ -37,7 +37,7 @@ use WebG\Plugin\System\Webgbooking\Mail\EmailLayout;
 final class Webgbooking extends CMSPlugin implements SubscriberInterface
 {
     /** Cache-buster for the bundled front-end assets (wgb.css/js, UIkit). Bump when those change. */
-    public const ASSET_VER = '0.35.1';
+    public const ASSET_VER = '0.35.2';
 
     protected $autoloadLanguage = true;
 
@@ -3975,6 +3975,78 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
         return (json_decode(self::httpBody($resp), true) ?: [])['access_token'] ?? '';
     }
 
+    /** Text for a Google event: no markup, no angle brackets (Google would show them as HTML), no control characters, bounded. */
+    private function gcalText(string $s, int $max = 1000): string
+    {
+        $s = str_replace(['<', '>'], ' ', strip_tags($s));
+        $s = (string) preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F]/', '', $s);
+
+        return trim(mb_substr($s, 0, $max));
+    }
+
+    /**
+     * Description of the Google event, plain text, in the site language. What Marco needs to read in his calendar and what the
+     * customer sees in theirs: kind of appointment and length, how it takes place (Meet link, or "I call you on <number>"), phone,
+     * notes, answers to the questions, the guest, and the link to move or cancel.
+     * The link to move or cancel is NOT written when the booking has a guest: the guest sees the whole description in the invite and
+     * must not be able to cancel or move somebody else's appointment (the guest's own email never carries the link either).
+     * $meetUrl: the Meet link when it is known (at insert it is not: Google makes it, and a second call adds it).
+     */
+    private function gcalDescription(object $row, string $meetUrl = ''): string
+    {
+        $P    = 'PLG_SYSTEM_WEBGBOOKING_';
+        $name = $this->gcalText((string) ($row->event_name ?? ''), 120);
+        $name = $name !== '' ? $name : Text::_($P . 'ICS_SUMMARY');
+        $L    = [Text::sprintf($P . 'GCAL_D_TYPE', $name, $this->rowDuration($row))];
+        $ph   = $this->gcalText((string) ($row->customer_phone ?? ''), 40);
+
+        if ($this->rowLocation($row) === 'phone') {
+            $L[] = Text::sprintf($P . 'LOC_PHONE_AT', $ph);
+        } else {
+            $url = $meetUrl !== '' ? $meetUrl : (string) ($row->meeting_url ?? '');
+            if ($url !== '' && self::httpUrlOk($url)) {
+                $L[] = Text::sprintf($P . 'GCAL_D_MEET', $url);
+            }
+            if ($ph !== '') {
+                $L[] = Text::sprintf($P . 'GCAL_D_PHONE', $ph);
+            }
+        }
+
+        $notes = $this->gcalText((string) ($row->notes ?? ''));
+        if ($notes !== '') {
+            $L[] = Text::sprintf($P . 'GCAL_D_NOTES', $notes);
+        }
+        foreach ($this->customAnswers($row) as $a) {
+            $v = $this->gcalText($a['v'], 500);
+            if ($v !== '') {
+                $L[] = $this->gcalText($a['l'], 120) . ': ' . $v;
+            }
+        }
+
+        $guest = trim((string) ($row->guest_email ?? ''));
+        if ($guest !== '') {
+            $L[] = Text::sprintf($P . 'GCAL_D_GUEST', $this->gcalText($guest, 200));
+        } elseif (!empty($row->manage_token)) {
+            $this->rootFrom($row);
+            $L[] = '';
+            $L[] = Text::sprintf($P . 'GCAL_D_MANAGE', $this->manageUrl($row));
+        }
+
+        return implode("\n", $L);
+    }
+
+    /** "Google Meet: <link>" (just "Google Meet" while the link is not known) or "Telefonata: ti chiamo io al <numero>". */
+    private function gcalLocation(object $row, string $meetUrl = ''): string
+    {
+        $P = 'PLG_SYSTEM_WEBGBOOKING_';
+        if ($this->rowLocation($row) === 'phone') {
+            return Text::sprintf($P . 'GCAL_LOC_PHONE', $this->gcalText((string) ($row->customer_phone ?? ''), 40));
+        }
+        $url = $meetUrl !== '' ? $meetUrl : (string) ($row->meeting_url ?? '');
+
+        return ($url !== '' && self::httpUrlOk($url)) ? Text::sprintf($P . 'GCAL_LOC_MEET_URL', $url) : Text::_($P . 'GCAL_LOC_MEET');
+    }
+
     /**
      * Create a Google Calendar event. For a Meet appointment it carries an auto-generated Google Meet link;
      * for a phone appointment it has NO conference, the number is in the title and the description.
@@ -4012,25 +4084,23 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
 
             $evName  = trim((string) ($row->event_name ?? ''));
             $summary = ($evName !== '' ? $evName : 'WebG Booking') . ' - ' . $row->customer_name;
-            $desc    = (string) $row->notes;
-
             if ($phone) {
                 $summary .= ' (' . Text::sprintf('PLG_SYSTEM_WEBGBOOKING_GCAL_PHONE_TITLE', $row->customer_phone) . ')';
-                $desc     = Text::sprintf('PLG_SYSTEM_WEBGBOOKING_GCAL_PHONE_DESC', $row->customer_name, $row->customer_phone)
-                    . ($desc !== '' ? "\n\n" . $desc : '');
             }
 
             $payload = [
-                'summary'     => $summary,
-                'description' => $desc,
-                'start'       => ['dateTime' => $start, 'timeZone' => $tz],
-                'end'         => ['dateTime' => $end, 'timeZone' => $tz],
-                'attendees'   => $attendees,
+                'summary'      => $summary,
+                'description'  => $this->gcalDescription($row),
+                'location'     => $this->gcalLocation($row),
+                'start'        => ['dateTime' => $start, 'timeZone' => $tz],
+                'end'          => ['dateTime' => $end, 'timeZone' => $tz],
+                'attendees'    => $attendees,
+                // said out loud instead of trusting the defaults: the appointment is confirmed and blocks the time (free/busy)
+                'transparency' => 'opaque',
+                'status'       => 'confirmed',
             ];
 
-            if ($phone) {
-                $payload['location'] = Text::sprintf('PLG_SYSTEM_WEBGBOOKING_GCAL_PHONE_TITLE', $row->customer_phone);
-            } else {
+            if (!$phone) {
                 $payload['conferenceData'] = ['createRequest' => [
                     'requestId'             => 'wgb-' . substr(hash_hmac('sha256', 'meet|' . $row->id, (string) $this->getApplication()->get('secret')), 0, 16),
                     'conferenceSolutionKey' => ['type' => 'hangoutsMeet'],
@@ -4067,17 +4137,33 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                 return '';
             }
 
+            $meetUrl = '';
             if (!empty($data['hangoutLink'])) {
-                return $data['hangoutLink'];
-            }
-
-            foreach (($data['conferenceData']['entryPoints'] ?? []) as $ep) {
-                if (($ep['entryPointType'] ?? '') === 'video' && !empty($ep['uri'])) {
-                    return $ep['uri'];
+                $meetUrl = (string) $data['hangoutLink'];
+            } else {
+                foreach (($data['conferenceData']['entryPoints'] ?? []) as $ep) {
+                    if (($ep['entryPointType'] ?? '') === 'video' && !empty($ep['uri'])) {
+                        $meetUrl = (string) $ep['uri'];
+                        break;
+                    }
                 }
             }
 
-            return '';
+            if ($meetUrl !== '') {
+                // Google makes the Meet link, so it is only known now: add it to the description and to the place. sendUpdates=none:
+                // the invite already went out with the Meet block, a second email for a text change would only confuse.
+                try {
+                    $http->patch(
+                        $base . '/' . rawurlencode((string) $row->google_event_id) . '?sendUpdates=none',
+                        json_encode(['description' => $this->gcalDescription($row, $meetUrl), 'location' => $this->gcalLocation($row, $meetUrl)]),
+                        $hdr,
+                        15
+                    );
+                } catch (\Throwable $e) {
+                }
+            }
+
+            return $meetUrl;
         } catch (\Throwable $e) {
             return '';
         }
@@ -4891,7 +4977,12 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
 
             (new HttpFactory())->getHttp()->patch(
                 'https://www.googleapis.com/calendar/v3/calendars/' . rawurlencode($cal) . '/events/' . rawurlencode((string) $row->google_event_id) . '?sendUpdates=all',
-                json_encode(['start' => ['dateTime' => $start, 'timeZone' => $tz], 'end' => ['dateTime' => $end, 'timeZone' => $tz]]),
+                json_encode([
+                    'start'       => ['dateTime' => $start, 'timeZone' => $tz],
+                    'end'         => ['dateTime' => $end, 'timeZone' => $tz],
+                    'description' => $this->gcalDescription($row),
+                    'location'    => $this->gcalLocation($row),
+                ]),
                 ['Authorization' => 'Bearer ' . $token, 'Content-Type' => 'application/json'],
                 15
             );
