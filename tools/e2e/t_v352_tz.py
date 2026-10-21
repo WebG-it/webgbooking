@@ -147,6 +147,12 @@ try:
         sel = ch.js("(function(){var s=document.querySelector('.wgb-tz-sel');return s?{v:s.value,t:s.options[s.selectedIndex].text,n:s.options.length,l:(document.querySelector('label[for=\"'+s.id+'\"]')||{}).textContent}:null})()")
         check('V1 %s: the zone menu is under the calendar, with a label, and the zone of the browser is selected' % tz, bool(sel) and bool(sel.get('l')) and sel.get('v') in ALIAS.get(tz, [tz]), sel)
         check('V1b %s: the option reads "<name of the zone> (hh:mm)" with the time it is there now, and there are many zones to choose from' % tz, bool(sel) and re.search(r'\(\d{2}:\d{2}\)$', sel.get('t', '')) is not None and sel.get('n', 0) > 20, sel)
+        if tz == 'Europe/Rome':
+            # the menu names each group by its best-known city (New York, not Detroit), with the same name the emails use
+            today_iso = dt.date.today().isoformat()
+            ny_name = tz_label('America/New_York', today_iso, '12:00')
+            eo = ch.js("(function(n){var o=[].slice.call(document.querySelectorAll('.wgb-tz-sel option')).filter(function(x){return x.text.indexOf(n+' (')===0})[0];return o?{v:o.value,t:o.text}:null})(%s)" % json.dumps(ny_name))
+            check('V1c the "Eastern" group of the menu stands for America/New_York (not Detroit), named like the emails name it (%s)' % tz_label('America/New_York', today_iso, '12:00'), bool(eo) and eo['v'] == 'America/New_York' and eo['t'].startswith(tz_label('America/New_York', today_iso, '12:00') + ' ('), eo)
         # what the visitor can pick this month vs what the server offers, converted
         now = dt.datetime.now(zoneinfo.ZoneInfo(tz))
         y, m = now.year, now.month

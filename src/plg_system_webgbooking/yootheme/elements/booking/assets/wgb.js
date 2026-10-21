@@ -14,13 +14,14 @@
   /* the instant (ms) of a wall-clock time in a zone, right across a change of the clock */
   function wallMs(y,mo,d,h,mi,z){var g=Date.UTC(y,mo-1,d,h,mi,0),o1=tzOff(g,z),r=g-o1,o2=tzOff(r,z);if(o2!==o1)r=g-o2;return r;}
   function pad2x(n){return (n<10?'0':'')+n;}
-  var TZ_LIST=['Pacific/Honolulu','America/Anchorage','America/Los_Angeles','America/Denver','America/Chicago','America/New_York','America/Halifax','America/Sao_Paulo','Atlantic/Azores','Europe/London','Europe/Lisbon','Europe/Paris','Europe/Rome','Europe/Athens','Europe/Istanbul','Europe/Moscow','Africa/Cairo','Africa/Johannesburg','Africa/Nairobi','Asia/Dubai','Asia/Karachi','Asia/Kolkata','Asia/Dhaka','Asia/Bangkok','Asia/Shanghai','Asia/Singapore','Asia/Tokyo','Asia/Seoul','Australia/Perth','Australia/Sydney','Pacific/Auckland','UTC'];
+  /* the best-known city of each zone: it stands for its group in the menu (so "Eastern" is New York, not Detroit); also the list when the browser cannot give all the zones */
+  var TZ_LIST=['Pacific/Honolulu','America/Anchorage','America/Los_Angeles','America/Phoenix','America/Denver','America/Chicago','America/Mexico_City','America/New_York','America/Toronto','America/Bogota','America/Lima','America/Caracas','America/Halifax','America/Santiago','America/Sao_Paulo','America/Argentina/Buenos_Aires','America/St_Johns','Atlantic/Reykjavik','Atlantic/Azores','Europe/London','Europe/Dublin','Europe/Lisbon','Europe/Paris','Europe/Rome','Europe/Berlin','Europe/Madrid','Europe/Athens','Europe/Helsinki','Europe/Istanbul','Europe/Moscow','Africa/Casablanca','Africa/Lagos','Africa/Cairo','Africa/Johannesburg','Africa/Nairobi','Asia/Jerusalem','Asia/Riyadh','Asia/Tehran','Asia/Dubai','Asia/Karachi','Asia/Kolkata','Asia/Dhaka','Asia/Bangkok','Asia/Jakarta','Asia/Shanghai','Asia/Hong_Kong','Asia/Singapore','Asia/Manila','Asia/Tokyo','Asia/Seoul','Australia/Perth','Australia/Adelaide','Australia/Sydney','Pacific/Auckland','UTC'];
   /* options of the zone menu: "<long name> (<current time there>)", one per distinct (name, clock rules); the zone in use is always the one that stands for its group */
   function tzOptions(loc,first){
     var ids=[];try{if(typeof Intl.supportedValuesOf==='function')ids=Intl.supportedValuesOf('timeZone');}catch(e){}
     if(!ids||!ids.length)ids=TZ_LIST.slice();
     var pri=[];for(var i=0;i<first.length;i++){if(first[i]&&tzOk(first[i])&&pri.indexOf(first[i])<0)pri.push(first[i]);}
-    var all=pri.concat(ids.filter(function(z){return pri.indexOf(z)<0;})),now=Date.now(),seen={},out=[];
+    var cur=TZ_LIST.filter(function(z){return pri.indexOf(z)<0;}),all=pri.concat(cur).concat(ids.filter(function(z){return pri.indexOf(z)<0&&cur.indexOf(z)<0;})),now=Date.now(),seen={},out=[];
     for(var j=0;j<all.length;j++){var z=all[j];if(!tzOk(z))continue;
       var nm='';try{var pp=new Intl.DateTimeFormat(loc,{timeZone:z,timeZoneName:'long'}).formatToParts(new Date(now));for(var k=0;k<pp.length;k++){if(pp[k].type==='timeZoneName')nm=pp[k].value;}}catch(e){}
       if(!nm)nm=z.replace(/_/g,' ');

@@ -65,14 +65,15 @@ r = book(None, D, '10:00', name='Mario Rossi', email='ny352@example.invalid', ph
 bid = last_id()
 check('Z1 a booking that carries the exact instant and the visitor zone is accepted, the zone is stored', r.get('ok') is True and sql('SELECT customer_tz FROM joom_webgbooking_bookings WHERE id=%d' % bid) == NY, r)
 d_ny, t_ny, ab = in_zone(D, '10:00', NY)
+LBL_NY = tz_label(NY, d_ny, t_ny)
 cm = mails_to('ny352@example.invalid')
 cm = cm[0] if cm else None
-check('Z2 the customer email says the time in THEIR zone, naming it (e.g. "%s (%s, %s)")' % (t_ny, ab, NY), cm is not None and ('%s (%s, %s)' % (t_ny, ab, NY)) in txt(cm['html']), cm and txt(cm['html'])[:700])
-check('Z2b ... not the site time with the site zone as the appointment time', cm is not None and ('10:00 (CEST, Europe/Rome)' not in txt(cm['html']) and '10:00 (CET, Europe/Rome)' not in txt(cm['html'])) or t_ny == '10:00', cm and txt(cm['html'])[:300])
+check('Z2 the customer email says the time in THEIR zone, naming it (e.g. "%s (%s, %s)")' % (t_ny, ab, NY), cm is not None and ('%s (%s)' % (t_ny, LBL_NY)) in txt(cm['html']), cm and txt(cm['html'])[:700])
+check('Z2b ... not the site time with the site zone as the appointment time', cm is not None and ('10:00 (%s)' % tz_label('Europe/Rome', D, '10:00')) not in txt(cm['html']) or t_ny == '10:00', cm and txt(cm['html'])[:300])
 dd = dt.date.fromisoformat(d_ny)
 check('Z3 default customer subject: "Confirmed|Confermato: <event> with|con <host> ... at|alle <time in their zone>"', cm is not None and re.match(r'^(Confirmed|Confermato): Riunione di prova (with|con) .+ (on|il) .*%s$' % re.escape(('at ' if cm['subject'].startswith('Confirmed') else 'alle ') + t_ny), cm['subject']) is not None, cm and cm['subject'])
 check('Z3b ... and the day in the subject is the day THEIR calendar shows (%s)' % d_ny, cm is not None and dd.strftime('%d/%m/%Y') in cm['subject'], cm and cm['subject'])
-check('Z4 the .ics keeps the true instant in UTC and says the time in their zone in the description', cm is not None and ('DTSTART:' + site_instant(D, '10:00').astimezone(dt.timezone.utc).strftime('%Y%m%dT%H%M%SZ')) in cm['ics'].replace('\r', '') and ('%s (%s, %s)' % (t_ny, ab, NY)).replace(',', '\\,') in cm['ics'].replace('\r', '').replace('\n ', ''), cm and cm['ics'][:600])
+check('Z4 the .ics keeps the true instant in UTC and says the time in their zone in the description', cm is not None and ('DTSTART:' + site_instant(D, '10:00').astimezone(dt.timezone.utc).strftime('%Y%m%dT%H%M%SZ')) in cm['ics'].replace('\r', '') and ('%s (%s)' % (t_ny, LBL_NY)).replace(',', '\\,') in cm['ics'].replace('\r', '').replace('\n ', ''), cm and cm['ics'][:600])
 check('Z5 the customer email has the questions with their answers, the change question and the two links (reschedule, cancel)', cm is not None and 'Il mio sito' in cm['html'] and re.search(r'(Need to make changes\?|Devi cambiare qualcosa\?)', cm['html']) and '#reschedule' in cm['html'] and '#cancel' in cm['html'], cm and txt(cm['html'])[:900])
 check('Z5b ... "Hi/Ciao <name>, your appointment with <host> is confirmed" and the invitee asked questions (phone and notes included)', cm is not None and re.search(r'(your appointment with .+ is confirmed|il tuo appuntamento con .+ è confermato)', txt(cm['html'])) and '+1 212 555 0100' in cm['html'] and 'Voglio capire' in cm['html'], cm and txt(cm['html'])[:500])
 sm = [m for m in mails_to('staff@wgbtest.invalid') if m['subject']]
@@ -94,7 +95,7 @@ r = book(None, D, '11:30', email='inj352@example.invalid', cfg=cfg, extra={'tz':
 check('Z8b a zone with odd characters is ignored too', r.get('ok') is True and sql("SELECT IFNULL(customer_tz,'NULL') FROM joom_webgbooking_bookings WHERE customer_email='inj352@example.invalid'") == 'NULL', r)
 r = book(None, D, '12:00', email='old352@example.invalid', cfg=cfg)
 cm0 = mails_to('old352@example.invalid')
-check('Z9 a booking without zone (an old page in cache) keeps the site time and zone in its email', r.get('ok') is True and cm0 and '12:00 (' in txt(cm0[0]['html']) and 'Europe/Rome' in txt(cm0[0]['html']), cm0 and txt(cm0[0]['html'])[:300])
+check('Z9 a booking without zone (an old page in cache) keeps the site time and zone in its email', r.get('ok') is True and cm0 and ('12:00 (%s)' % tz_label('Europe/Rome', D, '12:00')) in txt(cm0[0]['html']), cm0 and txt(cm0[0]['html'])[:300])
 
 # the zones: only real identifiers; abbreviations fall back to the site zone; the old alias some browsers report is accepted
 for zz, want in (('EST', 'NULL'), ('CEST', 'NULL'), ('CET', 'NULL'), ('GMT+2', 'NULL'), ('Asia/Calcutta', 'Asia/Calcutta'), ('UTC', 'UTC'), ('Europe/Rome', 'Europe/Rome')):
@@ -127,17 +128,17 @@ check('X4 the admin detail stylesheet has real fallbacks (no variable that falls
 tok = sql('SELECT manage_token FROM joom_webgbooking_bookings WHERE id=%d' % bid)
 murl = BASE + '/index.php?option=com_ajax&group=system&plugin=webgbooking&format=html&action=manage&token=' + tok
 pg = Sess().get(murl)
-check('B1 the manage page shows date and time in the customer\'s zone (and has ids the page can update)', ('%s (%s, %s)' % (t_ny, ab, NY)) in html.unescape(pg) and 'id="wgb-m-date"' in pg and 'id="wgb-m-time"' in pg and 'id="reschedule"' in pg and 'id="cancel"' in pg, re.findall(r'wgb-m-time">([^<]*)', pg))
+check('B1 the manage page shows date and time in the customer\'s zone (and has ids the page can update)', ('%s (%s)' % (t_ny, LBL_NY)) in html.unescape(pg) and 'id="wgb-m-date"' in pg and 'id="wgb-m-time"' in pg and 'id="reschedule"' in pg and 'id="cancel"' in pg, re.findall(r'wgb-m-time">([^<]*)', pg))
 D2 = day(6)
 ts2 = int(site_instant(D2, '14:00').timestamp())
 x = json.loads(Sess().post(AJAX + '&action=reschedule', {'action': 'reschedule', 'token': tok, 'date': D2, 'time': '14:00', 'ts': str(ts2), 'tz': 'Asia/Tokyo'}))
 d_t, t_t, ab_t = in_zone(D2, '14:00', 'Asia/Tokyo')
-check('B2 the reschedule answer carries the new date and time as the customer sees them (the header showed the old ones until a reload)', x.get('ok') is True and x.get('date') == dt.date.fromisoformat(d_t).strftime('%d/%m/%Y') and x.get('time', '').startswith(t_t) and 'Asia/Tokyo' in x.get('time', ''), x)
+check('B2 the reschedule answer carries the new date and time as the customer sees them (the header showed the old ones until a reload)', x.get('ok') is True and x.get('date') == dt.date.fromisoformat(d_t).strftime('%d/%m/%Y') and x.get('time', '').startswith(t_t) and tz_label('Asia/Tokyo', d_t, t_t) in x.get('time', ''), x)
 check('B3 the zone of the booking follows the new choice', sql('SELECT customer_tz FROM joom_webgbooking_bookings WHERE id=%d' % bid) == 'Asia/Tokyo')
 js = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'src', 'plg_system_webgbooking', 'yootheme', 'elements', 'booking', 'assets', 'wgb.js'), encoding='utf-8').read()
 check('B4 the script writes that date and time into the page header on success', "getElementById('wgb-m-date')" in js and "getElementById('wgb-m-time')" in js and 'res.date' in js)
 mv = [m for m in mails_to('ny352@example.invalid') if m['subject'].lower().startswith(('rescheduled', 'spostato'))]
-check('B5 the customer email for the move: "Rescheduled|Spostato: ..." with the time in the new zone', mv and ('%s (%s, Asia/Tokyo)' % (t_t, ab_t)) in txt(mv[-1]['html']), [m['subject'] for m in mails_to('ny352@example.invalid')])
+check('B5 the customer email for the move: "Rescheduled|Spostato: ..." with the time in the new zone', mv and ('%s (%s)' % (t_t, tz_label('Asia/Tokyo', d_t, t_t))) in txt(mv[-1]['html']), [m['subject'] for m in mails_to('ny352@example.invalid')])
 ms = [m for m in mails_to('staff@wgbtest.invalid') if re.match(r'^(Event moved|Evento spostato)', m['subject'])]
 check('B6 the staff email for the move: "Event moved|Evento spostato: ..." in the site time', ms and re.search(r'14:00 \w+, %d' % dt.date.fromisoformat(D2).day, ms[-1]['subject']), [m['subject'] for m in mails_to('staff@wgbtest.invalid')][-3:])
 
@@ -152,7 +153,7 @@ jx('rm -f /tmp/mail/*.eml')
 jx('cd /var/www/html && php cli/joomla.php scheduler:run --id=4 2>&1 | tail -2')
 rm_ = [m for m in mails_to('ny352@example.invalid')]
 d_r, t_r, ab_r = in_zone(w.strftime('%Y-%m-%d'), w.strftime('%H:%M'), 'Asia/Tokyo')
-check('R1 the reminder gives the time in the customer\'s zone, naming it', rm_ and ('%s (%s, Asia/Tokyo)' % (t_r, ab_r)) in txt(rm_[0]['html']), rm_ and txt(rm_[0]['html'])[:500])
+check('R1 the reminder gives the time in the customer\'s zone, naming it', rm_ and ('%s (%s)' % (t_r, tz_label('Asia/Tokyo', d_r, t_r))) in txt(rm_[0]['html']), rm_ and txt(rm_[0]['html'])[:500])
 check('R1b ... and the subject too (the time of the reminder subject is theirs)', rm_ and t_r in rm_[0]['subject'], rm_ and rm_[0]['subject'])
 
 # ---- what the admin does leaves a trace in the staff mailbox
@@ -169,7 +170,7 @@ st_mails = mails_to('staff@wgbtest.invalid')
 cu_mails = mails_to('adm352@example.invalid')
 check('S0 cancelled from the panel: the booking is cancelled and the customer is told', sql('SELECT status FROM joom_webgbooking_bookings WHERE id=%d' % aid) == 'cancelled' and cu_mails, sql('SELECT status FROM joom_webgbooking_bookings WHERE id=%d' % aid))
 check('S1 ... and the staff gets a notice too, saying it was done from the panel (a trace in the mailbox)', st_mails and re.search(r'(Canceled by you|Annullato da te)', st_mails[0]['subject']) and re.search(r'(You canceled|Hai annullato)', txt(st_mails[0]['html'])), [m['subject'] for m in st_mails])
-check('S2 the customer\'s cancellation notice has the new default subject ("Canceled|Annullato: <event> with|con <host> ...")', cu_mails and re.match(r'^(Canceled|Annullato): Telefonata di prova (with|con) ', cu_mails[0]['subject']) is not None, [m['subject'] for m in cu_mails])
+check('S2 the customer\'s cancellation notice has the new default subject ("Canceled|Annullato: <event> with|con <host> ...")', cu_mails and re.match(r'^(Cancel+ed|Annullato): Telefonata di prova (with|con) ', cu_mails[0]['subject']) is not None, [m['subject'] for m in cu_mails])
 # a customer cancelling by themselves still tells the staff
 r = book(None, day(7), '11:00', email='self352@example.invalid', phone='+39 333 000 8888', cfg=cfg2, name='Da Solo')
 sid = last_id()

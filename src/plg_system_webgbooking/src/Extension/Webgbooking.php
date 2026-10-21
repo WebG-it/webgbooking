@@ -18,6 +18,7 @@ namespace WebG\Plugin\System\Webgbooking\Extension;
 
 use Joomla\CMS\Component\ComponentHelper;
 use Joomla\CMS\Factory;
+use Joomla\CMS\Layout\FileLayout;
 use Joomla\CMS\Http\HttpFactory;
 use Joomla\CMS\Language\LanguageFactoryInterface;
 use Joomla\CMS\Language\Text;
@@ -33,11 +34,12 @@ use WebG\Plugin\System\Webgbooking\Booking\DirectPage;
 use WebG\Plugin\System\Webgbooking\Booking\EventTypes;
 use WebG\Plugin\System\Webgbooking\Booking\WidgetConfig;
 use WebG\Plugin\System\Webgbooking\Mail\EmailLayout;
+use WebG\Plugin\System\Webgbooking\Mail\EmailTemplates;
 
 final class Webgbooking extends CMSPlugin implements SubscriberInterface
 {
     /** Cache-buster for the bundled front-end assets (wgb.css/js, UIkit). Bump when those change. */
-    public const ASSET_VER = '0.35.2';
+    public const ASSET_VER = '0.35.3';
 
     protected $autoloadLanguage = true;
 
@@ -1538,7 +1540,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             $this->useSiteLanguage();
             $mf      = Factory::getContainer()->get(MailerFactoryInterface::class);
             $dateFmt = (new \DateTime($row->booking_date))->format('d/m/Y');
-            $this->sendLayout($mf, $row->customer_email, Text::_('PLG_SYSTEM_WEBGBOOKING_LINKMAIL_SUBJECT'), $this->customerMail($row, 'link', $this->manageUrl($row), $dateFmt));
+            $this->sendComposed($mf, $row->customer_email, $this->composeEmail('customer_link', $row, ['manageUrl' => $this->manageUrl($row)]));
 
             return true;
         } catch (\Throwable $ex) {
@@ -1824,22 +1826,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             $P    = 'PLG_SYSTEM_WEBGBOOKING_';
             $mf   = Factory::getContainer()->get(MailerFactoryInterface::class);
             $gone = \in_array($why, ['slot', 'past'], true);
-            $cv   = $this->custView($row);          // what the customer sees: their zone
-            $date = $this->mailDay((string) $cv->booking_date);
-            // the day name opens a sentence in the box, but sits inside one here: Italian writes it in lower case
-            $inText = strncmp($this->langTag(), 'it', 2) === 0 ? mb_strtolower($date) : $date;
-            $amount = self::formatAmount((int) $row->amount_cents, (string) $row->currency, $this->langTag());
-            $back   = !empty($row->source_url) && preg_match('#^https?://#i', (string) $row->source_url) ? (string) $row->source_url : $this->siteRoot();
-            $m = [
-                'title'       => Text::_($gone ? $P . 'PAY_LATE_TITLE' : $P . 'PAY_LATE_SUBJECT_CHECK'),
-                'preheader'   => Text::sprintf($P . 'MAIL_PRE_APPT', $date, $cv->booking_time),
-                'lead'        => [Text::_($P . 'EMAIL_HELLO') . ' ' . $row->customer_name . ',', Text::sprintf($gone ? $P . 'PAY_LATE_BODY_GONE' : $P . 'PAY_LATE_BODY_CHECK', $inText, $cv->booking_time, $amount)],
-                'notices'     => [['tone' => 'warn', 'text' => Text::sprintf($P . 'EMAIL_PAID', $amount)]],
-                'summary'     => ['rows' => $this->mailRows($cv, 'customer')],
-                'buttons'     => $gone ? [['label' => Text::_($P . 'PAY_LATE_CTA'), 'url' => $back, 'primary' => true]] : [],
-                'footer_note' => Text::_($P . 'EMAIL_FOOTER'),
-            ];
-            $this->sendLayout($mf, $row->customer_email, Text::_($gone ? $P . 'PAY_LATE_SUBJECT_GONE' : $P . 'PAY_LATE_SUBJECT_CHECK'), $m);
+            $this->sendComposed($mf, $row->customer_email, $this->composeEmail($gone ? 'customer_late_gone' : 'customer_late_check', $row, ['manageUrl' => '']));
         } catch (\Throwable $x) {
             $this->wlog(Text::sprintf('PLG_SYSTEM_WEBGBOOKING_LOG_MAIL_FAILED', 'late payment', (int) $row->id));
         }
@@ -3300,7 +3287,17 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                     : $this->custSubject($cv, 'confirmed');
                 $bodyTpl    = $elBody !== '' ? $elBody : trim((string) $this->params->get('email_body', ''));
             }
-            $this->sendLayout($mf, $row->customer_email, $subject, $this->customerMail($row, $reschedule ? 'rescheduled' : ($isRequest ? 'request' : 'confirmed'), $manageUrl, $dateFmt, $bodyTpl), $ics);
+            if ($bodyTpl !== '') {
+                // a text written in the old per-element or plugin field: shown as before, inside the default layout
+                $this->sendLayout($mf, $row->customer_email, $subject, $this->customerMail($row, $reschedule ? 'rescheduled' : ($isRequest ? 'request' : 'confirmed'), $manageUrl, $dateFmt, $bodyTpl), $ics);
+            } else {
+                $key = $reschedule ? 'customer_rescheduled' : ($isRequest ? 'customer_request' : 'customer_confirmed');
+                $x   = ['manageUrl' => $manageUrl];
+                if (!$reschedule && !empty($ownSubject)) {
+                    $x['subject'] = $subject;             // a subject written in the old fields still wins
+                }
+                $this->sendComposed($mf, $row->customer_email, $this->composeEmail($key, $row, $x), $ics);
+            }
 
         }
     }
@@ -3312,9 +3309,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             return;
         }
         $icsGuest = $this->buildIcs($row, $reschedule ? 'REQUEST' : 'PUBLISH', true);
-        $gv       = $this->custView($row);
-        $gSubject = self::fillTpl(Text::_('PLG_SYSTEM_WEBGBOOKING_EMAIL_GUEST_SUBJECT'), ['{name}' => $row->customer_name, '{date}' => $this->rowDateFmt($gv), '{time}' => $gv->booking_time]);
-        $this->sendLayout($mf, $row->guest_email, $gSubject, $this->customerMail($row, 'guest', '', $dateFmt), $icsGuest);
+        $this->sendComposed($mf, $row->guest_email, $this->composeEmail('guest_invite', $row, ['manageUrl' => '']), $icsGuest);
     }
 
     /** Keep only valid addresses of a comma separated list (max 500 chars). */
@@ -3365,7 +3360,16 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
         if (self::isLegacyDefaultBody($sBody)) {
             $sBody = '';
         }
-        $this->sendLayout($mf, $tos, $sSub, $this->staffMail($row, $moved ? 'moved' : 'new', $manageUrl, $dateFmt, $sBody));
+        if ($sBody !== '') {
+            $this->sendLayout($mf, $tos, $sSub, $this->staffMail($row, $moved ? 'moved' : 'new', $manageUrl, $dateFmt, $sBody));
+
+            return;
+        }
+        $x = ['manageUrl' => $manageUrl];
+        if (!$moved && $sSubTpl !== '') {
+            $x['subject'] = $sSub;
+        }
+        $this->sendComposed($mf, $tos, $this->composeEmail($moved ? 'staff_moved' : 'staff_new', $row, $x));
     }
 
     /** Self-service management URL (cancel / future reschedule), authorised by the per-booking token. */
@@ -3444,6 +3448,488 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
     }
 
     /** Date for subjects and alerts in the order of the site language (28/10/2026; 10/28/2026 only for US English), instead of the stored 2026-10-28. */
+    // ------------------------------------------------------------------------------------------------
+    // The editable emails (0.35.3): ready-made text per email and language, differences stored in #__webgbooking_emailtexts
+    // ------------------------------------------------------------------------------------------------
+
+    /** What this site changed in one email, in one language: field => text (empty when nothing was changed). */
+    public function emailOverride(string $key, string $tag): array
+    {
+        static $cache = [];
+        $ck = $key . '|' . $tag;
+        if (!isset($cache[$ck])) {
+            $cache[$ck] = [];
+            try {
+                $db  = Factory::getContainer()->get(DatabaseInterface::class);
+                $raw = $db->setQuery(
+                    $db->getQuery(true)->select($db->quoteName('data'))->from($db->quoteName('#__webgbooking_emailtexts'))
+                        ->where($db->quoteName('email_key') . ' = ' . $db->quote($key))->where($db->quoteName('lang') . ' = ' . $db->quote($tag))
+                )->loadResult();
+                $arr = json_decode((string) $raw, true);
+                if (\is_array($arr)) {
+                    foreach (EmailTemplates::fields($key) as $f) {
+                        if (isset($arr[$f]) && \is_string($arr[$f])) {
+                            $cache[$ck][$f] = $arr[$f];
+                        }
+                    }
+                }
+            } catch (\Throwable $e) {
+                // no table yet (a site that has not run the update): the ready-made texts are used
+            }
+        }
+
+        return $cache[$ck];
+    }
+
+    /** The texts an email is written with: the ready-made ones of the language, with what the site changed on top. $override replaces the stored ones (preview). */
+    private function emailFields(string $key, ?array $override = null): array
+    {
+        $tag = $this->langTag();
+        $f   = EmailTemplates::defaults($key);
+        foreach (($override ?? $this->emailOverride($key, $tag)) as $k => $v) {
+            if (isset($f[$k]) && trim((string) $v) !== '') {
+                $f[$k] = (string) $v;
+            }
+        }
+
+        return $f;
+    }
+
+    /** Placeholder values (plain text) of an email. $v is the row as the reader sees it (custView for the customer), $orig the stored row. */
+    private function emailVars(string $key, object $v, object $orig, array $x): array
+    {
+        $P      = 'PLG_SYSTEM_WEBGBOOKING_';
+        $who    = EmailTemplates::group($key);
+        $day    = $this->mailDay((string) $v->booking_date);
+        $tzId   = !empty($v->_tz) ? (string) $v->_tz : $this->siteTz();
+        $event  = $this->eventLabel($v);
+        $host   = $this->hostName();
+        $manage = (string) ($x['manageUrl'] ?? '');
+        $amount = (($orig->payment_status ?? '') === 'paid' && (int) ($orig->amount_cents ?? 0) > 0) ? self::formatAmount((int) $orig->amount_cents, (string) $orig->currency, $this->langTag()) : '';
+        $answers = [];
+        foreach ($this->answerRows($orig) as $r) {
+            $answers[] = $r[0] . ': ' . $r[1];
+        }
+        $isPhone = $this->rowLocation($orig) === 'phone';
+        $loc     = $isPhone ? Text::sprintf($P . 'LOC_PHONE_AT', (string) $orig->customer_phone) : Text::_($P . 'LOC_MEET');
+
+        return [
+            'name'           => (string) $orig->customer_name,
+            'email'          => (string) $orig->customer_email,
+            'phone'          => (string) $orig->customer_phone,
+            'event'          => $event,
+            'duration'       => (string) $this->rowDuration($orig),
+            'date'           => $this->rowDateFmt($v),
+            'day'            => $day,
+            'time'           => (string) $v->booking_time,
+            'when'           => $day . ', ' . $this->mailTime($v),
+            'timezone'       => $this->tzName($tzId, $v),
+            'short_when'     => $this->shortWhen($v),
+            'host'           => $host,
+            'with_host'      => ($host === '' || mb_stripos($event, $host) !== false) ? '' : Text::sprintf($P . 'EM_WITH_HOST', $host),
+            'location'       => $loc,
+            'meet_url'       => $isPhone ? '' : (string) ($orig->meeting_url ?? ''),
+            'manage_url'     => $who === 'customer' ? $manage : '',
+            'reschedule_url' => $who === 'customer' && $manage !== '' ? $manage . '#reschedule' : '',
+            'cancel_url'     => $who === 'customer' && $manage !== '' ? $manage . '#cancel' : '',
+            'notes'          => (string) $orig->notes,
+            'answers'        => implode("\n", $answers),
+            'guest'          => (string) ($orig->guest_email ?? ''),
+            'amount'         => $amount,
+            'business'       => (string) ($this->mailBrand()['name'] ?? ''),
+            'booking_id'     => (string) (int) ($orig->id ?? 0),
+            'backend_url'    => $who === 'staff' ? $this->mailBackendUrl($orig) : '',
+            'prev_date'      => $this->shortDate((string) ($orig->_prevDate ?? '')),
+            'prev_time'      => (string) ($orig->_prevTime ?? ''),
+        ];
+    }
+
+    /** Fill {placeholders}: $html = true for the rich body (values escaped, line breaks kept), false for subject and title (plain text). */
+    private function fillEmail(string $s, array $vars, bool $html): string
+    {
+        // names of the old per-element texts still work in the new ones
+        $alias = ['custom' => 'answers', 'meet_block' => 'meet_button', 'cancel_block' => 'change_links'];
+        $s = (string) preg_replace_callback('/\{([a-z_]+)\}/', function ($m) use ($vars, $html, $alias) {
+            $k = $alias[$m[1]] ?? $m[1];
+            if (!\array_key_exists($k, $vars)) {
+                return $m[0];                    // a block token (or an unknown word): left for the layout
+            }
+            $val = (string) $vars[$k];
+
+            return $html ? nl2br(htmlspecialchars($val, ENT_QUOTES, 'UTF-8'), false) : $val;
+        }, $s);
+
+        return $html ? $s : trim((string) preg_replace('/\s{2,}/u', ' ', $s));
+    }
+
+    /** The blocks an email can have: token => spec for the layout. Missing data = no block. */
+    private function emailBlocks(string $key, object $v, object $orig, array $f, array $x): array
+    {
+        $P      = 'PLG_SYSTEM_WEBGBOOKING_';
+        $who    = EmailTemplates::group($key);
+        $manage = (string) ($x['manageUrl'] ?? '');
+        $isPhone = $this->rowLocation($orig) === 'phone';
+        $url     = (string) ($orig->meeting_url ?? '');
+        $b       = [];
+
+        $b['appointment_box'] = ['type' => 'summary', 'rows' => $who === 'staff' ? $this->staffRows($orig) : $this->mailRows($v, $who === 'guest' ? 'guest' : 'customer')];
+
+        if ($who === 'staff') {
+            $ans = $this->answerRows($orig);
+            $b['answers_block'] = ['type' => 'sections', 'sections' => $ans ? [['title' => Text::_($P . 'MAIL_S_QUESTIONS'), 'stacked' => true, 'rows' => $ans]] : []];
+        } elseif ($who === 'customer') {
+            // the customer's own words back to them: plain text, notes cut, the phone only once
+            $ans = $this->answerRows($orig, 300, true);
+            $b['answers_block'] = ['type' => 'sections', 'sections' => $ans ? [['title' => Text::_($P . 'MAIL_S_YOUR_ANSWERS'), 'stacked' => true, 'plain' => true, 'rows' => $ans]] : []];
+        }
+
+        if (!$isPhone && $url !== '' && isset($f['lbl_meet'])) {
+            $b['meet_button'] = ['type' => 'primary', 'label' => $f['lbl_meet'], 'url' => $url];
+        }
+        if (isset($f['lbl_calendar'])) {
+            $cal = $this->mailCalendarUrl($orig);
+            if ($cal !== '') {
+                $b['calendar_link'] = ['type' => 'links', 'links' => [['label' => $f['lbl_calendar'], 'url' => $cal]]];
+            }
+        }
+        if ($who === 'customer' && $manage !== '' && isset($f['lbl_reschedule'], $f['lbl_cancel'])) {
+            $b['change_links'] = ['type' => 'links', 'label' => $f['lbl_change'] ?? '', 'links' => [['label' => $f['lbl_reschedule'], 'url' => $manage . '#reschedule'], ['label' => $f['lbl_cancel'], 'url' => $manage . '#cancel']]];
+        }
+
+        $paid = ($orig->payment_status ?? '') === 'paid' && (int) ($orig->amount_cents ?? 0) > 0;
+        $amt  = $paid ? self::formatAmount((int) $orig->amount_cents, (string) $orig->currency, $this->langTag()) : '';
+        if ($paid && $who !== 'guest' && $who !== 'staff') {
+            $b['payment_block'] = ['type' => 'notices', 'notices' => [['tone' => \in_array($key, ['customer_late_gone', 'customer_late_check'], true) ? 'warn' : 'ok', 'text' => Text::sprintf($P . 'EMAIL_PAID', $amt)]]];
+        }
+
+        $notices = [];
+        if ($who === 'customer' && \in_array($key, ['customer_confirmed', 'customer_request', 'customer_rescheduled', 'customer_reminder'], true)) {
+            if ($isPhone) {
+                $notices[] = ['tone' => 'info', 'text' => Text::sprintf($P . 'EMAIL_PHONE_CALL', (string) $orig->customer_phone)];
+            } elseif ($url === '' && !empty($orig->_meetPending)) {
+                $notices[] = ['tone' => 'info', 'text' => Text::_($P . 'EMAIL_MEET_PENDING')];
+            }
+        }
+        if ($paid && \in_array($key, ['customer_cancelled'], true)) {
+            $notices[] = ['tone' => 'ok', 'text' => Text::sprintf($P . 'CANCEL_REFUND_CUSTOMER', $amt)];
+        }
+        if ($paid && \in_array($key, ['staff_cancelled', 'staff_cancelled_admin'], true)) {
+            $notices[] = ['tone' => 'warn', 'text' => Text::sprintf($P . 'CANCEL_REFUND_STAFF', $amt, (string) ($orig->stripe_payment_intent ?? ''))];
+        }
+        $b['notices'] = ['type' => 'notices', 'notices' => $notices];
+
+        if ($who === 'staff' && isset($f['lbl_backend'])) {
+            $b['backend_button'] = ['type' => 'primary', 'label' => $f['lbl_backend'], 'url' => $this->mailBackendUrl($orig)];
+        }
+        if (isset($f['lbl_rebook'])) {
+            $back = !empty($orig->source_url) && preg_match('#^https?://#i', (string) $orig->source_url) ? (string) $orig->source_url : ($key === 'customer_late_gone' ? $this->siteRoot() : '');
+            if ($back !== '') {
+                $b['rebook_button'] = ['type' => 'primary', 'label' => $f['lbl_rebook'], 'url' => $back];
+            }
+        }
+
+        return $b;
+    }
+
+    /**
+     * Compose one email from its (ready-made or changed) text: ['subject' => string, 'layout' => array for EmailLayout]. $x: manageUrl, subject (a
+     * subject written in the old per-element or plugin fields, which still wins), override (preview: the texts of the form), sample (no real booking).
+     */
+    public function composeEmail(string $key, object $orig, array $x = []): array
+    {
+        $P    = 'PLG_SYSTEM_WEBGBOOKING_';
+        $who  = EmailTemplates::group($key);
+        $v    = $who === 'staff' ? $orig : $this->custView($orig);
+        $f    = $this->emailFields($key, $x['override'] ?? null);
+        $vars = $this->emailVars($key, $v, $orig, $x);
+
+        $subject = isset($x['subject']) && trim((string) $x['subject']) !== '' ? (string) $x['subject'] : $this->fillEmail($f['subject'], $vars, false);
+        $title   = $this->fillEmail($f['title'], $vars, false);
+        $text    = $this->fillEmail($f['text'], $vars, true);
+
+        $day  = $vars['day'];
+        $layout = [
+            'title'       => $title,
+            'preheader'   => $who === 'staff'
+                ? Text::sprintf($P . 'MAIL_PRE_STAFF', $orig->customer_name, $day, $v->booking_time)
+                : Text::sprintf($P . 'MAIL_PRE_APPT', $day, $v->booking_time),
+            'template'    => $text,
+            'blocks'      => $this->emailBlocks($key, $v, $orig, $f, $x),
+            'signoff'     => $f['signoff'] ?? '',
+            'footer_note' => $who === 'staff' ? Text::sprintf($P . 'MAIL_STAFF_FOOTER', (string) ($this->mailBrand()['name'])) : Text::_($P . 'EMAIL_FOOTER'),
+        ];
+
+        return ['subject' => $subject, 'layout' => $layout];
+    }
+
+    /** Send one composed email (HTML + plain text) through the layout, which a template can override. */
+    private function sendComposed($mf, $to, array $composed, string $ics = '', string $icsMethod = 'PUBLISH'): void
+    {
+        $this->sendLayout($mf, $to, $composed['subject'], $composed['layout'], $ics, $icsMethod);
+    }
+
+    /** A readable name of a zone ("Eastern Daylight Time" / "Ora legale orientale USA"), the same the zone menu of the booking page shows; the abbreviation and the identifier when this PHP has no intl. */
+    private function tzName(string $tzId, ?object $v = null): string
+    {
+        try {
+            $tz = new \DateTimeZone($tzId);
+            $at = new \DateTime($v ? ($v->booking_date . ' ' . $v->booking_time . ':00') : 'now', $tz);
+            if (class_exists('\\IntlDateFormatter')) {
+                $f = new \IntlDateFormatter(str_replace('-', '_', $this->langTag()), \IntlDateFormatter::NONE, \IntlDateFormatter::NONE, $tz, null, 'zzzz');
+                $n = $f->format($at);
+                if (\is_string($n) && $n !== '') {
+                    return $n;
+                }
+            }
+
+            return $at->format('T') . ', ' . $tz->getName();
+        } catch (\Throwable $e) {
+            return $tzId;
+        }
+    }
+
+    // ------------------------------------------------------------------------------------------------
+    // The panel's side of the editable emails (called by the component): edit data, save, restore, preview, test
+    // ------------------------------------------------------------------------------------------------
+
+    /** Run something with the strings of another language (the text being edited), then put the language back. */
+    private function inLanguage(string $tag, callable $fn)
+    {
+        $app  = $this->getApplication();
+        $prev = $app->getLanguage();
+        $same = $prev->getTag() === $tag;
+        try {
+            if (!$same) {
+                $lang = EmailTemplates::language($tag);
+                if (method_exists($app, 'loadLanguage')) {
+                    $app->loadLanguage($lang);
+                }
+                Factory::$language = $lang;
+            }
+
+            return $fn();
+        } finally {
+            if (!$same) {
+                if (method_exists($app, 'loadLanguage')) {
+                    $app->loadLanguage($prev);
+                }
+                Factory::$language = $prev;
+            }
+        }
+    }
+
+    /** Languages the texts can be written in: the ones the product speaks. */
+    public function emailLanguages(): array
+    {
+        return ['it-IT', 'en-GB'];
+    }
+
+    /** One line per email for the list: key, name, group, help, and whether this site changed it (in that language). */
+    public function emailList(string $tag): array
+    {
+        $out = [];
+        foreach (EmailTemplates::keys() as $k) {
+            $legacy = $this->legacyTextOf($k);
+            $out[] = [
+                'key'      => $k,
+                'group'    => EmailTemplates::group($k),
+                'name'     => EmailTemplates::name($k, $tag),
+                'help'     => EmailTemplates::help($k, $tag),
+                'changed'  => $this->emailOverride($k, $tag) !== [],
+                'legacy'   => $legacy !== '',
+            ];
+        }
+
+        return $out;
+    }
+
+    /** A text written in the old plugin options (before 0.35.3), which still wins for that email: the editor says so and can bring it in. */
+    private function legacyTextOf(string $key): string
+    {
+        if ($key === 'customer_confirmed') {
+            return trim((string) $this->params->get('email_body', ''));
+        }
+        if ($key === 'customer_reminder') {
+            return trim((string) $this->params->get('reminder_body', ''));
+        }
+
+        return '';
+    }
+
+    /** What the editor needs for one email in one language: the ready-made texts, what is stored, the fields, the placeholders. */
+    public function emailEditorData(string $key, string $tag): array
+    {
+        if (!EmailTemplates::exists($key)) {
+            return [];
+        }
+        $defaults = EmailTemplates::defaults($key, $tag);
+        $stored   = $this->emailOverride($key, $tag);
+
+        return [
+            'key'          => $key,
+            'lang'         => $tag,
+            'name'         => EmailTemplates::name($key, $tag),
+            'help'         => EmailTemplates::help($key, $tag),
+            'group'        => EmailTemplates::group($key),
+            'fields'       => EmailTemplates::fields($key),
+            'defaults'     => $defaults,
+            'stored'       => $stored,
+            'values'       => $stored + $defaults,
+            'blocks'       => EmailTemplates::blocks($key),
+            'placeholders' => EmailTemplates::placeholderDocs($tag),
+            'legacy'       => $this->legacyTextOf($key),
+        ];
+    }
+
+    /** Save what the form says, but only where it differs from the ready-made text; nothing different = no stored line. Returns what was stored. */
+    public function saveEmailTexts(string $key, string $tag, array $fields, int $userId = 0): array
+    {
+        if (!EmailTemplates::exists($key) || !\in_array($tag, $this->emailLanguages(), true)) {
+            return [];
+        }
+        $defaults = EmailTemplates::defaults($key, $tag);
+        $clean    = [];
+        foreach (EmailTemplates::fields($key) as $f) {
+            if (isset($fields[$f])) {
+                $v = (string) $fields[$f];
+                // the body is rich text from the editor: reduced to simple tags; the one-line texts carry no markup
+                $clean[$f] = EmailTemplates::isRich($f) ? $this->cleanRichText($v) : trim(strip_tags($v));
+            }
+        }
+        $keep = EmailTemplates::onlyDifferences($key, $clean, $defaults);
+        $db   = Factory::getContainer()->get(DatabaseInterface::class);
+        $q    = static fn($v) => $db->quote($v);
+        $db->setQuery('DELETE FROM ' . $db->quoteName('#__webgbooking_emailtexts') . ' WHERE ' . $db->quoteName('email_key') . ' = ' . $q($key) . ' AND ' . $db->quoteName('lang') . ' = ' . $q($tag))->execute();
+        if ($keep) {
+            $db->setQuery(
+                'INSERT INTO ' . $db->quoteName('#__webgbooking_emailtexts') . ' (' . $db->quoteName('email_key') . ',' . $db->quoteName('lang') . ',' . $db->quoteName('data') . ',' . $db->quoteName('modified') . ',' . $db->quoteName('modified_by') . ') VALUES ('
+                . $q($key) . ',' . $q($tag) . ',' . $q((string) json_encode($keep, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) . ',' . $q(Factory::getDate()->toSql()) . ',' . (int) $userId . ')'
+            )->execute();
+        }
+
+        return $keep;
+    }
+
+    /** "Restore the default text": the stored line goes away, the ready-made text applies (and follows the next versions). */
+    public function restoreEmailTexts(string $key, string $tag): void
+    {
+        $db = Factory::getContainer()->get(DatabaseInterface::class);
+        $db->setQuery('DELETE FROM ' . $db->quoteName('#__webgbooking_emailtexts') . ' WHERE ' . $db->quoteName('email_key') . ' = ' . $db->quote($key) . ' AND ' . $db->quoteName('lang') . ' = ' . $db->quote($tag))->execute();
+    }
+
+    /** Bring a text from the old plugin option into the new editor ("convert"): the text becomes the body, the old option is emptied. */
+    public function convertLegacyText(string $key, string $tag, int $userId = 0): bool
+    {
+        $old = $this->legacyTextOf($key);
+        if ($old === '') {
+            return false;
+        }
+        $pname = $key === 'customer_confirmed' ? 'email_body' : 'reminder_body';
+        $data  = $this->emailEditorData($key, $tag);
+        // the old text sat between the appointment box and the buttons of the standard layout: the new body keeps that shape
+        $tpl = '<p>' . '{name}</p>' . $this->cleanRichText($old) . ($key === 'customer_reminder'
+            ? '{notices}{appointment_box}{meet_button}{change_links}' : '{payment_block}{notices}{appointment_box}{answers_block}{meet_button}{calendar_link}{change_links}');
+        $this->saveEmailTexts($key, $tag, ['text' => $tpl] + $data['values'], $userId);
+        $p = $this->params;
+        $p->set($pname, '');
+        $db = Factory::getContainer()->get(DatabaseInterface::class);
+        $db->setQuery('UPDATE ' . $db->quoteName('#__extensions') . ' SET ' . $db->quoteName('params') . ' = ' . $db->quote((string) $p->toString())
+            . ' WHERE ' . $db->quoteName('element') . ' = ' . $db->quote('webgbooking') . ' AND ' . $db->quoteName('folder') . ' = ' . $db->quote('system'))->execute();
+
+        return true;
+    }
+
+    /** Simple HTML only (what the editor's toolbar makes), nothing that runs or restyles. */
+    private function cleanRichText(string $html): string
+    {
+        $html = (string) preg_replace('#<(script|style|iframe|object|embed|noscript|template|svg|math|form|textarea|select|button)\b[^>]*>.*?</\1\s*>#is', '', $html);
+        $html = strip_tags($html, '<p><br><strong><b><em><i><u><ul><ol><li><a><h2><h3><blockquote>');
+        $html = (string) preg_replace('/<(p|br|strong|b|em|i|u|ul|ol|li|h2|h3|blockquote)\s+[^>]*>/i', '<$1>', $html);
+        $html = (string) preg_replace_callback('/<a\s+[^>]*>/i', static function ($m) {
+            return preg_match('/href\s*=\s*(["\'])([^"\']*)\1/i', $m[0], $h) && preg_match('#^(https?://|mailto:|tel:)#i', trim($h[2])) ? '<a href="' . htmlspecialchars(trim($h[2]), ENT_QUOTES, 'UTF-8') . '">' : '<a>';
+        }, $html);
+
+        return trim($html);
+    }
+
+    /** A booking that exists nowhere: the data the preview and the test email are written with. */
+    private function sampleBooking(string $key): object
+    {
+        $tz  = new \DateTimeZone($this->siteTz());
+        $day = (new \DateTime('now', $tz))->modify('+3 days');
+        $prev = (clone $day)->modify('-1 day');
+
+        return (object) [
+            'id'                     => 0,
+            'booking_date'           => $day->format('Y-m-d'),
+            'booking_time'           => '10:30',
+            'customer_name'          => Text::_('PLG_SYSTEM_WEBGBOOKING_SAMPLE_NAME'),
+            'customer_email'         => 'mario.rossi@example.com',
+            'customer_phone'         => '+1 212 555 0100',
+            'notes'                  => Text::_('PLG_SYSTEM_WEBGBOOKING_SAMPLE_NOTES'),
+            'status'                 => 'confirmed',
+            'meeting_url'            => 'https://meet.google.com/abc-defg-hij',
+            'guest_email'            => in_array($key, ['guest_invite', 'guest_reminder'], true) ? 'ospite@example.com' : '',
+            'manage_token'           => 'sample',
+            'source_url'             => 'https://www.example.com/prenota',
+            'custom_data'            => (string) json_encode([['l' => Text::_('PLG_SYSTEM_WEBGBOOKING_SAMPLE_Q1'), 'v' => Text::_('PLG_SYSTEM_WEBGBOOKING_SAMPLE_A1')], ['l' => Text::_('PLG_SYSTEM_WEBGBOOKING_SAMPLE_Q2'), 'v' => Text::_('PLG_SYSTEM_WEBGBOOKING_SAMPLE_A2')]], JSON_UNESCAPED_UNICODE),
+            'duration_min'           => 60,
+            'location'               => 'meet',
+            'event_name'             => Text::_('PLG_SYSTEM_WEBGBOOKING_SAMPLE_EVENT'),
+            'payment_status'         => 'paid',
+            'amount_cents'           => 2900,
+            'currency'               => 'EUR',
+            'stripe_payment_intent'  => 'pi_sample',
+            'customer_tz'            => 'America/New_York',
+            'seq'                    => 0,
+            '_prevDate'              => $prev->format('Y-m-d'),
+            '_prevTime'              => '09:00',
+            '_byAdmin'               => $key === 'staff_cancelled_admin',
+        ];
+    }
+
+    /** The email as it will look, with sample data, for the texts in the form (not saved). No booking is made, nothing is sent. */
+    public function previewEmail(string $key, string $tag, array $fields): array
+    {
+        if (!EmailTemplates::exists($key) || !\in_array($tag, $this->emailLanguages(), true)) {
+            return ['subject' => '', 'html' => '', 'text' => ''];
+        }
+
+        return $this->inLanguage($tag, function () use ($key, $tag, $fields) {
+            $row = $this->sampleBooking($key);
+            $ov  = [];
+            foreach (EmailTemplates::fields($key) as $f) {
+                if (isset($fields[$f])) {
+                    $ov[$f] = EmailTemplates::isRich($f) ? $this->cleanRichText((string) $fields[$f]) : trim(strip_tags((string) $fields[$f]));
+                }
+            }
+            $c = $this->composeEmail($key, $row, ['manageUrl' => $this->manageUrl($row), 'override' => $ov]);
+            $r = $this->renderEmail($c['layout']);
+
+            return ['subject' => $c['subject'], 'html' => $r['html'], 'text' => $r['text']];
+        });
+    }
+
+    /** "Send me a test": the same preview, by email, to the address given (the administrator's own). */
+    public function sendTestEmail(string $key, string $tag, array $fields, string $to): bool
+    {
+        if (!filter_var($to, FILTER_VALIDATE_EMAIL)) {
+            return false;
+        }
+        try {
+            $p  = $this->previewEmail($key, $tag, $fields);
+            if ($p['html'] === '') {
+                return false;
+            }
+            $mf = Factory::getContainer()->get(MailerFactoryInterface::class);
+            $this->sendHtmlMail($mf, $to, '[' . Text::_('PLG_SYSTEM_WEBGBOOKING_TEST_TAG') . '] ' . $p['subject'], $p['html'], '', 'PUBLISH', $p['text']);
+
+            return true;
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+
     /** What the appointment is called in the subjects: the event's name, else "Appointment". */
     private function eventLabel(object $row): string
     {
@@ -3457,7 +3943,8 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
     {
         $h = trim((string) $this->params->get('host_name', ''));
         if ($h === '') {
-            $h = trim((string) $this->params->get('mail_from_name', ''));
+            // the sender name often carries the business after a comma ("Marco Galassi, WebG"): the person is what comes first
+            $h = trim((string) preg_split('/\s*[,|]\s*|\s+-\s+/', trim((string) $this->params->get('mail_from_name', '')))[0]);
         }
 
         return $h !== '' ? $h : (string) ($this->mailBrand()['name'] ?? '');
@@ -3531,14 +4018,21 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
     }
 
     /** The questions the customer answered, as bold question + answer: phone, the form's questions, the notes. */
-    private function answerRows(object $row, int $notesMax = 0): array
+    private function answerRows(object $row, int $notesMax = 0, bool $forCustomer = false): array
     {
         $P  = 'PLG_SYSTEM_WEBGBOOKING_';
         $ar = [];
-        if (trim((string) $row->customer_phone) !== '') {
+        $phoneDigits = preg_replace('/\D/', '', (string) $row->customer_phone);
+        // for the customer the phone is shown once: with a phone appointment it is already in "Location", and a question that asks for a phone
+        // number and got the same number is not repeated
+        $showPhone = trim((string) $row->customer_phone) !== '' && !($forCustomer && $this->rowLocation($row) === 'phone');
+        if ($showPhone) {
             $ar[] = [Text::_($P . 'MAIL_L_PHONE_NUMBER'), (string) $row->customer_phone];
         }
         foreach ($this->customAnswers($row) as $it) {
+            if ($forCustomer && \strlen((string) $phoneDigits) >= 6 && preg_replace('/\D/', '', $it['v']) === $phoneDigits) {
+                continue;
+            }
             $ar[] = [$it['l'], $it['v']];
         }
         if (trim((string) $row->notes) !== '') {
@@ -3562,7 +4056,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             if (!$tos) {
                 return;
             }
-            $this->sendLayout($mf, $tos, $this->staffSubject($row, $kind), $this->staffMail($row, $kind, $this->manageUrl($row), $this->rowDateFmt($row)));
+            $this->sendComposed($mf, $tos, $this->composeEmail('staff_' . $kind, $row, ['manageUrl' => $this->manageUrl($row)]));
         } catch (\Throwable $e) {
         }
     }
@@ -3685,14 +4179,13 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
         }
     }
 
-    /** "15:00 (CEST, Europe/Rome)": the time with its zone. */
+    /** "15:00 (Central European Summer Time)": the time with the readable name of its zone (the abbreviation and identifier when this PHP has no intl). */
     private function mailTime(object $row): string
     {
         try {
-            $tz = new \DateTimeZone((string) ($row->_tz ?? '') !== '' ? (string) $row->_tz : $this->siteTz());
-            $dt = new \DateTime($row->booking_date . ' ' . $row->booking_time . ':00', $tz);
+            $id = (string) ($row->_tz ?? '') !== '' ? (string) $row->_tz : $this->siteTz();
 
-            return $row->booking_time . ' (' . $dt->format('T') . ', ' . $tz->getName() . ')';
+            return $row->booking_time . ' (' . $this->tzName($id, $row) . ')';
         } catch (\Throwable $e) {
             return (string) $row->booking_time;
         }
@@ -3920,8 +4413,62 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
     /** Render with the layout and send (HTML + plain text alternative). */
     private function sendLayout($mf, $to, string $subject, array $m, string $ics = '', string $icsMethod = 'PUBLISH'): void
     {
-        $r = EmailLayout::render($m + ['lang' => $this->langTag(), 'brand' => $this->mailBrand()]);
+        $r = $this->renderEmail($m);
         $this->sendHtmlMail($mf, $to, $subject, $r['html'], $ics, $icsMethod, $r['text']);
+    }
+
+    /**
+     * HTML and plain text of an email, through the Joomla layouts webgbooking.email.default and webgbooking.email.text: a template can override
+     * them (templates/<template>/html/layouts/webgbooking/email/...). Any failure of an override falls back to the standard layout: an email is never lost.
+     */
+    public function renderEmail(array $m): array
+    {
+        $data = $m + ['lang' => $this->langTag(), 'brand' => $this->mailBrand()];
+        try {
+            $paths = [JPATH_PLUGINS . '/system/webgbooking/layouts'];
+            $tpl   = $this->siteTemplateName();
+            if ($tpl !== '') {
+                $paths[] = JPATH_ROOT . '/templates/' . $tpl . '/html/layouts';         // added last = looked in first
+            }
+            $make = static function (string $id) use ($paths): FileLayout {
+                $l = new FileLayout($id);
+                foreach ($paths as $p) {
+                    $l->addIncludePath($p);
+                }
+
+                return $l;
+            };
+            $html = trim((string) $make('webgbooking.email.default')->render($data));
+            $text = (string) $make('webgbooking.email.text')->render($data);
+            if ($html !== '') {
+                return ['html' => $html, 'text' => $text !== '' ? $text : strip_tags($html)];
+            }
+        } catch (\Throwable $e) {
+            $this->wlog('email layout override failed, standard layout used');
+        }
+
+        return EmailLayout::render($data);
+    }
+
+    /** The default site template (the one whose folder may hold layout overrides), also from the scheduler where no template is loaded. */
+    private function siteTemplateName(): string
+    {
+        static $name = null;
+        if ($name === null) {
+            $name = '';
+            try {
+                $db   = Factory::getContainer()->get(DatabaseInterface::class);
+                $name = (string) $db->setQuery(
+                    $db->getQuery(true)->select($db->quoteName('template'))->from($db->quoteName('#__template_styles'))
+                        ->where($db->quoteName('client_id') . ' = 0')->where($db->quoteName('home') . ' = ' . $db->quote('1'))
+                )->loadResult();
+                $name = preg_match('/^[A-Za-z0-9_.-]+$/', $name) ? $name : '';
+            } catch (\Throwable $e) {
+                $name = '';
+            }
+        }
+
+        return $name;
     }
 
     /** A button for the blocks inside a custom text ({meet_block}), in the brand colours. */
@@ -5298,30 +5845,12 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             if ($tos) {
                 try {
                     $row->_byAdmin = $byAdmin;
-                    $this->sendLayout($mf, $tos, $this->staffSubject($row, $byAdmin ? 'cancelled_admin' : 'cancelled'), $this->staffMail($row, 'cancelled', $this->manageUrl($row), $dateFmt));
+                    $this->sendComposed($mf, $tos, $this->composeEmail($byAdmin ? 'staff_cancelled_admin' : 'staff_cancelled', $row, ['manageUrl' => $this->manageUrl($row)]));
                 } catch (\Throwable $e) {
                 }
             }
 
-            $cv      = $this->custView($row);
-            $dateFmt = $this->rowDateFmt($cv);
-
-            $notices = [];
-            if (!$byAdmin && ($row->payment_status ?? '') === 'paid' && (int) ($row->amount_cents ?? 0) > 0) {
-                $notices[] = ['tone' => 'ok', 'text' => Text::sprintf($P . 'CANCEL_REFUND_CUSTOMER', self::formatAmount((int) $row->amount_cents, (string) $row->currency, $this->langTag()))];
-            }
-            $back = !empty($row->source_url) && preg_match('#^https?://#i', (string) $row->source_url) ? (string) $row->source_url : '';
-            $m = [
-                'title'       => Text::_($P . 'MAIL_TITLE_CANCELLED'),
-                'preheader'   => Text::sprintf($P . 'MAIL_PRE_APPT', $this->mailDay((string) $cv->booking_date), $cv->booking_time),
-                'lead'        => [Text::_($P . 'EMAIL_HELLO') . ' ' . $row->customer_name . ',', Text::sprintf($byAdmin ? $P . 'CANCEL_BY_STAFF_BODY' : $P . 'CANCEL_CUSTOMER_LINE', $dateFmt, $cv->booking_time)],
-                'notices'     => $notices,
-                'summary'     => ['rows' => $this->mailRows($cv, 'customer')],
-                'buttons'     => $back !== '' ? [['label' => Text::_($P . 'MAIL_BTN_REBOOK'), 'url' => $back, 'primary' => true]] : [],
-                'signoff'     => Text::_($P . 'EMAIL_SIGNOFF'),
-                'footer_note' => Text::_($P . 'EMAIL_FOOTER'),
-            ];
-            $this->sendLayout($mf, $row->customer_email, $this->custSubject($cv, 'cancelled'), $m, $this->buildIcs($row, 'CANCEL'), 'CANCEL');
+            $this->sendComposed($mf, $row->customer_email, $this->composeEmail($byAdmin ? 'customer_cancelled_staff' : 'customer_cancelled', $row, ['manageUrl' => '']), $this->buildIcs($row, 'CANCEL'), 'CANCEL');
             $sent = true;
         } catch (\Throwable $e) {
         }
@@ -5475,7 +6004,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
 
             $subjectTpl = (string) ($plan['subject'] ?? '');
             if ($subjectTpl === '') {
-                $subjectTpl = trim((string) $this->params->get('reminder_subject', '')) ?: Text::_('PLG_SYSTEM_WEBGBOOKING_REMINDER_SUBJECT');
+                $subjectTpl = trim((string) $this->params->get('reminder_subject', ''));
             }
             $bodyTpl = (string) ($plan['body'] ?? '');
             if ($bodyTpl === '') {
@@ -5483,12 +6012,21 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             }
 
             // No .ics on a reminder: the appointment is already in their calendar from the confirmation.
-            $this->sendLayout($mf, $row->customer_email, self::fillTpl($subjectTpl, $tags), $this->customerMail($row, 'reminder', $manageUrl, $dateFmt, $bodyTpl));
+            $x = ['manageUrl' => $manageUrl];
+            if ($subjectTpl !== '') {
+                $x['subject'] = self::fillTpl($subjectTpl, $tags);         // a subject written in the old fields still wins
+            }
+            if ($bodyTpl !== '') {
+                $this->sendLayout($mf, $row->customer_email, $x['subject'] ?? $this->composeEmail('customer_reminder', $row, ['manageUrl' => $manageUrl])['subject'], $this->customerMail($row, 'reminder', $manageUrl, $dateFmt, $bodyTpl));
+            } else {
+                $this->sendComposed($mf, $row->customer_email, $this->composeEmail('customer_reminder', $row, $x));
+            }
 
             // The invited guest gets a reminder too: no management link, no phone of the customer.
             if (!empty($row->guest_email)) {
                 try {
-                    $this->sendLayout($mf, $row->guest_email, self::fillTpl($subjectTpl, $tags), $this->customerMail($row, 'guest_reminder', '', $dateFmt));
+                    $gx = $subjectTpl !== '' ? ['subject' => self::fillTpl($subjectTpl, $tags)] : [];
+                    $this->sendComposed($mf, $row->guest_email, $this->composeEmail('guest_reminder', $row, $gx));
                 } catch (\Throwable $e) {
                 }
             }

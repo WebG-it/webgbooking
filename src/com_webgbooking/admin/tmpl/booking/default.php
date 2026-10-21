@@ -8,12 +8,16 @@
 
 \defined('_JEXEC') or die;
 
+
+
 use Joomla\CMS\Date\Date;
 use Joomla\CMS\Factory;
 use Joomla\CMS\HTML\HTMLHelper;
 use Joomla\CMS\Language\Text;
 use Joomla\CMS\Router\Route;
 use Joomla\CMS\Uri\Uri;
+// Italian writes days and months in lower case ("lunedì 26 ottobre 2026"); the core language file gives them capitalised
+$lcIt = static fn(string $t): string => strncmp((string) Factory::getApplication()->getLanguage()->getTag(), 'it', 2) === 0 ? mb_strtolower($t) : $t;
 
 /** @var \WebG\Component\Webgbooking\Administrator\View\Booking\HtmlView $this */
 $i = $this->item;
@@ -224,7 +228,7 @@ $dl = static function (string $label, string $valueHtml): string {
         </h2>
         <p class="wgb-bk-when">
             <?php if ($start) : ?>
-                <?php echo $timeTag($start, $start->format('l j F Y', true, true)) . ', <span class="wgb-bk-nowrap">' . $e($start->format('H:i', true) . ($end ? '-' . $end->format('H:i', true) : '')) . '</span>'; ?>
+                <?php echo $timeTag($start, $lcIt($start->format('l j F Y', true, true))) . ', <span class="wgb-bk-nowrap">' . $e($start->format('H:i', true) . ($end ? '-' . $end->format('H:i', true) : '')) . '</span>'; ?>
             <?php else : ?>
                 <?php echo $e(trim($i->booking_date . ' ' . $i->booking_time)); ?>
             <?php endif; ?>

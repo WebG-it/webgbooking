@@ -9,7 +9,7 @@
     <license>GNU General Public License version 2 or later</license>
     <licence>GNU General Public Licence version 2 or later (GPL-2.0-or-later)</licence>
     <packagename>webgbooking</packagename>
-    <version>0.35.2</version>
+    <version>0.35.3</version>
     <scriptfile>script.php</scriptfile>
     <url>https://github.com/WebG-it/webgbooking</url>
     <packagerurl>https://www.webg.it</packagerurl>

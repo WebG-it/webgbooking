@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.35.3 (pacchetto, componente e plugin): le email si cambiano senza scrivere codice
+
+Richiesta di Marco: in nessuna estensione per modificare un testo si deve essere programmatori. Prove in `tools/e2e/t_v353.py`.
+
+1. **Testi delle email** (*Componenti, WebG Booking, Testi delle email*): una voce per ognuna delle 16 email (conferma, richiesta, spostamento, promemoria, link della videochiamata, annullo da parte del cliente e dal pannello, pagamento tardivo con orario preso e in verifica, invito e promemoria all'ospite, e a chi riceve gli appuntamenti nuova prenotazione, spostamento, annullo e le tracce di annullo e conferma dal pannello). Per ognuna: oggetto, titolo, testo nell'editor visuale, parole dei pulsanti e chiusura, in italiano e in inglese. **Ogni testo parte già scritto** con le parole di oggi: non è mai vuoto, si cambiano solo le parole.
+2. **Si salva solo ciò che hai cambiato.** Un testo non toccato segue da solo le nuove versioni; salvare un testo uguale a quello predefinito non salva niente; "Ripristina il testo predefinito" torna alla versione del prodotto.
+3. **Segnaposto da un menu** nell'editor, ciascuno con la sua spiegazione ("{date} = data dell'appuntamento"), compresi `{amount}` e `{payment_block}`. I blocchi complessi sono segnaposto unici già formattati e non si scrive HTML: riquadro appuntamento, domande e risposte, pulsante della videochiamata, "Aggiungi a Google Calendar", "Devi cambiare qualcosa?" con Riprogramma e Annulla, riquadro del pagamento, avvisi, pulsante verso il pannello, pulsante per prenotare ancora. Un blocco che nel testo non c'è, nell'email non c'è.
+4. **Anteprima e "Mandami una prova"** per ogni email, con dati di esempio e con i testi che hai davanti anche se non salvati: non si crea nessuna prenotazione. La prova arriva alla tua email, con "PROVA" nell'oggetto.
+5. **L'aspetto resta comune** (logo, colori, piede) nelle opzioni del plugin, e ora **tutti i colori hanno il selettore**. L'email è: testata, corpo modificabile, blocchi, piede. Il testo scritto nell'elemento YOOtheme usa lo stesso editor visuale e vale per quell'elemento; se è vuoto si usa il testo di *Testi delle email*.
+6. **Per chi sviluppa, senza toccare il prodotto**: il layout di ogni email è un layout Joomla sovrascrivibile dal template (`templates/<template>/html/layouts/webgbooking/email/default.php` per l'HTML e `text.php` per il testo semplice; un override che dà errore non fa perdere l'email) e ogni testo predefinito è una stringa che si sostituisce con gli override di lingua di Joomla. Il README lo spiega.
+7. **Aggiornamento senza perdite**: i testi scritti nelle vecchie opzioni del plugin (oggetto e corpo della conferma e del promemoria) passano da soli a *Testi delle email*, con i blocchi standard attorno, e le vecchie opzioni si svuotano dopo la copia. I testi scritti nel singolo elemento restano com'erano. L'aggiornamento crea la tabella `#__webgbooking_emailtexts`.
+8. **Difetti trovati dal vivo sulla 0.35.2**:
+   - l'oggetto non ripete più chi riceve gli appuntamenti: "Confermato: Appuntamento con Marco Galassi il ..." (senza "con Marco Galassi, WebG" in coda); il nome è quello scritto nella nuova opzione, altrimenti la parte prima della virgola del nome del mittente;
+   - giorni e mesi in italiano in minuscolo ("lunedì 26 ottobre 2026") nelle email e nel dettaglio della prenotazione;
+   - il fuso è scritto con il suo nome in parole ("Ora legale orientale USA"), lo stesso del menu della pagina, e il menu sceglie per ogni gruppo la città più nota (New York, non Detroit);
+   - nelle email al cliente "Devi cambiare qualcosa?" sta sopra i collegamenti anche nel testo semplice, e "Aggiungi a Google Calendar" è su una riga a parte rispetto a Riprogramma e Annulla;
+   - il telefono non compare due volte: con la telefonata sta solo in "Luogo", e una domanda sul telefono con lo stesso numero non si ripete nelle risposte.
+
+Dopo l'aggiornamento svuotare la cache del sito (YOOtheme, Cloudflare) per vedere il nuovo modulo.
+
 ## 0.35.2 (pacchetto, componente e plugin): fuso orario, email come quelle di Calendly, evento Google completo, dettaglio prenotazione rifatto
 
 Prove in `tools/e2e/t_v352.py`, `t_v352_mail.py`, `t_v352_tz.py` (in un browser vero) e `t_v352_admin.py`.

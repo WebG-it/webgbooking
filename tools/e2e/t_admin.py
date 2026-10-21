@@ -8,7 +8,7 @@ for t in tok: data[t] = '1'
 s.post(BASE + '/administrator/index.php', data)
 ext = sql("SELECT extension_id FROM joom_extensions WHERE element='webgbooking' AND folder='system'")
 pg = s.get(BASE + '/administrator/index.php?option=com_plugins&task=plugin.edit&extension_id=%s' % ext)
-for name in ['jform[params][reminders_enabled]', 'jform[params][reminder_times]', 'jform[params][reminder_subject]', 'jform[params][reminder_body]', 'jform[params][slot_duration]']:
+for name in ['jform[params][reminders_enabled]', 'jform[params][reminder_times]', 'jform[params][slot_duration]']:
     check('plugin options form has ' + name, name in pg, '')
 check('plugin options: reminder text description present', 'Appointment reminders' in pg or 'Reminders' in pg)
 tk = sql("SELECT extension_id FROM joom_extensions WHERE element='webgbookingreminders'")

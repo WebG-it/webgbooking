@@ -216,6 +216,21 @@ return new class () implements InstallerScriptInterface {
                 . ') DEFAULT CHARSET=utf8mb4'
             )->execute();
 
+            // 0.35.3: what the site changed in the texts of the emails, per email and language (ONLY what differs from the ready-made text;
+            // no line = the product's text, which then follows the new versions).
+            $db->setQuery(
+                'CREATE TABLE IF NOT EXISTS ' . $db->quoteName('#__webgbooking_emailtexts') . ' ('
+                . $db->quoteName('id') . ' INT UNSIGNED NOT NULL AUTO_INCREMENT,'
+                . $db->quoteName('email_key') . ' VARCHAR(40) NOT NULL,'
+                . $db->quoteName('lang') . ' VARCHAR(10) NOT NULL,'
+                . $db->quoteName('data') . ' MEDIUMTEXT NULL,'
+                . $db->quoteName('modified') . ' DATETIME NULL,'
+                . $db->quoteName('modified_by') . ' INT UNSIGNED NOT NULL DEFAULT 0,'
+                . 'PRIMARY KEY (' . $db->quoteName('id') . '),'
+                . 'UNIQUE KEY ' . $db->quoteName('uq_email_lang') . ' (' . $db->quoteName('email_key') . ',' . $db->quoteName('lang') . ')'
+                . ') DEFAULT CHARSET=utf8mb4'
+            )->execute();
+
             // Key/value store: alert throttles, freeBusy cache, one-time outcome tokens.
             $db->setQuery(
                 'CREATE TABLE IF NOT EXISTS ' . $db->quoteName('#__webgbooking_kv') . ' ('
@@ -270,6 +285,13 @@ return new class () implements InstallerScriptInterface {
             $problems[] = 'tables: ' . $e->getMessage();
         }
 
+        // 0.35.3: the texts written in the old plugin options move to the new email texts, so nothing written by hand is lost
+        try {
+            $this->migrateEmailTexts(Factory::getContainer()->get(DatabaseInterface::class));
+        } catch (\Throwable $e) {
+            $problems[] = 'email texts: ' . $e->getMessage();
+        }
+
         // Not silent any more: a failed ALTER means the plugin would run against a table that lacks columns.
         if ($problems) {
             try {
@@ -283,5 +305,66 @@ return new class () implements InstallerScriptInterface {
         }
 
         return true;
+    }
+
+    /**
+     * Until 0.35.2 the plugin options had a subject and a body for the confirmation and for the reminder (raw HTML). They become the text of the same
+     * emails in the new "Email texts" (in the site language), the body inside the usual blocks (appointment box, buttons) so the email keeps its shape;
+     * then the old options are emptied. A line that already exists is never overwritten. Runs once: afterwards there is nothing left to move.
+     */
+    private function migrateEmailTexts(DatabaseInterface $db): void
+    {
+        $q   = $db->getQuery(true)->select([$db->quoteName('extension_id'), $db->quoteName('params')])->from($db->quoteName('#__extensions'))
+            ->where($db->quoteName('element') . ' = ' . $db->quote('webgbooking'))->where($db->quoteName('folder') . ' = ' . $db->quote('system'));
+        $row = $db->setQuery($q)->loadObject();
+        if (!$row) {
+            return;
+        }
+        $params = json_decode((string) $row->params, true);
+        if (!\is_array($params)) {
+            return;
+        }
+        $tag = (string) \Joomla\CMS\Component\ComponentHelper::getParams('com_languages')->get('site', 'en-GB');
+        $map = [
+            'customer_confirmed' => ['subject' => 'email_subject', 'body' => 'email_body', 'blocks' => '{payment_block}{notices}{appointment_box}{answers_block}{meet_button}{calendar_link}{change_links}'],
+            'customer_reminder'  => ['subject' => 'reminder_subject', 'body' => 'reminder_body', 'blocks' => '{notices}{appointment_box}{meet_button}{change_links}'],
+        ];
+        $moved = false;
+        foreach ($map as $key => $m) {
+            $subject = trim((string) ($params[$m['subject']] ?? ''));
+            $body    = trim((string) ($params[$m['body']] ?? ''));
+            if ($subject === '' && $body === '') {
+                continue;
+            }
+            $data = [];
+            if ($subject !== '') {
+                $data['subject'] = $subject;
+            }
+            if ($body !== '') {
+                // the old text sat between the appointment box and the buttons: the new body keeps the blocks around it
+                $blocks = $m['blocks'];
+                if (preg_match('/\{(meet_block|location_block|meet_url)\}/', $body)) {
+                    $blocks = str_replace('{meet_button}', '', $blocks);       // the old text placed the link itself
+                }
+                if (preg_match('/\{(cancel_block|cancel_url)\}/', $body)) {
+                    $blocks = str_replace('{change_links}', '', $blocks);
+                }
+                $data['text'] = $body . $blocks;
+            }
+            $exists = (int) $db->setQuery('SELECT COUNT(*) FROM ' . $db->quoteName('#__webgbooking_emailtexts') . ' WHERE ' . $db->quoteName('email_key') . ' = ' . $db->quote($key) . ' AND ' . $db->quoteName('lang') . ' = ' . $db->quote($tag))->loadResult();
+            if (!$exists) {
+                $db->setQuery(
+                    'INSERT INTO ' . $db->quoteName('#__webgbooking_emailtexts') . ' (' . $db->quoteName('email_key') . ',' . $db->quoteName('lang') . ',' . $db->quoteName('data') . ',' . $db->quoteName('modified') . ') VALUES ('
+                    . $db->quote($key) . ',' . $db->quote($tag) . ',' . $db->quote((string) json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) . ',' . $db->quote(Factory::getDate()->toSql()) . ')'
+                )->execute();
+            }
+            // emptied only after the copy is safe in the table
+            $params[$m['subject']] = '';
+            $params[$m['body']]    = '';
+            $moved = true;
+        }
+        if ($moved) {
+            $db->setQuery('UPDATE ' . $db->quoteName('#__extensions') . ' SET ' . $db->quoteName('params') . ' = ' . $db->quote((string) json_encode($params)) . ' WHERE ' . $db->quoteName('extension_id') . ' = ' . (int) $row->extension_id)->execute();
+        }
     }
 };

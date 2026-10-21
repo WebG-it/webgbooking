@@ -79,7 +79,7 @@ rw = tp.dbrow(pid)
 check('P4 payment completed (webhook): confirmed and paid', st_ == 200 and rw['status'] == 'confirmed' and rw['payment_status'] == 'paid' and rw['amount_cents'] == '2900', (out, rw.get('status')))
 cm = mails_to('payny@example.invalid')
 cm = cm[0] if cm else None
-check('P5 the confirmation email after the payment: the time in New York (%s %s, %s) and the payment line' % (d_ny, t_ny, ab), cm is not None and ('%s (%s, %s)' % (t_ny, ab, NY)) in txt(cm['html']) and re.search(r'(Payment received|Pagamento ricevuto|29[.,]00)', txt(cm['html'])) is not None, cm and txt(cm['html'])[:700])
+check('P5 the confirmation email after the payment: the time in New York (%s %s, %s) and the payment line' % (d_ny, t_ny, ab), cm is not None and ('%s (%s)' % (t_ny, tz_label(NY, dt.datetime.strptime(d_ny, '%d/%m/%Y').strftime('%Y-%m-%d'), t_ny))) in txt(cm['html']) and re.search(r'(Payment received|Pagamento ricevuto|29[.,]00)', txt(cm['html'])) is not None, cm and txt(cm['html'])[:700])
 check('P5b ... subject "Confirmed|Confermato: <event> with|con <host> ... at|alle <time in their zone>"', cm is not None and re.match(r'^(Confirmed|Confermato): Audit pagato (with|con) ', cm['subject']) and t_ny in cm['subject'], cm and cm['subject'])
 check('P5c ... their answers (the four questions, phone included) as plain text, the change links', cm is not None and 'sito-cliente.example.invalid' in cm['html'] and 'href="https://sito-cliente.example.invalid' not in cm['html'] and 'Poco traffico' in cm['html'] and '#reschedule' in cm['html'] and '+1 212 555 0101' in cm['html'], cm and txt(cm['html'])[:500])
 sm = [m for m in mails_to(STAFF) if re.match(r'^(New Event|Nuovo evento):', m['subject'])]
@@ -105,7 +105,7 @@ row = tp.dbrow(lid)
 check('L1 payment after the hold with the slot taken: needs review, money recorded', thief.get('ok') is True and out.get('result') == 'review' and row['status'] == 'needs_review' and row['payment_status'] == 'paid', (out, row.get('status')))
 lm = mails_to('late352@example.invalid')
 lm = lm[0] if lm else None
-check('L2 the customer is told at once, and the time in the email is THEIR time (%s, %s)' % (t2, ab2), lm is not None and ('%s (%s, %s)' % (t2, ab2, NY)) in txt(lm['html']) or (lm is not None and t2 in txt(lm['html']) and NY in txt(lm['html'])), lm and txt(lm['html'])[:700])
+check('L2 the customer is told at once, and the time in the email is THEIR time (%s, %s)' % (t2, ab2), lm is not None and ('%s (%s)' % (t2, tz_label(NY, dt.datetime.strptime(d2, '%d/%m/%Y').strftime('%Y-%m-%d'), t2))) in txt(lm['html']), lm and txt(lm['html'])[:700])
 alert = [m for m in mails_to(STAFF) if re.search(r'(review|verific|rimbors|refund)', m['subject'], re.I) or 'Late NY' in m['subject']]
 check('L3 the staff alert goes out and states the SITE time (11:00)', alert and '11:00' in (alert[0]['subject'] + txt(alert[0]['html'])), [m['subject'] for m in mails_to(STAFF)])
 # ---- the customer who left and never paid: the slot is released and the page says so

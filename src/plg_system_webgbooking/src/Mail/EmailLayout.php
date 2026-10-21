@@ -207,109 +207,45 @@ final class EmailLayout
             }
         }
 
-        // notices (payment received, refund, warning)
-        $notices = (array) ($m['notices'] ?? []);
-        foreach ($notices as $n) {
-            if (!\is_array($n) || trim((string) ($n['text'] ?? '')) === '') {
-                continue;
+        $c   = compact('F', 'textC', 'headC', 'accent', 'link', 'btn', 'btnText', 'boxBg', 'boxLine');
+        $add = static function (array $r) use (&$content, &$text): void {
+            $content .= $r[0];
+            foreach ($r[1] as $l) {
+                $text[] = $l;
             }
-            $tone = (string) ($n['tone'] ?? 'info');
-            [$nb, $nl, $nt, $cls] = $tone === 'ok' ? ['#eef8f1', '#7bc99b', '#14532d', 'note-ok'] : ($tone === 'warn' ? ['#fff6e5', '#f0b45a', '#6b3f00', 'note-warn'] : [$boxBg, $boxLine, '#1f2433', 'note-box']);
-            $content .= '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:6px 0 16px 0;"><tr><td class="' . $cls . '" style="background-color:' . $nb . ';border:1px solid ' . $nl . ';border-radius:8px;padding:12px 16px;font-family:' . $F . ';font-size:15px;line-height:23px;font-weight:600;color:' . $nt . ';">' . self::e($n['text']) . '</td></tr></table>';
-            $text[] = (string) $n['text'];
-        }
+        };
 
-        // summary box
-        $rows = (array) (($m['summary'] ?? [])['rows'] ?? []);
-        if ($rows) {
-            $content .= '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:8px 0 20px 0;"><tr><td class="box" style="background-color:' . $boxBg . ';border:1px solid ' . $boxLine . ';border-left:6px solid ' . $accent . ';border-radius:8px;padding:14px 20px;">'
-                . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">';
-            foreach ($rows as $i => $r) {
-                $val = $r[1];
-                $url = '';
-                if (\is_array($val)) {
-                    [$val, $url] = [$val[0], $val[1] ?? ''];
+        if (isset($m['template'])) {
+            // the editable body (a template with its blocks), from the plugin
+            $add(self::flow($c, (string) $m['template'], (array) ($m['blocks'] ?? [])));
+        } else {
+            $add(self::blockNotices($c, (array) ($m['notices'] ?? [])));
+            $add(self::blockSummary($c, (array) (($m['summary'] ?? [])['rows'] ?? [])));
+
+            // the element's own text goes in the body of the layout
+            $bodyHtml = trim((string) ($m['body_html'] ?? ''));
+            if ($bodyHtml !== '') {
+                $content .= '<div class="t-body body-custom" style="margin:0 0 14px 0;font-family:' . $F . ';font-size:16px;line-height:25px;color:' . $textC . ';">' . $bodyHtml . '</div>';
+                $text[] = self::htmlToText($bodyHtml);
+            }
+
+
+            $add(self::blockSections($c, (array) ($m['sections'] ?? [])));
+
+            // buttons: one main action, the others as quiet links
+            $buttons = array_values(array_filter((array) ($m['buttons'] ?? []), static fn($x) => \is_array($x) && !empty($x['url']) && !empty($x['label'])));
+            $primary = null;
+            $others  = [];
+            foreach ($buttons as $x) {
+                if ($primary === null && !empty($x['primary'])) {
+                    $primary = $x;
+                } else {
+                    $others[] = $x;
                 }
-                $cellV = $url !== ''
-                    ? '<a href="' . self::e($url) . '" class="t-link" style="color:' . $link . ';text-decoration:underline;">' . self::e($val) . '</a>'
-                    : self::e($val);
-                $content .= '<tr><td class="stack t-muted" valign="top" style="padding:5px 14px 5px 0;width:120px;font-family:' . $F . ';font-size:13px;line-height:20px;color:#5b6074;">' . self::e($r[0]) . '</td>'
-                    . '<td class="stack t-head" valign="top" style="padding:5px 0;font-family:' . $F . ';font-size:15px;line-height:22px;font-weight:700;color:' . $headC . ';">' . $cellV . '</td></tr>';
-                $text[] = $r[0] . ': ' . $val . ($url !== '' ? ' (' . $url . ')' : '');
             }
-            $content .= '</table></td></tr></table>';
+            $add(self::blockPrimary($c, $primary));
+            $add(self::blockLinks($c, $primary, $others, (string) ($m['others_label'] ?? '')));
         }
-
-        // the element's own text goes in the body of the layout
-        $bodyHtml = trim((string) ($m['body_html'] ?? ''));
-        if ($bodyHtml !== '') {
-            $content .= '<div class="t-body body-custom" style="margin:0 0 14px 0;font-family:' . $F . ';font-size:16px;line-height:25px;color:' . $textC . ';">' . $bodyHtml . '</div>';
-            $text[] = self::htmlToText($bodyHtml);
-        }
-
-        // data sections (staff: the customer, the answers)
-        foreach ((array) ($m['sections'] ?? []) as $sec) {
-            $srows = (array) ($sec['rows'] ?? []);
-            if (!$srows) {
-                continue;
-            }
-            $content .= '<p class="t-link" style="margin:18px 0 6px 0;font-family:' . $F . ';font-size:12px;line-height:16px;font-weight:700;letter-spacing:1.6px;text-transform:uppercase;color:' . $link . ';">' . self::e($sec['title'] ?? '') . '</p>'
-                . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 6px 0;border-top:1px solid #e3e6ec;" class="rule">';
-            $text[] = '';
-            $text[] = mb_strtoupper((string) ($sec['title'] ?? ''));
-            foreach ($srows as $r) {
-                $v = (string) $r[1];
-                if (!empty($sec['stacked'])) {
-                    $val = !empty($sec['plain']) ? nl2br(self::e($v), false) : nl2br(self::linkify($v, $link), false);
-                    // question in bold, the answer under it (one cell each)
-                    $content .= '<tr><td class="t-head rule" style="padding:10px 0 2px 0;font-family:' . $F . ';font-size:14px;line-height:20px;font-weight:700;color:' . $headC . ';">' . self::e($r[0]) . '</td></tr>'
-                        . '<tr><td class="t-body rule" style="padding:0 0 10px 0;border-bottom:1px solid #e3e6ec;font-family:' . $F . ';font-size:15px;line-height:22px;color:' . $textC . ';">' . $val . '</td></tr>';
-                    $text[] = $r[0] . ': ' . $v;
-                    continue;
-                }
-                $content .= '<tr><td class="stack t-muted rule" valign="top" style="padding:8px 14px 8px 0;width:140px;border-bottom:1px solid #e3e6ec;font-family:' . $F . ';font-size:13px;line-height:20px;color:#5b6074;">' . self::e($r[0]) . '</td>'
-                    . '<td class="stack t-body rule" valign="top" style="padding:8px 0;border-bottom:1px solid #e3e6ec;font-family:' . $F . ';font-size:15px;line-height:22px;color:' . $textC . ';">' . nl2br(self::linkify($v, $link), false) . '</td></tr>';
-                $text[] = $r[0] . ': ' . $v;
-            }
-            $content .= '</table>';
-        }
-
-        // buttons: one main action, the others as quiet links
-        $buttons = array_values(array_filter((array) ($m['buttons'] ?? []), static fn($x) => \is_array($x) && !empty($x['url']) && !empty($x['label'])));
-        $primary = null;
-        $others  = [];
-        foreach ($buttons as $x) {
-            if ($primary === null && !empty($x['primary'])) {
-                $primary = $x;
-            } else {
-                $others[] = $x;
-            }
-        }
-        if ($primary !== null) {
-            $content .= self::space(14)
-                . '<table role="presentation" align="center" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto;"><tr>'
-                . '<td class="btn-td" align="center" bgcolor="' . $btn . '" style="background-color:' . $btn . ';border-radius:8px;"><a class="btn-a" href="' . self::e($primary['url']) . '" style="display:inline-block;padding:15px 34px;font-family:' . $F . ';font-size:17px;line-height:22px;font-weight:700;color:' . $btnText . ';text-decoration:none;border-radius:8px;">' . self::e($primary['label']) . '</a></td></tr></table>';
-            $text[] = '';
-            $text[] = $primary['label'] . ': ' . $primary['url'];
-        }
-        if ($others) {
-            $links = [];
-            foreach ($others as $x) {
-                $links[] = '<a href="' . self::e($x['url']) . '" class="t-link" style="color:' . $link . ';font-weight:700;text-decoration:underline;">' . self::e($x['label']) . '</a>';
-                $text[]  = $x['label'] . ': ' . $x['url'];
-            }
-            $lbl = trim((string) ($m['others_label'] ?? ''));
-            if ($lbl !== '') {
-                $content .= '<p class="t-muted" style="margin:18px 0 0 0;text-align:center;font-family:' . $F . ';font-size:14px;line-height:22px;color:#5b6074;">' . self::e($lbl) . '</p>';
-                $text[] = '';
-                $text[] = $lbl;
-            }
-            $content .= '<p style="margin:' . ($lbl !== '' ? '2' : ($primary !== null ? '18' : '6')) . 'px 0 0 0;text-align:center;font-family:' . $F . ';font-size:15px;line-height:24px;">' . implode('<span class="t-muted" style="color:#5b6074;">&nbsp;&nbsp;&middot;&nbsp;&nbsp;</span>', $links) . '</p>';
-            if ($primary === null) {
-                array_unshift($text, '');
-            }
-        }
-
         $sign = trim((string) ($m['signoff'] ?? ''));
         if ($sign !== '') {
             $content .= self::space(14) . '<p class="t-body" style="margin:0;font-family:' . $F . ';font-size:16px;line-height:25px;color:' . $textC . ';">' . self::e($sign) . '</p>';
@@ -434,6 +370,272 @@ final class EmailLayout
             . '</body></html>';
 
         return ['html' => $html, 'text' => implode("\n", $text) . "\n"];
+    }
+
+    /** Notices (payment received, refund, warning). @return array{0:string,1:string[]} html, text lines */
+    private static function blockNotices(array $c, array $notices): array
+    {
+        extract($c);
+        $content = '';
+        $text    = [];
+        foreach ($notices as $n) {
+            if (!\is_array($n) || trim((string) ($n['text'] ?? '')) === '') {
+                continue;
+            }
+            $tone = (string) ($n['tone'] ?? 'info');
+            [$nb, $nl, $nt, $cls] = $tone === 'ok' ? ['#eef8f1', '#7bc99b', '#14532d', 'note-ok'] : ($tone === 'warn' ? ['#fff6e5', '#f0b45a', '#6b3f00', 'note-warn'] : [$boxBg, $boxLine, '#1f2433', 'note-box']);
+            $content .= '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:6px 0 16px 0;"><tr><td class="' . $cls . '" style="background-color:' . $nb . ';border:1px solid ' . $nl . ';border-radius:8px;padding:12px 16px;font-family:' . $F . ';font-size:15px;line-height:23px;font-weight:600;color:' . $nt . ';">' . self::e($n['text']) . '</td></tr></table>';
+            $text[] = (string) $n['text'];
+        }
+
+        return [$content, $text];
+    }
+
+    /** The appointment box. @return array{0:string,1:string[]} html, text lines */
+    private static function blockSummary(array $c, array $rows): array
+    {
+        extract($c);
+        $content = '';
+        $text    = [];
+        if ($rows) {
+            $content .= '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:8px 0 20px 0;"><tr><td class="box" style="background-color:' . $boxBg . ';border:1px solid ' . $boxLine . ';border-left:6px solid ' . $accent . ';border-radius:8px;padding:14px 20px;">'
+                . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">';
+            foreach ($rows as $i => $r) {
+                $val = $r[1];
+                $url = '';
+                if (\is_array($val)) {
+                    [$val, $url] = [$val[0], $val[1] ?? ''];
+                }
+                $cellV = $url !== ''
+                    ? '<a href="' . self::e($url) . '" class="t-link" style="color:' . $link . ';text-decoration:underline;">' . self::e($val) . '</a>'
+                    : self::e($val);
+                $content .= '<tr><td class="stack t-muted" valign="top" style="padding:5px 14px 5px 0;width:120px;font-family:' . $F . ';font-size:13px;line-height:20px;color:#5b6074;">' . self::e($r[0]) . '</td>'
+                    . '<td class="stack t-head" valign="top" style="padding:5px 0;font-family:' . $F . ';font-size:15px;line-height:22px;font-weight:700;color:' . $headC . ';">' . $cellV . '</td></tr>';
+                $text[] = $r[0] . ': ' . $val . ($url !== '' ? ' (' . $url . ')' : '');
+            }
+            $content .= '</table></td></tr></table>';
+        }
+
+        return [$content, $text];
+    }
+
+    /** Data sections (the answers, the customer). @return array{0:string,1:string[]} html, text lines */
+    private static function blockSections(array $c, array $secs): array
+    {
+        extract($c);
+        $content = '';
+        $text    = [];
+        foreach ($secs as $sec) {
+            $srows = (array) ($sec['rows'] ?? []);
+            if (!$srows) {
+                continue;
+            }
+            $content .= '<p class="t-link" style="margin:18px 0 6px 0;font-family:' . $F . ';font-size:12px;line-height:16px;font-weight:700;letter-spacing:1.6px;text-transform:uppercase;color:' . $link . ';">' . self::e($sec['title'] ?? '') . '</p>'
+                . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 6px 0;border-top:1px solid #e3e6ec;" class="rule">';
+            $text[] = '';
+            $text[] = mb_strtoupper((string) ($sec['title'] ?? ''));
+            foreach ($srows as $r) {
+                $v = (string) $r[1];
+                if (!empty($sec['stacked'])) {
+                    $val = !empty($sec['plain']) ? nl2br(self::e($v), false) : nl2br(self::linkify($v, $link), false);
+                    // question in bold, the answer under it (one cell each)
+                    $content .= '<tr><td class="t-head rule" style="padding:10px 0 2px 0;font-family:' . $F . ';font-size:14px;line-height:20px;font-weight:700;color:' . $headC . ';">' . self::e($r[0]) . '</td></tr>'
+                        . '<tr><td class="t-body rule" style="padding:0 0 10px 0;border-bottom:1px solid #e3e6ec;font-family:' . $F . ';font-size:15px;line-height:22px;color:' . $textC . ';">' . $val . '</td></tr>';
+                    $text[] = $r[0] . ': ' . $v;
+                    continue;
+                }
+                $content .= '<tr><td class="stack t-muted rule" valign="top" style="padding:8px 14px 8px 0;width:140px;border-bottom:1px solid #e3e6ec;font-family:' . $F . ';font-size:13px;line-height:20px;color:#5b6074;">' . self::e($r[0]) . '</td>'
+                    . '<td class="stack t-body rule" valign="top" style="padding:8px 0;border-bottom:1px solid #e3e6ec;font-family:' . $F . ';font-size:15px;line-height:22px;color:' . $textC . ';">' . nl2br(self::linkify($v, $link), false) . '</td></tr>';
+                $text[] = $r[0] . ': ' . $v;
+            }
+            $content .= '</table>';
+        }
+
+        return [$content, $text];
+    }
+
+    /** The one main button. @return array{0:string,1:string[]} html, text lines */
+    private static function blockPrimary(array $c, ?array $primary): array
+    {
+        extract($c);
+        $content = '';
+        $text    = [];
+        if ($primary !== null) {
+            $content .= self::space(14)
+                . '<table role="presentation" align="center" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto;"><tr>'
+                . '<td class="btn-td" align="center" bgcolor="' . $btn . '" style="background-color:' . $btn . ';border-radius:8px;"><a class="btn-a" href="' . self::e($primary['url']) . '" style="display:inline-block;padding:15px 34px;font-family:' . $F . ';font-size:17px;line-height:22px;font-weight:700;color:' . $btnText . ';text-decoration:none;border-radius:8px;">' . self::e($primary['label']) . '</a></td></tr></table>';
+            $text[] = '';
+            $text[] = $primary['label'] . ': ' . $primary['url'];
+        }
+
+        return [$content, $text];
+    }
+
+    /** Quiet links, with an optional question above them. @return array{0:string,1:string[]} html, text lines */
+    private static function blockLinks(array $c, ?array $primary, array $others, string $lbl): array
+    {
+        extract($c);
+        $content = '';
+        $text    = [];
+        if ($others) {
+            $links = [];
+            $lbl   = trim($lbl);
+            $text[] = '';
+            if ($lbl !== '') {
+                // the question first, then the links (in the html and in the plain text)
+                $content .= '<p class="t-muted" style="margin:18px 0 0 0;text-align:center;font-family:' . $F . ';font-size:14px;line-height:22px;color:#5b6074;">' . self::e($lbl) . '</p>';
+                $text[]   = $lbl;
+            }
+            foreach ($others as $x) {
+                $links[] = '<a href="' . self::e($x['url']) . '" class="t-link" style="color:' . $link . ';font-weight:700;text-decoration:underline;">' . self::e($x['label']) . '</a>';
+                $text[]  = $x['label'] . ': ' . $x['url'];
+            }
+            $content .= '<p style="margin:' . ($lbl !== '' ? '2' : ($primary !== null ? '18' : '6')) . 'px 0 0 0;text-align:center;font-family:' . $F . ';font-size:15px;line-height:24px;">' . implode('<span class="t-muted" style="color:#5b6074;">&nbsp;&nbsp;&middot;&nbsp;&nbsp;</span>', $links) . '</p>';
+        }
+
+        return [$content, $text];
+    }
+
+    /**
+     * The editable body of an email: a template (rich text with {blocks}) written by the person who runs the site, or the default one.
+     * The text is cleaned (only simple tags, links to http/https/mailto/tel), dressed with the email styles, and each {block} is replaced by
+     * its finished, formatted block: nobody writes HTML tables. $blocks: token => spec (see below); a block with nothing to show is dropped.
+     *   summary: {rows}           the appointment box        sections: {sections}      questions and answers
+     *   primary: {label, url}     the one big button         links: {links: [[label,url]...], label?}   quiet links
+     *   notices: {notices}        boxes (payment, info, warning)
+     * @return array{0:string,1:string[]} html, text lines
+     */
+    private static function flow(array $c, string $tpl, array $blocks): array
+    {
+        $content = '';
+        $text    = [];
+        $tokens  = ['appointment_box', 'answers_block', 'meet_button', 'calendar_link', 'change_links', 'payment_block', 'notices', 'backend_button', 'rebook_button'];
+        // a block token becomes an element the cleaner keeps; after cleaning it is cut out again
+        $tpl = (string) preg_replace('/\{(' . implode('|', $tokens) . ')\}/', '<wgbblock data-n="$1"></wgbblock>', $tpl);
+        $html = self::cleanHtml($tpl, $c);
+        // the editor wraps a lone token in a paragraph: the paragraph goes, the block stays
+        $html = (string) preg_replace('#<p[^>]*>\s*((?:\x01BLOCK:[a-z_]+\x01\s*)+)</p>#', '$1', $html);
+        $parts = preg_split('/\x01BLOCK:([a-z_]+)\x01/', $html, -1, PREG_SPLIT_DELIM_CAPTURE) ?: [];
+        foreach ($parts as $i => $part) {
+            if ($i % 2 === 0) {
+                // a paragraph that only held a block: the block goes without it
+                $seg = trim((string) preg_replace('#<p[^>]*></p>#', '', $part));
+                if ($seg !== '') {
+                    $content .= $seg;
+                    $t = self::htmlToText($seg);
+                    if (trim($t) !== '') {
+                        $text[] = $t;
+                    }
+                }
+                continue;
+            }
+            $spec = $blocks[$part] ?? null;
+            if (!\is_array($spec)) {
+                continue;
+            }
+            switch ($spec['type'] ?? '') {
+                case 'summary':
+                    $r = self::blockSummary($c, (array) ($spec['rows'] ?? []));
+                    break;
+                case 'sections':
+                    $r = self::blockSections($c, (array) ($spec['sections'] ?? []));
+                    break;
+                case 'primary':
+                    $r = !empty($spec['url']) && !empty($spec['label']) ? self::blockPrimary($c, $spec) : ['', []];
+                    break;
+                case 'links':
+                    $ls = array_values(array_filter((array) ($spec['links'] ?? []), static fn($x) => \is_array($x) && !empty($x['url']) && !empty($x['label'])));
+                    $r  = $ls ? self::blockLinks($c, null, $ls, (string) ($spec['label'] ?? '')) : ['', []];
+                    break;
+                case 'notices':
+                    $r = self::blockNotices($c, (array) ($spec['notices'] ?? []));
+                    break;
+                default:
+                    $r = ['', []];
+            }
+            $content .= $r[0];
+            foreach ($r[1] as $l) {
+                $text[] = $l;
+            }
+        }
+
+        return [$content, $text];
+    }
+
+    /** The tags a template may use, dressed with the email styles; everything else loses its tag and keeps its text. Block elements become a marker. */
+    private static function cleanHtml(string $html, array $c): string
+    {
+        extract($c);
+        if (trim($html) === '') {
+            return '';
+        }
+        $doc = new \DOMDocument('1.0', 'UTF-8');
+        $prev = libxml_use_internal_errors(true);
+        $doc->loadHTML('<?xml encoding="utf-8" ?><div id="wgb-root">' . $html . '</div>', LIBXML_NOERROR | LIBXML_NOWARNING | LIBXML_NONET);
+        libxml_clear_errors();
+        libxml_use_internal_errors($prev);
+        $root = $doc->getElementById('wgb-root');
+        if (!$root) {
+            return '';
+        }
+        $st = [
+            'p'  => 'margin:0 0 14px 0;font-family:' . $F . ';font-size:16px;line-height:25px;color:' . $textC . ';',
+            'li' => 'margin:0 0 6px 0;font-family:' . $F . ';font-size:16px;line-height:25px;color:' . $textC . ';',
+            'ul' => 'margin:0 0 14px 0;padding-left:22px;',
+            'ol' => 'margin:0 0 14px 0;padding-left:22px;',
+            'h2' => 'margin:0 0 12px 0;font-family:' . $F . ';font-size:20px;line-height:28px;font-weight:700;color:' . $headC . ';',
+            'h3' => 'margin:0 0 10px 0;font-family:' . $F . ';font-size:17px;line-height:24px;font-weight:700;color:' . $headC . ';',
+            'blockquote' => 'margin:0 0 14px 0;padding:2px 0 2px 14px;border-left:3px solid ' . $accent . ';',
+        ];
+        $cls = ['p' => 't-body', 'li' => 't-body', 'h2' => 't-head', 'h3' => 't-head'];
+        $walk = static function (\DOMNode $n) use (&$walk, $st, $cls, $link): string {
+            $out = '';
+            foreach ($n->childNodes as $ch) {
+                if ($ch->nodeType === XML_TEXT_NODE) {
+                    $out .= self::e($ch->nodeValue);
+                    continue;
+                }
+                if ($ch->nodeType !== XML_ELEMENT_NODE) {
+                    continue;
+                }
+                $tag = strtolower($ch->nodeName);
+                if (\in_array($tag, ['script', 'style', 'iframe', 'object', 'embed', 'noscript', 'template', 'svg', 'math', 'form', 'textarea', 'select', 'button', 'input'], true)) {
+                    continue;           // these never carry text meant for the reader: the tag and what is inside it go
+                }
+                $in  = $walk($ch);
+                if ($tag === 'wgbblock') {
+                    $out .= "\x01BLOCK:" . preg_replace('/[^a-z_]/', '', (string) $ch->getAttribute('data-n')) . "\x01";
+                } elseif ($tag === 'br') {
+                    $out .= '<br>';
+                } elseif (\in_array($tag, ['strong', 'b'], true)) {
+                    $out .= '<strong>' . $in . '</strong>';
+                } elseif (\in_array($tag, ['em', 'i'], true)) {
+                    $out .= '<em>' . $in . '</em>';
+                } elseif ($tag === 'u') {
+                    $out .= '<u>' . $in . '</u>';
+                } elseif (isset($st[$tag])) {
+                    $out .= '<' . $tag . (isset($cls[$tag]) ? ' class="' . $cls[$tag] . '"' : '') . ' style="' . $st[$tag] . '">' . $in . '</' . $tag . '>';
+                } elseif ($tag === 'a') {
+                    $href = trim((string) $ch->getAttribute('href'));
+                    $ok   = (bool) preg_match('#^(https?://|mailto:|tel:)#i', $href) && !preg_match('/[\s"<>\\\\]/', $href);
+                    $out .= $ok ? '<a href="' . self::e($href) . '" class="t-link" style="color:' . $link . ';text-decoration:underline;">' . $in . '</a>' : $in;
+                } elseif (\in_array($tag, ['div', 'section'], true)) {
+                    $out .= $in;
+                } else {
+                    $out .= $in;        // an unknown tag (script, style, iframe ...): no tag, only its text is left
+                }
+            }
+
+            return $out;
+        };
+
+        $res = $walk($root);
+        // text sitting directly in the body (no paragraph) gets one
+        if ($res !== '' && !preg_match('#^\s*<(p|ul|ol|h2|h3|blockquote)[ >]#i', $res) && strpos($res, '<p ') === false) {
+            $res = '<p class="t-body" style="' . $st['p'] . '">' . $res . '</p>';
+        }
+
+        return $res;
     }
 
     /** Footer text: escaped, with web addresses as links in the footer colour. */

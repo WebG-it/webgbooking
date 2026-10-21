@@ -71,6 +71,14 @@ def http_get(path):
             time.sleep(2)
 
 
+
+def tz_label(tz, d, t, loc='en_GB'):
+    """The readable name of a zone on a date, as the plugin writes it in the emails: the long name with intl, else "EDT, America/New_York"."""
+    code = ('$z=new DateTimeZone("%s");$dt=new DateTime("%s %s:00",$z);'
+            'echo class_exists("IntlDateFormatter")?(new IntlDateFormatter("%s",0,0,$z,null,"zzzz"))->format($dt):($dt->format("T").", %s");') % (tz, d, t, loc, tz)
+    return jx("php -r '%s'" % code).strip()
+
+
 AJAX = BASE + '/index.php?option=com_ajax&group=system&plugin=webgbooking&format=json'
 
 

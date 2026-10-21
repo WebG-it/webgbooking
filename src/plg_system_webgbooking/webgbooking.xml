@@ -8,7 +8,7 @@
     <copyright>(C) 2026 Marco Galassi / WebG</copyright>
     <license>GNU General Public License version 2 or later</license>
     <licence>GNU General Public Licence version 2 or later (GPL-2.0-or-later)</licence>
-    <version>0.35.2</version>
+    <version>0.35.3</version>
     <description>PLG_SYSTEM_WEBGBOOKING_XML_DESCRIPTION</description>
     <scriptfile>script.php</scriptfile>
     <namespace path="src">WebG\Plugin\System\Webgbooking</namespace>
@@ -21,6 +21,7 @@
     <files>
         <folder plugin="webgbooking">services</folder>
         <folder>src</folder>
+        <folder>layouts</folder>
         <folder>yootheme</folder>
         <folder>language</folder>
     </files>
@@ -68,12 +69,6 @@
                 <field type="note" name="email_note" class="alert alert-info"
                     label="PLG_SYSTEM_WEBGBOOKING_EMAIL_TPL_FIELDSET"
                     description="PLG_SYSTEM_WEBGBOOKING_EMAIL_TPL_DESC" />
-                <field name="email_subject" type="text" default="" size="60"
-                    label="PLG_SYSTEM_WEBGBOOKING_EMAIL_SUBJECT_LABEL"
-                    description="PLG_SYSTEM_WEBGBOOKING_EMAIL_PLACEHOLDERS" />
-                <field name="email_body" type="editor" filter="raw" default="" height="220"
-                    label="PLG_SYSTEM_WEBGBOOKING_EMAIL_BODY_LABEL"
-                    description="PLG_SYSTEM_WEBGBOOKING_EMAIL_PLACEHOLDERS" />
 
                 <field name="newsletter_webhook" type="url" default=""
                     label="PLG_SYSTEM_WEBGBOOKING_NEWSLETTER_WEBHOOK_LABEL"
@@ -121,12 +116,6 @@
                 <field name="reminder_times" type="text" default="24h, 1h" size="30"
                     label="PLG_SYSTEM_WEBGBOOKING_REMINDER_TIMES_LABEL"
                     description="PLG_SYSTEM_WEBGBOOKING_REMINDER_TIMES_DESC" />
-                <field name="reminder_subject" type="text" default="" size="60"
-                    label="PLG_SYSTEM_WEBGBOOKING_REMINDER_SUBJECT_LABEL"
-                    description="PLG_SYSTEM_WEBGBOOKING_EMAIL_PLACEHOLDERS" />
-                <field name="reminder_body" type="editor" filter="raw" default="" height="220"
-                    label="PLG_SYSTEM_WEBGBOOKING_REMINDER_BODY_LABEL"
-                    description="PLG_SYSTEM_WEBGBOOKING_EMAIL_PLACEHOLDERS" />
 
                 <field type="note" name="direct_note" class="alert alert-info"
                     label="PLG_SYSTEM_WEBGBOOKING_DIRECT_FIELDSET"
@@ -158,19 +147,19 @@
                 <field name="mail_color" type="color" default="#2b59c3"
                     label="PLG_SYSTEM_WEBGBOOKING_MAIL_COLOR_LABEL"
                     description="PLG_SYSTEM_WEBGBOOKING_MAIL_COLOR_DESC" />
-                <field name="mail_button_color" type="text" default="" size="10" hint="#2b59c3" autocomplete="off"
+                <field name="mail_button_color" type="color" default="" format="hex" keywords=""
                     label="PLG_SYSTEM_WEBGBOOKING_MAIL_BUTTON_COLOR_LABEL"
                     description="PLG_SYSTEM_WEBGBOOKING_MAIL_BUTTON_COLOR_DESC" />
-                <field name="mail_line_color" type="text" default="" size="10" hint="#rrggbb" autocomplete="off"
+                <field name="mail_line_color" type="color" default="" format="hex" keywords=""
                     label="PLG_SYSTEM_WEBGBOOKING_MAIL_LINE_COLOR_LABEL"
                     description="PLG_SYSTEM_WEBGBOOKING_MAIL_LINE_COLOR_DESC" />
-                <field name="mail_link_color" type="text" default="" size="10" hint="#rrggbb" autocomplete="off"
+                <field name="mail_link_color" type="color" default="" format="hex" keywords=""
                     label="PLG_SYSTEM_WEBGBOOKING_MAIL_LINK_COLOR_LABEL"
                     description="PLG_SYSTEM_WEBGBOOKING_MAIL_LINK_COLOR_DESC" />
-                <field name="mail_text_color" type="text" default="" size="10" hint="#rrggbb" autocomplete="off"
+                <field name="mail_text_color" type="color" default="" format="hex" keywords=""
                     label="PLG_SYSTEM_WEBGBOOKING_MAIL_TEXT_COLOR_LABEL"
                     description="PLG_SYSTEM_WEBGBOOKING_MAIL_TEXT_COLOR_DESC" />
-                <field name="mail_footer_color" type="text" default="" size="10" hint="#rrggbb" autocomplete="off"
+                <field name="mail_footer_color" type="color" default="" format="hex" keywords=""
                     label="PLG_SYSTEM_WEBGBOOKING_MAIL_FOOTER_COLOR_LABEL"
                     description="PLG_SYSTEM_WEBGBOOKING_MAIL_FOOTER_COLOR_DESC" />
                 <field name="mail_logo_pos" type="list" default="left"
