@@ -1135,8 +1135,14 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
         return $comma ? $num . ' ' . $sym : (mb_strlen($sym) > 1 ? $sym . ' ' : $sym) . $num;
     }
 
+    /** The language of the text being previewed in the panel (null = the language of the request). */
+    private ?string $forcedTag = null;
+
     private function langTag(): string
     {
+        if ($this->forcedTag !== null) {
+            return $this->forcedTag;
+        }
         try {
             return (string) $this->getApplication()->getLanguage()->getTag();
         } catch (\Throwable $e) {
@@ -3698,6 +3704,8 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
         $app  = $this->getApplication();
         $prev = $app->getLanguage();
         $same = $prev->getTag() === $tag;
+        $oldForced = $this->forcedTag;
+        $this->forcedTag = $tag;
         try {
             if (!$same) {
                 $lang = EmailTemplates::language($tag);
@@ -3709,6 +3717,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
 
             return $fn();
         } finally {
+            $this->forcedTag = $oldForced;
             if (!$same) {
                 if (method_exists($app, 'loadLanguage')) {
                     $app->loadLanguage($prev);
