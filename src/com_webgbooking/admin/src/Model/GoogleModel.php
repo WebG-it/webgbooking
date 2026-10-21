@@ -39,6 +39,11 @@ class GoogleModel extends BaseDatabaseModel
 
     private function pluginParams(): Registry
     {
+        // the settings are the Options of the component since 0.36.0: read through the one place that knows (plugin as fallback)
+        $settings = '\WebG\Plugin\System\Webgbooking\Booking\Settings';
+        if (class_exists($settings)) {
+            return $settings::all();
+        }
         $plugin = PluginHelper::getPlugin('system', 'webgbooking');
 
         return new Registry(\is_object($plugin) ? ($plugin->params ?? '') : '');

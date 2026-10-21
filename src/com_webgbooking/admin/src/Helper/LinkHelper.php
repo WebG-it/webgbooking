@@ -22,8 +22,8 @@ final class LinkHelper
     {
         $class = '\\WebG\\Plugin\\System\\Webgbooking\\Booking\\EventTypes';
         if (class_exists($class)) {
-            $plugin = PluginHelper::getPlugin('system', 'webgbooking');
-            $path   = $plugin ? (string) (new Registry($plugin->params ?? ''))->get('direct_path', '') : '';
+            $settings = '\WebG\Plugin\System\Webgbooking\Booking\Settings';
+            $path     = class_exists($settings) ? (string) $settings::all()->get('direct_path', '') : '';
 
             return $class::publicUrl($slug, $path, $long);
         }

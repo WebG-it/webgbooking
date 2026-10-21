@@ -78,6 +78,10 @@ def normalise(pages):
 
 
 check('S0 the previous package installs', install(OLD))
+# 0.36.0: a release before it keeps its options in the PLUGIN. The test options go where that release reads them; the new package then
+# has to carry them to the Options of the component by itself (the update does it), and the new pages must still come out identical.
+sql("UPDATE joom_extensions SET params='{}' WHERE element='com_webgbooking' AND type='component'")
+jx('php /tmp/mock/init.php row=plugin >/dev/null')
 old_pages = render_and_collect('old')
 old_tok = tokens_of(old_pages)
 check('S0b the new package installs over it', install(NEW))
@@ -102,5 +106,6 @@ for i, (n, a) in old_tok.items():
         diffs.append((n, [k for k in set(a) | set(b) if a.get(k) != b.get(k)]))
 check('S4 the sealed form token of every element has the same content (questions, event, price, staff, webhook, Brevo, reminders ...), no new key for hand-made elements (%d tokens)' % len(old_tok), len(old_tok) == len(new_tok) and not diffs, diffs[:5])
 check('S5 no hand-made element carries a saved type in its token', all('etype' not in d and 'src' not in d for _, d in new_tok.values()))
+check('S6 the update carried the options of the plugin to the Options of the component (the test options are all there)', len(json.loads(sql("SELECT params FROM joom_extensions WHERE element='com_webgbooking' AND type='component'"))) >= 20, '')
 shutil.rmtree(OUT, ignore_errors=True)
 print('RESULT pass=%d fail=%d' % (RES['pass'], RES['fail']))

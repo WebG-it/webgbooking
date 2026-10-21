@@ -1,3 +1,286 @@
 <?xml version="1.0" encoding="utf-8"?>
 <config>
+    <inlinehelp button="show" />
+    <fieldset name="basic" label="PLG_SYSTEM_WEBGBOOKING_AVAIL_FIELDSET"
+        addfieldprefix="WebG\Plugin\System\Webgbooking\Field">
+        <field name="work_start" type="text" default="09:00" size="6"
+            label="PLG_SYSTEM_WEBGBOOKING_WORK_START_LABEL"
+            description="PLG_SYSTEM_WEBGBOOKING_TIME_DESC" />
+        <field name="work_end" type="text" default="18:00" size="6"
+            label="PLG_SYSTEM_WEBGBOOKING_WORK_END_LABEL"
+            description="PLG_SYSTEM_WEBGBOOKING_TIME_DESC" />
+        <field name="work_days" type="checkboxes" default="1,2,3,4,5"
+            label="PLG_SYSTEM_WEBGBOOKING_WORK_DAYS_LABEL">
+            <option value="1">PLG_SYSTEM_WEBGBOOKING_MON</option>
+            <option value="2">PLG_SYSTEM_WEBGBOOKING_TUE</option>
+            <option value="3">PLG_SYSTEM_WEBGBOOKING_WED</option>
+            <option value="4">PLG_SYSTEM_WEBGBOOKING_THU</option>
+            <option value="5">PLG_SYSTEM_WEBGBOOKING_FRI</option>
+            <option value="6">PLG_SYSTEM_WEBGBOOKING_SAT</option>
+            <option value="0">PLG_SYSTEM_WEBGBOOKING_SUN</option>
+        </field>
+        <field name="slot_interval" type="list" default="30"
+            label="PLG_SYSTEM_WEBGBOOKING_SLOT_INTERVAL_LABEL">
+            <option value="15">15</option>
+            <option value="20">20</option>
+            <option value="30">30</option>
+            <option value="45">45</option>
+            <option value="60">60</option>
+        </field>
+        <field name="buffer_before" type="number" default="0" min="0"
+            label="PLG_SYSTEM_WEBGBOOKING_BUFFER_BEFORE_LABEL"
+            description="PLG_SYSTEM_WEBGBOOKING_BUFFER_DESC" />
+        <field name="buffer_after" type="number" default="0" min="0"
+            label="PLG_SYSTEM_WEBGBOOKING_BUFFER_AFTER_LABEL"
+            description="PLG_SYSTEM_WEBGBOOKING_BUFFER_DESC" />
+        <field name="min_notice" type="number" default="2" min="0"
+            label="PLG_SYSTEM_WEBGBOOKING_MIN_NOTICE_LABEL" />
+        <field name="window_days" type="number" default="30" min="1"
+            label="PLG_SYSTEM_WEBGBOOKING_WINDOW_DAYS_LABEL" />
+        <field name="notify_email" type="email" default=""
+            label="PLG_SYSTEM_WEBGBOOKING_NOTIFY_EMAIL_LABEL"
+            description="PLG_SYSTEM_WEBGBOOKING_NOTIFY_EMAIL_DESC" />
+
+        <field type="note" name="email_note" class="alert alert-info"
+            label="PLG_SYSTEM_WEBGBOOKING_EMAIL_TPL_FIELDSET"
+            description="PLG_SYSTEM_WEBGBOOKING_EMAIL_TPL_DESC" />
+
+        <field name="newsletter_webhook" type="url" default=""
+            label="PLG_SYSTEM_WEBGBOOKING_NEWSLETTER_WEBHOOK_LABEL"
+            description="PLG_SYSTEM_WEBGBOOKING_NEWSLETTER_WEBHOOK_DESC" />
+        <field name="booking_webhook" type="url" default=""
+            label="PLG_SYSTEM_WEBGBOOKING_BOOKING_WEBHOOK_LABEL"
+            description="PLG_SYSTEM_WEBGBOOKING_BOOKING_WEBHOOK_DESC" />
+        <field name="booking_webhook_method" type="list" default="POST"
+            label="PLG_SYSTEM_WEBGBOOKING_BOOKING_WEBHOOK_METHOD_LABEL">
+            <option value="POST">POST</option>
+            <option value="GET">GET</option>
+        </field>
+        <field name="google_sheet_id" type="text" default="" size="60"
+            label="PLG_SYSTEM_WEBGBOOKING_GOOGLE_SHEET_LABEL"
+            description="PLG_SYSTEM_WEBGBOOKING_GOOGLE_SHEET_DESC" />
+        <field name="meeting_url" type="url" default=""
+            label="PLG_SYSTEM_WEBGBOOKING_MEETING_URL_LABEL"
+            description="PLG_SYSTEM_WEBGBOOKING_MEETING_URL_DESC" />
+
+        <field type="note" name="google_note" class="alert alert-info"
+            label="PLG_SYSTEM_WEBGBOOKING_GOOGLE_FIELDSET"
+            description="PLG_SYSTEM_WEBGBOOKING_GOOGLE_NOTE" />
+        <field name="google_client_id" type="text" default="" size="70"
+            label="PLG_SYSTEM_WEBGBOOKING_GOOGLE_CLIENT_ID_LABEL"
+            description="PLG_SYSTEM_WEBGBOOKING_GOOGLE_HELP" />
+        <field name="google_client_secret" type="password" default="" autocomplete="off"
+            label="PLG_SYSTEM_WEBGBOOKING_GOOGLE_CLIENT_SECRET_LABEL"
+            description="PLG_SYSTEM_WEBGBOOKING_GOOGLE_HELP" />
+        <field name="google_calendar_id" type="text" default="primary" size="40"
+            label="PLG_SYSTEM_WEBGBOOKING_GOOGLE_CALENDAR_LABEL"
+            description="PLG_SYSTEM_WEBGBOOKING_GOOGLE_CALENDAR_DESC" />
+        <field name="slot_duration" type="number" default="30" min="5"
+            label="PLG_SYSTEM_WEBGBOOKING_SLOT_DURATION_LABEL"
+            description="PLG_SYSTEM_WEBGBOOKING_SLOT_DURATION_DESC" />
+
+        <field type="note" name="reminders_note" class="alert alert-info"
+            label="PLG_SYSTEM_WEBGBOOKING_REMINDERS_FIELDSET"
+            description="PLG_SYSTEM_WEBGBOOKING_REMINDERS_DESC" />
+        <field name="reminders_enabled" type="radio" layout="joomla.form.field.radio.switcher" default="1"
+            label="PLG_SYSTEM_WEBGBOOKING_REMINDERS_ENABLED_LABEL"
+            description="PLG_SYSTEM_WEBGBOOKING_REMINDERS_ENABLED_DESC">
+            <option value="0">JNO</option>
+            <option value="1">JYES</option>
+        </field>
+        <field name="reminder_times" type="text" default="24h, 1h" size="30"
+            label="PLG_SYSTEM_WEBGBOOKING_REMINDER_TIMES_LABEL"
+            description="PLG_SYSTEM_WEBGBOOKING_REMINDER_TIMES_DESC" />
+
+        <field type="note" name="direct_note" class="alert alert-info"
+            label="PLG_SYSTEM_WEBGBOOKING_DIRECT_FIELDSET"
+            description="PLG_SYSTEM_WEBGBOOKING_DIRECT_NOTE" />
+        <field name="direct_path" type="text" default="prenota" size="20" maxlength="40" filter="cmd" autocomplete="off"
+            label="PLG_SYSTEM_WEBGBOOKING_DIRECT_PATH_LABEL"
+            description="PLG_SYSTEM_WEBGBOOKING_DIRECT_PATH_DESC" />
+        <field name="direct_index" type="radio" layout="joomla.form.field.radio.switcher" default="1"
+            label="PLG_SYSTEM_WEBGBOOKING_DIRECT_INDEX_LABEL"
+            description="PLG_SYSTEM_WEBGBOOKING_DIRECT_INDEX_DESC">
+            <option value="0">JNO</option>
+            <option value="1">JYES</option>
+        </field>
+    </fieldset>
+
+    <fieldset name="mail" label="PLG_SYSTEM_WEBGBOOKING_MAIL_FIELDSET"
+        addfieldprefix="WebG\Plugin\System\Webgbooking\Field">
+        <field type="note" name="mail_note" class="alert alert-info"
+            label="PLG_SYSTEM_WEBGBOOKING_MAIL_FIELDSET"
+            description="PLG_SYSTEM_WEBGBOOKING_MAIL_NOTE" />
+        <field name="mail_business_name" type="text" default="" size="40" autocomplete="off"
+            label="PLG_SYSTEM_WEBGBOOKING_MAIL_BUSINESS_NAME_LABEL"
+            description="PLG_SYSTEM_WEBGBOOKING_MAIL_BUSINESS_NAME_DESC" />
+        <field name="mail_logo" type="media" default=""
+            label="PLG_SYSTEM_WEBGBOOKING_MAIL_LOGO_LABEL"
+            description="PLG_SYSTEM_WEBGBOOKING_MAIL_LOGO_DESC" />
+        <field name="mail_logo_dark" type="media" default=""
+            label="PLG_SYSTEM_WEBGBOOKING_MAIL_LOGO_DARK_LABEL"
+            description="PLG_SYSTEM_WEBGBOOKING_MAIL_LOGO_DARK_DESC" />
+        <field name="mail_color" type="color" default="#2b59c3"
+            label="PLG_SYSTEM_WEBGBOOKING_MAIL_COLOR_LABEL"
+            description="PLG_SYSTEM_WEBGBOOKING_MAIL_COLOR_DESC" />
+        <field name="mail_button_color" type="color" default="" format="hex" keywords=""
+            label="PLG_SYSTEM_WEBGBOOKING_MAIL_BUTTON_COLOR_LABEL"
+            description="PLG_SYSTEM_WEBGBOOKING_MAIL_BUTTON_COLOR_DESC" />
+        <field name="mail_line_color" type="color" default="" format="hex" keywords=""
+            label="PLG_SYSTEM_WEBGBOOKING_MAIL_LINE_COLOR_LABEL"
+            description="PLG_SYSTEM_WEBGBOOKING_MAIL_LINE_COLOR_DESC" />
+        <field name="mail_link_color" type="color" default="" format="hex" keywords=""
+            label="PLG_SYSTEM_WEBGBOOKING_MAIL_LINK_COLOR_LABEL"
+            description="PLG_SYSTEM_WEBGBOOKING_MAIL_LINK_COLOR_DESC" />
+        <field name="mail_text_color" type="color" default="" format="hex" keywords=""
+            label="PLG_SYSTEM_WEBGBOOKING_MAIL_TEXT_COLOR_LABEL"
+            description="PLG_SYSTEM_WEBGBOOKING_MAIL_TEXT_COLOR_DESC" />
+        <field name="mail_footer_color" type="color" default="" format="hex" keywords=""
+            label="PLG_SYSTEM_WEBGBOOKING_MAIL_FOOTER_COLOR_LABEL"
+            description="PLG_SYSTEM_WEBGBOOKING_MAIL_FOOTER_COLOR_DESC" />
+        <field name="mail_logo_pos" type="list" default="left"
+            label="PLG_SYSTEM_WEBGBOOKING_MAIL_LOGO_POS_LABEL"
+            description="PLG_SYSTEM_WEBGBOOKING_MAIL_LOGO_POS_DESC">
+            <option value="left">PLG_SYSTEM_WEBGBOOKING_MAIL_POS_LEFT</option>
+            <option value="center">PLG_SYSTEM_WEBGBOOKING_MAIL_POS_CENTER</option>
+        </field>
+        <field name="mail_header_style" type="list" default="band"
+            label="PLG_SYSTEM_WEBGBOOKING_MAIL_HEADER_STYLE_LABEL"
+            description="PLG_SYSTEM_WEBGBOOKING_MAIL_HEADER_STYLE_DESC">
+            <option value="band">PLG_SYSTEM_WEBGBOOKING_MAIL_HDR_BAND</option>
+            <option value="rule">PLG_SYSTEM_WEBGBOOKING_MAIL_HDR_RULE</option>
+        </field>
+        <field name="mail_footer_out" type="list" default="0"
+            label="PLG_SYSTEM_WEBGBOOKING_MAIL_FOOTER_OUT_LABEL"
+            description="PLG_SYSTEM_WEBGBOOKING_MAIL_FOOTER_OUT_DESC">
+            <option value="0">PLG_SYSTEM_WEBGBOOKING_MAIL_FOUT_CARD</option>
+            <option value="1">PLG_SYSTEM_WEBGBOOKING_MAIL_FOUT_PAGE</option>
+        </field>
+        <field name="mail_footer" type="footereditor" default="" buttons="false" height="220px" filter="raw"
+            label="PLG_SYSTEM_WEBGBOOKING_MAIL_FOOTER_LABEL"
+            description="PLG_SYSTEM_WEBGBOOKING_MAIL_FOOTER_DESC" />
+        <field name="privacy_url" type="text" default="" size="60" autocomplete="off"
+            label="PLG_SYSTEM_WEBGBOOKING_PRIVACY_URL_LABEL"
+            description="PLG_SYSTEM_WEBGBOOKING_PRIVACY_URL_DESC" />
+        <field name="host_name" type="text" default="" size="40" autocomplete="off"
+            label="PLG_SYSTEM_WEBGBOOKING_HOST_NAME_LABEL"
+            description="PLG_SYSTEM_WEBGBOOKING_HOST_NAME_DESC" />
+        <field name="gcal_manage_link" type="radio" default="1" layout="joomla.form.field.radio.switcher"
+            label="PLG_SYSTEM_WEBGBOOKING_GCAL_MANAGE_LINK_LABEL"
+            description="PLG_SYSTEM_WEBGBOOKING_GCAL_MANAGE_LINK_DESC">
+            <option value="0">JNO</option>
+            <option value="1">JYES</option>
+        </field>
+        <field name="mail_from_name" type="text" default="" size="40" autocomplete="off"
+            label="PLG_SYSTEM_WEBGBOOKING_MAIL_FROM_NAME_LABEL"
+            description="PLG_SYSTEM_WEBGBOOKING_MAIL_FROM_NAME_DESC" />
+    </fieldset>
+
+    <fieldset name="integrations" label="PLG_SYSTEM_WEBGBOOKING_INT_FIELDSET"
+        addfieldprefix="WebG\Plugin\System\Webgbooking\Field">
+        <field type="note" name="brevo_note" class="alert alert-info"
+            label="PLG_SYSTEM_WEBGBOOKING_BREVO_FIELDSET"
+            description="PLG_SYSTEM_WEBGBOOKING_BREVO_DESC" />
+        <field name="brevo_key" type="secret" default=""
+            label="PLG_SYSTEM_WEBGBOOKING_BREVO_KEY_LABEL"
+            description="PLG_SYSTEM_WEBGBOOKING_BREVO_KEY_DESC" />
+        <field name="brevo_attr_first" type="text" default="NOME" size="20" autocomplete="off"
+            label="PLG_SYSTEM_WEBGBOOKING_BREVO_ATTR_FIRST_LABEL"
+            description="PLG_SYSTEM_WEBGBOOKING_BREVO_ATTR_DESC" />
+        <field name="brevo_attr_last" type="text" default="COGNOME" size="20" autocomplete="off"
+            label="PLG_SYSTEM_WEBGBOOKING_BREVO_ATTR_LAST_LABEL" />
+        <field name="brevo_attr_sms" type="text" default="SMS" size="20" autocomplete="off"
+            label="PLG_SYSTEM_WEBGBOOKING_BREVO_ATTR_SMS_LABEL" />
+        <field name="brevo_default_cc" type="text" default="39" size="5" autocomplete="off"
+            label="PLG_SYSTEM_WEBGBOOKING_BREVO_CC_LABEL"
+            description="PLG_SYSTEM_WEBGBOOKING_BREVO_CC_DESC" />
+
+        <field type="note" name="whp_note" class="alert alert-info"
+            label="PLG_SYSTEM_WEBGBOOKING_WHP_FIELDSET"
+            description="PLG_SYSTEM_WEBGBOOKING_WHP_DESC" />
+        <field name="booking_webhook_profile" type="text" default="" size="30" autocomplete="off"
+            label="PLG_SYSTEM_WEBGBOOKING_WHP_GLOBAL_LABEL"
+            description="PLG_SYSTEM_WEBGBOOKING_WHP_GLOBAL_DESC" />
+        <field name="whp1_name" type="text" default="" size="30" autocomplete="off"
+            label="PLG_SYSTEM_WEBGBOOKING_WHP_NAME_LABEL" />
+        <field name="whp1_headers" type="secretarea" default="" filter="raw"
+            label="PLG_SYSTEM_WEBGBOOKING_WHP_HEADERS_LABEL"
+            description="PLG_SYSTEM_WEBGBOOKING_WHP_HEADERS_DESC" />
+        <field name="whp2_name" type="text" default="" size="30" autocomplete="off"
+            label="PLG_SYSTEM_WEBGBOOKING_WHP_NAME_LABEL" />
+        <field name="whp2_headers" type="secretarea" default="" filter="raw"
+            label="PLG_SYSTEM_WEBGBOOKING_WHP_HEADERS_LABEL" />
+        <field name="whp3_name" type="text" default="" size="30" autocomplete="off"
+            label="PLG_SYSTEM_WEBGBOOKING_WHP_NAME_LABEL" />
+        <field name="whp3_headers" type="secretarea" default="" filter="raw"
+            label="PLG_SYSTEM_WEBGBOOKING_WHP_HEADERS_LABEL" />
+        <field name="whp4_name" type="text" default="" size="30" autocomplete="off"
+            label="PLG_SYSTEM_WEBGBOOKING_WHP_NAME_LABEL" />
+        <field name="whp4_headers" type="secretarea" default="" filter="raw"
+            label="PLG_SYSTEM_WEBGBOOKING_WHP_HEADERS_LABEL" />
+    </fieldset>
+
+    <fieldset name="payments" label="PLG_SYSTEM_WEBGBOOKING_PAY_FIELDSET"
+        addfieldprefix="WebG\Plugin\System\Webgbooking\Field">
+        <field type="note" name="pay_note" class="alert alert-info"
+            label="PLG_SYSTEM_WEBGBOOKING_PAY_FIELDSET"
+            description="PLG_SYSTEM_WEBGBOOKING_PAY_DESC" />
+        <field name="stripe_mode" type="radio" layout="joomla.form.field.radio.switcher" default="test"
+            label="PLG_SYSTEM_WEBGBOOKING_PAY_MODE_LABEL"
+            description="PLG_SYSTEM_WEBGBOOKING_PAY_MODE_DESC">
+            <option value="test">PLG_SYSTEM_WEBGBOOKING_PAY_MODE_TEST</option>
+            <option value="live">PLG_SYSTEM_WEBGBOOKING_PAY_MODE_LIVE</option>
+        </field>
+        <field name="stripe_pk" type="text" default="" size="60" autocomplete="off"
+            label="PLG_SYSTEM_WEBGBOOKING_PAY_PK_LABEL"
+            description="PLG_SYSTEM_WEBGBOOKING_PAY_PK_DESC" />
+        <field name="stripe_sk" type="secret" default=""
+            label="PLG_SYSTEM_WEBGBOOKING_PAY_SK_LABEL"
+            description="PLG_SYSTEM_WEBGBOOKING_PAY_SK_DESC" />
+        <field name="stripe_whsec" type="secret" default=""
+            label="PLG_SYSTEM_WEBGBOOKING_PAY_WHSEC_LABEL"
+            description="PLG_SYSTEM_WEBGBOOKING_PAY_WHSEC_DESC" />
+        <field name="stripe_webhook_url" type="webhookurl"
+            label="PLG_SYSTEM_WEBGBOOKING_PAY_WEBHOOK_LABEL"
+            description="PLG_SYSTEM_WEBGBOOKING_PAY_WEBHOOK_DESC" />
+        <field name="stripe_hold_minutes" type="number" default="30" min="30" max="1440"
+            label="PLG_SYSTEM_WEBGBOOKING_PAY_HOLD_LABEL"
+            description="PLG_SYSTEM_WEBGBOOKING_PAY_HOLD_DESC" />
+        <field name="limit_ip_hour" type="number" default="15" min="1"
+            label="PLG_SYSTEM_WEBGBOOKING_LIMIT_IP_LABEL"
+            description="PLG_SYSTEM_WEBGBOOKING_LIMIT_IP_DESC" />
+        <field name="max_holds_ip" type="number" default="2" min="1"
+            label="PLG_SYSTEM_WEBGBOOKING_HOLDS_IP_LABEL"
+            description="PLG_SYSTEM_WEBGBOOKING_HOLDS_IP_DESC" />
+        <field name="cf_ranges_extra" type="textarea" default="" rows="3" filter="raw"
+            label="PLG_SYSTEM_WEBGBOOKING_CF_EXTRA_LABEL"
+            description="PLG_SYSTEM_WEBGBOOKING_CF_EXTRA_DESC" />
+        <field name="max_open_holds" type="number" default="60" min="1"
+            label="PLG_SYSTEM_WEBGBOOKING_HOLDS_MAX_LABEL"
+            description="PLG_SYSTEM_WEBGBOOKING_HOLDS_MAX_DESC" />
+        <field name="gtm_id" type="text" default="" size="20" autocomplete="off"
+            label="PLG_SYSTEM_WEBGBOOKING_GTM_LABEL"
+            description="PLG_SYSTEM_WEBGBOOKING_GTM_DESC" />
+        <field name="ga4_id" type="text" default="" size="20" autocomplete="off"
+            label="PLG_SYSTEM_WEBGBOOKING_GA4_LABEL"
+            description="PLG_SYSTEM_WEBGBOOKING_GA4_DESC" />
+        <field name="config_epoch" type="number" default="1" min="1" readonly="true"
+            label="PLG_SYSTEM_WEBGBOOKING_EPOCH_LABEL"
+            description="PLG_SYSTEM_WEBGBOOKING_EPOCH_DESC" />
+        <field name="config_bump" type="radio" layout="joomla.form.field.radio.switcher" default="0"
+            label="PLG_SYSTEM_WEBGBOOKING_BUMP_LABEL"
+            description="PLG_SYSTEM_WEBGBOOKING_BUMP_DESC">
+            <option value="0">JNO</option>
+            <option value="1">JYES</option>
+        </field>
+        <field name="config_ttl_days" type="number" default="30" min="0"
+            label="PLG_SYSTEM_WEBGBOOKING_TTL_LABEL"
+            description="PLG_SYSTEM_WEBGBOOKING_TTL_DESC" />
+        <field name="paid_cancel_hours" type="number" default="24" min="0"
+            label="PLG_SYSTEM_WEBGBOOKING_PAY_CANCEL_LABEL"
+            description="PLG_SYSTEM_WEBGBOOKING_PAY_CANCEL_DESC" />
+    </fieldset>
+    <fieldset name="permissions" label="JCONFIG_PERMISSIONS_LABEL" description="JCONFIG_PERMISSIONS_DESC">
+        <field name="rules" type="rules" label="JCONFIG_PERMISSIONS_LABEL" validate="rules" filter="rules" component="com_webgbooking" section="component" />
+    </fieldset>
 </config>

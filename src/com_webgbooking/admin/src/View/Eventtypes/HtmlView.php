@@ -55,6 +55,9 @@ class HtmlView extends BaseHtmlView
         if ($this->canDelete) {
             ToolbarHelper::deleteList(Text::_('COM_WEBGBOOKING_ET_CONFIRM_DELETE'), 'eventtypes.delete', 'JTOOLBAR_DELETE');
         }
+        if (Factory::getApplication()->getIdentity()->authorise('core.admin', 'com_webgbooking')) {
+            ToolbarHelper::preferences('com_webgbooking');
+        }
 
         parent::display($tpl);
     }

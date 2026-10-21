@@ -21,7 +21,6 @@ namespace WebG\Plugin\System\Webgbooking\Booking;
 
 use Joomla\CMS\Factory;
 use Joomla\CMS\Language\Text;
-use Joomla\CMS\Plugin\PluginHelper;
 use Joomla\CMS\Uri\Uri;
 use Joomla\Registry\Registry;
 use WebG\Plugin\System\Webgbooking\Extension\Webgbooking;
@@ -31,7 +30,7 @@ final class WidgetConfig
     /** Plugin parameters as a Registry (the availability defaults and the Stripe hold come from there). */
     public static function pluginParams(): Registry
     {
-        return new Registry(PluginHelper::getPlugin('system', 'webgbooking')->params ?? '');
+        return Settings::all();
     }
 
     /**
@@ -44,7 +43,14 @@ final class WidgetConfig
         if ($own !== '') {
             return Webgbooking::httpUrlOk($own) ? $own : '';
         }
-        foreach (preg_split('/\R/', (string) $pp->get('mail_footer', '')) ?: [] as $line) {
+        $footer = (string) $pp->get('mail_footer', '');
+        if (FooterText::isRich($footer)) {
+            // written in the editor: the link whose words (or address) say "privacy"; its address is what counts, not what is shown
+            $u = FooterText::privacyHref($footer);
+
+            return $u !== '' && Webgbooking::httpUrlOk($u) ? $u : '';
+        }
+        foreach (preg_split('/\R/', $footer) ?: [] as $line) {
             if (stripos($line, 'privacy') !== false && preg_match('#https?://[^\s<>"\']+#i', $line, $m)) {
                 $u = rtrim($m[0], '.,;)');
 

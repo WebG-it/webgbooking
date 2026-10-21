@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.36.0 (pacchetto, componente e plugin): le impostazioni sono le Opzioni del componente, il piede si scrive in un editor
+
+Due richieste di Marco, stesso rilascio. Prove in `tools/e2e/t_v360.py` (le Opzioni, il filtro del piede, il disegno), `t_v360_upgrade.py` (l'aggiornamento con opzioni vere dalla 0.35.3 e dalla 0.35.2) e `t_v360_fresh.py` (installazione nuova).
+
+1. **Tutte le impostazioni (circa 80) sono nelle Opzioni del componente**: *Componenti, WebG Booking, Opzioni* (disponibilità, aspetto delle email, integrazioni, pagamenti, più la scheda dei permessi). Il pulsante **Opzioni** è nella barra degli strumenti di Prenotazioni, Tipi di evento e Testi delle email. Il plugin di sistema non ha più opzioni sue e mostra solo il collegamento alle Opzioni.
+2. **Un solo punto di lettura.** Plugin, componente, attività dei promemoria e elemento YOOtheme leggono le Opzioni del componente; il plugin resta come ripiego solo per una chiave che il componente non ha. Il salvataggio si comporta come prima: le chiavi segrete (Stripe, Brevo, intestazioni dei webhook) si cifrano, una chiave Stripe che non corrisponde al modo test/produzione si rifiuta, "Invalida le configurazioni in cache" alza l'epoca. Le impostazioni che non sono sullo schermo (i vecchi testi, gli interruttori nascosti) sopravvivono a un salvataggio, e togliere la spunta a tutti i giorni è una scelta vera (non fa tornare un valore vecchio).
+3. **Il piede è un editor.** Si può scrivere "Privacy Policy" come collegamento senza mostrare l'indirizzo. Si salvano solo `p`, `br`, `strong`, `b`, `em`, `i` e collegamenti `http`, `https`, `mailto`: via script, stile, classi, `onclick`, `javascript:`, `data:`, iframe e il resto, sia al salvataggio sia quando il testo viene disegnato; i collegamenti hanno `rel="noopener noreferrer"`. Si vede nell'email al cliente, nella notifica a chi riceve gli appuntamenti, nella pagina diretta e (come "Privacy Policy (indirizzo)") nel testo semplice delle email; la casella del consenso prende l'indirizzo dal collegamento che nelle parole o nell'indirizzo ha "privacy".
+4. **Attenzione, cosa cambia per chi usa già il prodotto: niente si perde.**
+   - Ogni valore salvato nel plugin viene copiato nelle Opzioni del componente all'aggiornamento (anche le chiavi cifrate, che restano cifrate); una chiave che il componente ha già non viene mai sovrascritta, quindi rilanciare l'aggiornamento non disfa niente. Le pagine disegnate prima dell'aggiornamento continuano a funzionare (l'epoca della configurazione è la stessa).
+   - **Il plugin non ha più opzioni sue**: da ora si cambia tutto in *Componenti, WebG Booking, Opzioni*. I vecchi valori restano nel plugin come ripiego (non si cancella niente finché non è provato): se si torna a una versione più vecchia, la trova com'era.
+   - I piedi scritti prima (testo semplice, una riga per voce) escono **identici a prima** e si aprono nell'editor con le righe a capo. Il database non cambia finché non si salvano le Opzioni.
+   - Le scritte che dicevano "opzioni del plugin" dicono ora dove sono davvero le Opzioni.
+   - Una **installazione nuova** parte con le Opzioni già compilate coi valori di serie (orari 09:00 18:00, modo test di Stripe, indirizzo /prenota ...), come prima faceva il plugin; un aggiornamento non aggiunge valori che il sito non aveva.
+
+Dopo l'aggiornamento svuotare la cache del sito (YOOtheme, Cloudflare) per vedere il nuovo modulo.
+
 ## 0.35.3 (pacchetto, componente e plugin): le email si cambiano senza scrivere codice
 
 Richiesta di Marco: in nessuna estensione per modificare un testo si deve essere programmatori. Prove in `tools/e2e/t_v353.py`.

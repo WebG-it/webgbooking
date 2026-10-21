@@ -24,6 +24,20 @@ def jx(cmd):
     return sh(['docker', 'exec', J, 'sh', '-c', cmd])
 
 
+# 0.36.0: the settings are the Options of the component, not of the plugin. ONE place says where, for every test.
+OPTIONS_ROW = "element='com_webgbooking' AND type='component'"
+
+
+def opt_set(key, value):
+    """Set one option in the Options of the component (a string value)."""
+    sql("UPDATE joom_extensions SET params=JSON_SET(IF(params IN ('', 'null'), '{}', params),'$.%s',%s) WHERE %s" % (key, "'" + str(value).replace(chr(92), chr(92) * 2).replace("'", "''") + "'", OPTIONS_ROW))
+
+
+def opts_get():
+    """All the options of the component as a dict."""
+    return json.loads(sql("SELECT params FROM joom_extensions WHERE %s" % OPTIONS_ROW) or '{}')
+
+
 def check(name, cond, extra=''):
     RES['pass' if cond else 'fail'] += 1
     print(('PASS ' if cond else 'FAIL ') + name + ((' | ' + str(extra)) if (extra and not cond) else ''))

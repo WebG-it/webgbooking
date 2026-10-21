@@ -129,7 +129,10 @@ final class DirectPage
 
         $foot = '<p class="bk-f1">' . self::e($name) . '</p>';
         $ft   = trim((string) ($b['footer'] ?? ''));
-        if ($ft !== '') {
+        if ($ft !== '' && FooterText::isRich($ft)) {
+            $rich = FooterText::inline($ft, 'target="_blank"');
+            $foot .= $rich !== '' ? '<p class="bk-f2">' . $rich . '</p>' : '';
+        } elseif ($ft !== '') {
             $foot .= '<p class="bk-f2">' . nl2br(self::linkifyText($ft), false) . '</p>';
         }
 

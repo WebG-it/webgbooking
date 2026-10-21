@@ -81,11 +81,11 @@ class FormParser(HTMLParser):
 
 
 adm = admin_login()
-ext = sql("SELECT extension_id FROM joom_extensions WHERE element='webgbooking' AND folder='system'")
-EDIT = BASE + '/administrator/index.php?option=com_plugins&task=plugin.edit&extension_id=%s' % ext
+EDIT = BASE + '/administrator/index.php?option=com_config&view=component&component=com_webgbooking'     # 0.36.0: the Options of the component
 
 
-def save_options(overrides, task='plugin.apply'):
+def save_options(overrides, task='component.apply'):
+    overrides = {(k.replace('jform[params][', 'jform[', 1) if k.startswith('jform[params][') else k): v for k, v in overrides.items()}
     page = adm.get(EDIT)
     fp = FormParser()
     fp.feed(page)
@@ -96,11 +96,11 @@ def save_options(overrides, task='plugin.apply'):
 
 
 def opts():
-    return json.loads(sql("SELECT params FROM joom_extensions WHERE element='webgbooking' AND folder='system'"))
+    return json.loads(sql("SELECT params FROM joom_extensions WHERE element='com_webgbooking' AND type='component'"))
 
 
 # ---------------------------------------------------------------- plugin options form
-sql("UPDATE joom_extensions SET params=JSON_REMOVE(JSON_REMOVE(params,'$.stripe_sk'),'$.stripe_whsec') WHERE element='webgbooking' AND folder='system'")
+sql("UPDATE joom_extensions SET params=JSON_REMOVE(JSON_REMOVE(params,'$.stripe_sk'),'$.stripe_whsec') WHERE element='com_webgbooking' AND type='component'")
 tp.set_mock_key(SK)
 page = adm.get(EDIT)
 check('A1 options form shows the webhook URL to register', 'action=stripewebhook' in page and 'readonly' in page, '')

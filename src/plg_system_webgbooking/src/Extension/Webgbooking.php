@@ -27,11 +27,14 @@ use Joomla\CMS\Plugin\CMSPlugin;
 use Joomla\CMS\Session\Session;
 use Joomla\CMS\Uri\Uri;
 use Joomla\Database\DatabaseInterface;
+use Joomla\Event\DispatcherInterface;
 use Joomla\Event\Event;
 use Joomla\Event\Priority;
 use Joomla\Event\SubscriberInterface;
 use WebG\Plugin\System\Webgbooking\Booking\DirectPage;
 use WebG\Plugin\System\Webgbooking\Booking\EventTypes;
+use WebG\Plugin\System\Webgbooking\Booking\FooterText;
+use WebG\Plugin\System\Webgbooking\Booking\Settings;
 use WebG\Plugin\System\Webgbooking\Booking\WidgetConfig;
 use WebG\Plugin\System\Webgbooking\Mail\EmailLayout;
 use WebG\Plugin\System\Webgbooking\Mail\EmailTemplates;
@@ -39,9 +42,22 @@ use WebG\Plugin\System\Webgbooking\Mail\EmailTemplates;
 final class Webgbooking extends CMSPlugin implements SubscriberInterface
 {
     /** Cache-buster for the bundled front-end assets (wgb.css/js, UIkit). Bump when those change. */
-    public const ASSET_VER = '0.35.3';
+    public const ASSET_VER = '0.36.0';
 
     protected $autoloadLanguage = true;
+
+    /**
+     * Since 0.36.0 the settings are the Options of the component. The plugin reads them through ONE place (Settings::merged):
+     * the component's options on top of the plugin's own, so a key that was not copied yet is still found where it always was.
+     */
+    public function __construct(DispatcherInterface $dispatcher, array $config = [])
+    {
+        parent::__construct($dispatcher, $config);
+        try {
+            $this->params = Settings::merged($this->params);
+        } catch (\Throwable $e) {
+        }
+    }
 
     public static function getSubscribedEvents(): array
     {
@@ -1176,20 +1192,12 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             return $plain;
         }
 
-        // in clear: encrypt now
+        // in clear: encrypt now (in the options of the component, where the settings live since 0.36.0)
         try {
-            $db  = Factory::getContainer()->get(DatabaseInterface::class);
-            $raw = (string) $db->setQuery(
-                $db->getQuery(true)->select($db->quoteName('params'))->from($db->quoteName('#__extensions'))
-                    ->where($db->quoteName('element') . ' = ' . $db->quote('webgbooking'))->where($db->quoteName('folder') . ' = ' . $db->quote('system'))
-            )->loadResult();
-            $p = json_decode($raw, true);
-            if (\is_array($p) && isset($p[$name]) && strncmp((string) $p[$name], 'g:', 2) !== 0) {
-                $p[$name] = $this->enc($v);
-                $db->setQuery(
-                    $db->getQuery(true)->update($db->quoteName('#__extensions'))->set($db->quoteName('params') . ' = ' . $db->quote((string) json_encode($p)))
-                        ->where($db->quoteName('element') . ' = ' . $db->quote('webgbooking'))->where($db->quoteName('folder') . ' = ' . $db->quote('system'))
-                )->execute();
+            $db = Factory::getContainer()->get(DatabaseInterface::class);
+            $p  = Settings::componentRow($db);
+            if (isset($p[$name]) && strncmp((string) $p[$name], 'g:', 2) !== 0 && trim((string) $p[$name]) === $v) {
+                Settings::setComponent($db, [$name => $this->enc($v)]);
                 $this->wlog(Text::sprintf('PLG_SYSTEM_WEBGBOOKING_LOG_SECRET_ENCRYPTED', $name));
             }
         } catch (\Throwable $e) {
@@ -2184,7 +2192,22 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             $context = (string) ($a['context'] ?? $a[0] ?? '');
             $table   = $a['subject'] ?? $a[1] ?? null;
 
-            if ($context !== 'com_plugins.plugin' || !\is_object($table) || ($table->element ?? '') !== 'webgbooking' || ($table->folder ?? '') !== 'system') {
+            $isComp = $context === 'com_config.component' && \is_object($table) && ($table->element ?? '') === Settings::COMPONENT;
+            $isPlg  = $context === 'com_plugins.plugin' && \is_object($table) && ($table->element ?? '') === 'webgbooking' && ($table->folder ?? '') === 'system';
+            if (!$isComp && !$isPlg) {
+                return;
+            }
+
+            if ($isPlg) {
+                // since 0.36.0 the plugin has no options of its own: what it still holds (the old values, kept as a fallback) is never wiped by a save of its empty form
+                $dbp = Factory::getContainer()->get(DatabaseInterface::class);
+                $was = (string) $dbp->setQuery(
+                    $dbp->getQuery(true)->select($dbp->quoteName('params'))->from($dbp->quoteName('#__extensions'))->where($dbp->quoteName('extension_id') . ' = ' . (int) ($table->extension_id ?? 0))
+                )->loadResult();
+                if ($was !== '') {
+                    $table->params = $was;
+                }
+
                 return;
             }
 
@@ -2199,8 +2222,31 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                 $db->getQuery(true)->select($db->quoteName('params'))->from($db->quoteName('#__extensions'))->where($db->quoteName('extension_id') . ' = ' . (int) ($table->extension_id ?? 0))
             )->loadResult(), true);
 
+            // the form posts what is on the screen: a box with nothing ticked posts nothing, and the options not on the screen (the
+            // old email texts, a hidden switch) are not posted at all. A key that is simply missing would let the plugin's old value
+            // come back, so: every field of the form has a key, and every other stored key is kept as it was.
+            $fields = Settings::formFields();
+            if ($fields) {
+                foreach ($fields as $f) {
+                    if (!\array_key_exists($f, $new)) {
+                        $new[$f] = '';
+                    }
+                }
+                foreach ($old as $k => $v) {
+                    if (!\array_key_exists($k, $new) && !\in_array($k, $fields, true)) {
+                        $new[$k] = $v;
+                    }
+                }
+            }
+            // the footer is written in an editor: only the small closed set of tags and links is stored
+            if (isset($new['mail_footer']) && \is_string($new['mail_footer'])) {
+                $new['mail_footer'] = FooterText::sanitize($new['mail_footer']);
+            }
+
             // config epoch: bump on request, never lower
-            $epoch = max(1, (int) ($old['config_epoch'] ?? 1));
+            // (the plugin's own value counts too: a site whose options were not copied yet must not start again from 1)
+            $prev  = fn(string $k, string $def = ''): string => \array_key_exists($k, $old) ? (string) $old[$k] : (string) $this->params->get($k, $def);
+            $epoch = max(1, (int) ($old['config_epoch'] ?? 0), (int) $this->params->get('config_epoch', 1));
             if (!empty($new['config_bump']) && (string) $new['config_bump'] === '1') {
                 $epoch++;
                 $app->enqueueMessage(Text::sprintf('PLG_SYSTEM_WEBGBOOKING_EPOCH_BUMPED', $epoch), 'message');
@@ -2213,7 +2259,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             foreach (['stripe_sk', 'stripe_whsec', 'brevo_key', 'whp1_headers', 'whp2_headers', 'whp3_headers', 'whp4_headers'] as $k) {
                 $v = trim((string) ($new[$k] ?? ''));
                 if ($v === '') {
-                    $new[$k] = (string) ($old[$k] ?? '');
+                    $new[$k] = $prev($k);
                 } elseif ($v === '-') {
                     $new[$k] = '';
                 } elseif (strncmp($v, 'g:', 2) !== 0) {
@@ -2231,12 +2277,12 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             $keyMode = preg_match('/^(sk|rk)_live_/', $eff) ? 'live' : (preg_match('/^(sk|rk)_test_/', $eff) ? 'test' : '');
             if ($freshSk !== '' && $keyMode === '') {
                 $app->enqueueMessage(Text::_('PLG_SYSTEM_WEBGBOOKING_PAY_KEY_PREFIX_ERROR'), 'error');
-                $new['stripe_sk'] = (string) ($old['stripe_sk'] ?? '');
+                $new['stripe_sk'] = $prev('stripe_sk');
                 $freshSk = '';
             } elseif ($keyMode !== '' && $keyMode !== $mode) {
                 $app->enqueueMessage(Text::sprintf('PLG_SYSTEM_WEBGBOOKING_PAY_KEY_MODE_ERROR', $keyMode, $mode), 'error');
-                $new['stripe_sk']   = (string) ($old['stripe_sk'] ?? '');
-                $new['stripe_mode'] = (string) ($old['stripe_mode'] ?? 'test');
+                $new['stripe_sk']   = $prev('stripe_sk');
+                $new['stripe_mode'] = $prev('stripe_mode', 'test');
                 $freshSk = '';
             }
             $table->params = (string) json_encode($new);
@@ -3424,7 +3470,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             'logo_dark' => $this->mediaUrl((string) $this->params->get('mail_logo_dark', '')),
             'color'     => $accent,
             'button'    => EmailLayout::hex((string) $this->params->get('mail_button_color', ''), $accent),
-            'footer'    => trim((string) $this->params->get('mail_footer', '')),
+            'footer'    => FooterText::sanitize((string) $this->params->get('mail_footer', '')),
             'logo_pos'     => $this->params->get('mail_logo_pos', 'left') === 'center' ? 'center' : 'left',
             'header_style' => $this->params->get('mail_header_style', 'band') === 'rule' ? 'rule' : 'band',
             'footer_out'   => (int) $this->params->get('mail_footer_out', 0) === 1,
@@ -3839,11 +3885,20 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
         $tpl = '<p>' . '{name}</p>' . $this->cleanRichText($old) . ($key === 'customer_reminder'
             ? '{notices}{appointment_box}{meet_button}{change_links}' : '{payment_block}{notices}{appointment_box}{answers_block}{meet_button}{calendar_link}{change_links}');
         $this->saveEmailTexts($key, $tag, ['text' => $tpl] + $data['values'], $userId);
-        $p = $this->params;
-        $p->set($pname, '');
+        // the old text is now in the editor: emptied in the options of the component, and in the plugin's old row where it was written
         $db = Factory::getContainer()->get(DatabaseInterface::class);
-        $db->setQuery('UPDATE ' . $db->quoteName('#__extensions') . ' SET ' . $db->quoteName('params') . ' = ' . $db->quote((string) $p->toString())
-            . ' WHERE ' . $db->quoteName('element') . ' = ' . $db->quote('webgbooking') . ' AND ' . $db->quoteName('folder') . ' = ' . $db->quote('system'))->execute();
+        Settings::setComponent($db, [$pname => '']);
+        $row = (string) $db->setQuery(
+            $db->getQuery(true)->select($db->quoteName('params'))->from($db->quoteName('#__extensions'))
+                ->where($db->quoteName('element') . ' = ' . $db->quote('webgbooking'))->where($db->quoteName('folder') . ' = ' . $db->quote('system'))
+        )->loadResult();
+        $pp = json_decode($row, true);
+        if (\is_array($pp) && ($pp[$pname] ?? '') !== '') {
+            $pp[$pname] = '';
+            $db->setQuery('UPDATE ' . $db->quoteName('#__extensions') . ' SET ' . $db->quoteName('params') . ' = ' . $db->quote((string) json_encode($pp))
+                . ' WHERE ' . $db->quoteName('element') . ' = ' . $db->quote('webgbooking') . ' AND ' . $db->quoteName('folder') . ' = ' . $db->quote('system'))->execute();
+        }
+        $this->params->set($pname, '');
 
         return true;
     }

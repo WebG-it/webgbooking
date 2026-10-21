@@ -18,6 +18,8 @@ namespace WebG\Plugin\System\Webgbooking\Mail;
 
 \defined('_JEXEC') or die;
 
+use WebG\Plugin\System\Webgbooking\Booking\FooterText;
+
 final class EmailLayout
 {
     private const FONT = "Roboto,'Segoe UI',Helvetica,Arial,sans-serif";
@@ -272,7 +274,14 @@ final class EmailLayout
         $flines[] = '<p class="f1" style="margin:0 0 6px 0;font-family:' . $F . ';font-size:14px;line-height:22px;font-weight:700;color:' . $fc1 . ';">' . self::e($name) . '</p>';
         $ftext    = [$name];
         $foot     = trim((string) ($b['footer'] ?? ''));
-        if ($foot !== '') {
+        if ($foot !== '' && FooterText::isRich($foot)) {
+            // since 0.36.0 the footer can be written in an editor (links with words); filtered again here, whatever was stored
+            $rich = FooterText::inline($foot, 'class="f-link" style="color:' . $fc1 . ';text-decoration:underline;"', static fn(string $t): string => self::e(self::breakDetect($t)));
+            if ($rich !== '') {
+                $flines[] = '<p class="f2" style="margin:0 0 8px 0;font-family:' . $F . ';font-size:13px;line-height:21px;color:' . $fc2 . ';">' . $rich . '</p>';
+                $ftext[]  = FooterText::toText($foot);
+            }
+        } elseif ($foot !== '') {
             $flines[] = '<p class="f2" style="margin:0 0 8px 0;font-family:' . $F . ';font-size:13px;line-height:21px;color:' . $fc2 . ';">' . nl2br(self::linkifyFooter($foot, $fc1), false) . '</p>';
             $ftext[]  = $foot;
         }

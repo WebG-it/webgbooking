@@ -11,19 +11,12 @@
 use Joomla\CMS\Factory;
 use Joomla\CMS\Language\Text;
 use Joomla\CMS\Router\Route;
-use Joomla\Database\DatabaseInterface;
 
 /** @var \WebG\Component\Webgbooking\Administrator\View\Emails\HtmlView $this */
 $e = static fn($s) => htmlspecialchars((string) $s, ENT_QUOTES, 'UTF-8');
 
-// the plugin options (the look of every email: logo, colours, footer) live in the plugin: a link there
-$extId = 0;
-try {
-    $db    = Factory::getContainer()->get(DatabaseInterface::class);
-    $extId = (int) $db->setQuery($db->getQuery(true)->select($db->quoteName('extension_id'))->from($db->quoteName('#__extensions'))
-        ->where($db->quoteName('element') . ' = ' . $db->quote('webgbooking'))->where($db->quoteName('folder') . ' = ' . $db->quote('system')))->loadResult();
-} catch (\Throwable $ex) {
-}
+// the look of every email (logo, colours, footer) is in the Options of the component: a link there
+$optionsUrl = (Factory::getApplication()->getIdentity()->authorise('core.admin', 'com_webgbooking')) ? Route::_('index.php?option=com_config&view=component&component=com_webgbooking') : '';
 $groups = ['customer' => 'COM_WEBGBOOKING_EMG_CUSTOMER', 'guest' => 'COM_WEBGBOOKING_EMG_GUEST', 'staff' => 'COM_WEBGBOOKING_EMG_STAFF'];
 ?>
 <div class="wgb-em">
@@ -36,8 +29,8 @@ $groups = ['customer' => 'COM_WEBGBOOKING_EMG_CUSTOMER', 'guest' => 'COM_WEBGBOO
             <?php foreach ($this->languages as $l) : ?>
                 <a class="btn btn-sm <?php echo $l === $this->lang ? 'btn-primary' : 'btn-outline-secondary'; ?>" href="<?php echo Route::_('index.php?option=com_webgbooking&view=emails&lang=' . rawurlencode($l)); ?>"<?php echo $l === $this->lang ? ' aria-current="true"' : ''; ?>><?php echo $e($l); ?></a>
             <?php endforeach; ?>
-            <?php if ($extId > 0) : ?>
-                <a class="btn btn-sm btn-outline-secondary ms-auto" href="<?php echo Route::_('index.php?option=com_plugins&task=plugin.edit&extension_id=' . $extId); ?>"><span class="icon-palette" aria-hidden="true"></span> <?php echo Text::_('COM_WEBGBOOKING_EM_LOOK'); ?></a>
+            <?php if ($optionsUrl !== '') : ?>
+                <a class="btn btn-sm btn-outline-secondary ms-auto" href="<?php echo $optionsUrl; ?>"><span class="icon-palette" aria-hidden="true"></span> <?php echo Text::_('COM_WEBGBOOKING_EM_LOOK'); ?></a>
             <?php endif; ?>
         </div>
         <?php foreach ($groups as $g => $gl) : ?>

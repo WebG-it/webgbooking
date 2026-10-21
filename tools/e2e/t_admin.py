@@ -7,10 +7,12 @@ data = {'username': 'admin', 'passwd': os.environ['WGB_E2E_ADMIN_PASS'], 'option
 for t in tok: data[t] = '1'
 s.post(BASE + '/administrator/index.php', data)
 ext = sql("SELECT extension_id FROM joom_extensions WHERE element='webgbooking' AND folder='system'")
-pg = s.get(BASE + '/administrator/index.php?option=com_plugins&task=plugin.edit&extension_id=%s' % ext)
-for name in ['jform[params][reminders_enabled]', 'jform[params][reminder_times]', 'jform[params][slot_duration]']:
-    check('plugin options form has ' + name, name in pg, '')
-check('plugin options: reminder text description present', 'Appointment reminders' in pg or 'Reminders' in pg)
+pg = s.get(BASE + '/administrator/index.php?option=com_config&view=component&component=com_webgbooking')
+for name in ['jform[reminders_enabled]', 'jform[reminder_times]', 'jform[slot_duration]']:
+    check('component options form has ' + name, name in pg, '')
+check('component options: reminder text description present', 'Appointment reminders' in pg or 'Reminders' in pg)
+ppg = s.get(BASE + '/administrator/index.php?option=com_plugins&task=plugin.edit&extension_id=%s' % ext)
+check('the plugin has no options of its own: its form shows only the link to the component options', 'jform[params][reminders_enabled]' not in ppg and 'jform[params][stripe_sk]' not in ppg and 'href="/administrator/index.php?option=com_config&amp;view=component&amp;component=com_webgbooking"' in ppg, ppg[-300:])
 tk = sql("SELECT extension_id FROM joom_extensions WHERE element='webgbookingreminders'")
 pg2 = s.get(BASE + '/administrator/index.php?option=com_plugins&task=plugin.edit&extension_id=%s' % tk)
 check('task plugin edit page opens and is enabled', 'WebG Booking' in pg2 or 'webgbookingreminders' in pg2, pg2[:100])

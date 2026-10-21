@@ -79,7 +79,7 @@ def flash(out):
 # ============================================================================ 1. the key and the profiles are secrets
 print('--- 1. secrets')
 setup(brevo_key='', whp1_name='', whp1_headers='')
-sql("UPDATE joom_extensions SET params=JSON_REMOVE(params,'$.brevo_key','$.whp1_name','$.whp1_headers') WHERE element='webgbooking' AND folder='system'")
+sql("UPDATE joom_extensions SET params=JSON_REMOVE(params,'$.brevo_key','$.whp1_name','$.whp1_headers') WHERE element='com_webgbooking' AND type='component'")
 jx("printf %%s '%s' > /tmp/gmock/brevo_key; chmod 666 /tmp/gmock/brevo_key; rm -f /tmp/gmock/log.jsonl" % BKEY)
 out = save_options({'jform[params][brevo_key]': BKEY, 'jform[params][whp1_name]': 'crm',
                     'jform[params][whp1_headers]': 'Authorization: Bearer %s\nX-Api-Key: %s\nHOSTS: www.googleapis.com\nHost: evil.example\nBad Header: x\nContent-Type: text/plain' % (S1, S2)})
@@ -349,7 +349,7 @@ b = last_id()
 check('B23 a key Brevo refuses (401): booking works, error step, log says the key is refused, staff mailed', r.get('ok') is True and '"brevo":"error"' in rowdb(b)['fx_steps'].replace(' ', '') and 'refuses the API key' in logtxt() and any('Brevo' in m['subject'] for m in mails_to('staff@wgbtest.invalid')), logtxt()[-200:])
 # no key
 setup(brevo_key='')
-sql("UPDATE joom_extensions SET params=JSON_REMOVE(params,'$.brevo_key') WHERE element='webgbooking' AND folder='system'")
+sql("UPDATE joom_extensions SET params=JSON_REMOVE(params,'$.brevo_key') WHERE element='com_webgbooking' AND type='component'")
 r = book('brevo1', day(D), '09:00', email='nokey@example.invalid', name='Senza Chiave')
 b = last_id()
 check('B24 Brevo switched on for the element but no key in the plugin options: booking works, clear log line, staff mailed', r.get('ok') is True and 'API key is not set' in logtxt() and '"brevo":"error"' in rowdb(b)['fx_steps'].replace(' ', ''), logtxt()[-200:])

@@ -158,7 +158,7 @@ base = ' '.join("'%s=%s'" % (k, v) for k, v in {'mail_logo': 'images/joomla_blac
                                                   'mail_footer': 'Via Roma 1, 10100 Torino' + chr(92) + 'nP.IVA 01234567890' + chr(92) + 'Privacy: https://www.example.invalid/privacy', 'mail_from_name': 'Studio Esempio'}.items())
 jx("php /tmp/mock/init.php %s >/dev/null" % base)
 jx("sed -i 's/\\\\\\\\n/\\\\n/g' /dev/null")
-sql("UPDATE joom_extensions SET params=JSON_SET(params,'$.mail_footer','Via Roma 1, 10100 Torino\\nP.IVA 01234567890\\nPrivacy: https://www.example.invalid/privacy') WHERE element='webgbooking' AND folder='system'")
+sql("UPDATE joom_extensions SET params=JSON_SET(params,'$.mail_footer','Via Roma 1, 10100 Torino\\nP.IVA 01234567890\\nPrivacy: https://www.example.invalid/privacy') WHERE element='com_webgbooking' AND type='component'")
 jx('rm -f /tmp/mail/*.eml')
 book('def', day(D + 2), '09:00', email='brand1@example.invalid', name='Cliente Brand')
 bm = next((m for m in collect() if 'brand1@' in m['rcpt']), None)
@@ -221,7 +221,7 @@ tp.fresh()
 
 def opts(**kv):
     args = ','.join("'$.%s','%s'" % (k, v) for k, v in kv.items())
-    sql("UPDATE joom_extensions SET params=JSON_SET(params,%s) WHERE element='webgbooking' AND folder='system'" % args)
+    sql("UPDATE joom_extensions SET params=JSON_SET(params,%s) WHERE element='com_webgbooking' AND type='component'" % args)
 
 
 opts(mail_color='#ee6c2d', mail_line_color='#fda079', mail_link_color='#b34a16', mail_button_color='#fd9265', mail_text_color='#363650', mail_footer_color='#363650')

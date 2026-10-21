@@ -9,7 +9,7 @@ reset_env()
 fresh()
 D = 12
 # ------------------------------------------------------------------ setup checks
-params = sql("SELECT params FROM joom_extensions WHERE element='webgbooking' AND folder='system'")
+params = sql("SELECT params FROM joom_extensions WHERE element='com_webgbooking' AND type='component'")
 check('P0 keys are stored encrypted (g: prefix), the raw key is nowhere in the options', json.loads(params)['stripe_sk'].startswith('g:') and SK not in params and WHSEC not in params, params[:80])
 
 # ------------------------------------------------------------------ free events unchanged

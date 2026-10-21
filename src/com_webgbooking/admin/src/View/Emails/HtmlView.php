@@ -40,6 +40,9 @@ class HtmlView extends BaseHtmlView
         $this->items = $engine ? $engine->emailList($this->lang) : [];
 
         ToolbarHelper::title(Text::_('COM_WEBGBOOKING_EM_TITLE'), 'envelope');
+        if (Factory::getApplication()->getIdentity()->authorise('core.admin', 'com_webgbooking')) {
+            ToolbarHelper::preferences('com_webgbooking');
+        }
         parent::display($tpl);
     }
 }

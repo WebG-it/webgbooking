@@ -487,7 +487,7 @@ sql("DELETE FROM joom_users WHERE username='mgrro'")
 
 # the plugin options page has the new fields
 pg = adm.get(edit_url)
-check('A11 plugin options: "first part of the address" and "list of public events"', 'jform[params][direct_path]' in pg and 'jform[params][direct_index]' in pg)
+check('A11 plugin options: "first part of the address" and "list of public events"', 'jform[direct_path]' in pg and 'jform[direct_index]' in pg)
 save_options({'jform[params][direct_path]': 'Ri servato!'})
 pp_ = opts().get('direct_path')
 check('A11b the path option is cleaned by Joomla (letters, digits, hyphens) and the page answers on it', re.fullmatch(r'[A-Za-z0-9._-]*', pp_ or '') is not None and ours(direct('/' + (pp_.lower() if pp_ else 'prenota') + '/costoso')[2]), pp_)

@@ -266,7 +266,7 @@ tp.fresh()
 footer = 'Studio Esempio S.r.l.\\nVia Roma 1, 10121 Torino\\nP.IVA 01234567890\\nInformativa privacy: https://www.example.invalid/privacy'
 sql("UPDATE joom_extensions SET params=JSON_SET(params,'$.mail_logo','images/studio-esempio.png#joomlaImage://local-images/studio-esempio.png?width=600&height=160',"
     "'$.mail_logo_dark','images/studio-esempio-scuro.png#joomlaImage://local-images/studio-esempio-scuro.png?width=600&height=160',"
-    "'$.mail_color','#0f766e','$.mail_button_color','#0f766e','$.mail_footer','%s','$.mail_from_name','Studio Esempio') WHERE element='webgbooking' AND folder='system'" % footer)
+    "'$.mail_color','#0f766e','$.mail_button_color','#0f766e','$.mail_footer','%s','$.mail_from_name','Studio Esempio') WHERE element='com_webgbooking' AND type='component'" % footer)
 clear()
 book('meet30', day(D + 9), '09:30', guest='', notes='Prima consulenza.', **CUST)
 ms = collect()

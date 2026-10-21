@@ -63,7 +63,7 @@ def stored(key, lang):
 lst = adm.get(ADMIN + '?option=com_webgbooking&view=emails&lang=en-GB')
 names = re.findall(r'view=email&amp;key=([a-z_]+)&amp;lang=en-GB', lst)
 check('E1 the list of emails has one entry for each of the %d emails, in three groups' % len(KEYS), sorted(set(names)) == sorted(KEYS) and all(g in lst for g in ('To the customer', 'To the guest', 'To whoever receives the appointments')), sorted(set(KEYS) ^ set(names)))
-check('E1b ... the language of the texts can be chosen (it-IT, en-GB) and a link leads to the look (logo, colours, footer)', 'lang=it-IT' in lst and 'com_plugins' in lst, '')
+check('E1b ... the language of the texts can be chosen (it-IT, en-GB) and a link leads to the look (logo, colours, footer)', 'lang=it-IT' in lst and 'option=com_config' in lst, '')
 sub = adm.get(ADMIN + '?option=com_webgbooking&view=bookings')
 check('E1c the component menu has "Email texts"', 'view=emails' in sub)
 
@@ -167,7 +167,9 @@ check('L4 a Joomla language override changes the ready-made text: in the email a
 jx('rm -f /var/www/html/language/overrides/en-GB.override.ini /var/www/html/administrator/language/overrides/en-GB.override.ini')
 
 # ============================================================ 5. the texts of the old plugin options move to the new place on update
-sql("UPDATE joom_extensions SET params=JSON_SET(params,'$.email_subject','Gentile {name}: prenotazione del {date}','$.email_body','<p>Gentile {name}, la aspettiamo. {meet_block}</p>','$.reminder_subject','Ricorda: {date} {time}') WHERE element='webgbooking' AND folder='system'")
+# (a site updating from an old release has these in the options of the PLUGIN, where they were written; the component has none yet)
+sql("UPDATE joom_extensions SET params=JSON_SET(IF(params IN ('', 'null'), '{}', params),'$.email_subject','Gentile {name}: prenotazione del {date}','$.email_body','<p>Gentile {name}, la aspettiamo. {meet_block}</p>','$.reminder_subject','Ricorda: {date} {time}') WHERE element='webgbooking' AND folder='system' AND type='plugin'")
+sql("UPDATE joom_extensions SET params=JSON_REMOVE(params,'$.email_subject','$.email_body','$.reminder_subject','$.reminder_body') WHERE element='com_webgbooking' AND type='component'")
 zips = sorted(glob.glob(os.path.join(ROOT, 'dist', 'pkg_webgbooking-*.zip')), key=lambda p: [int(x) for x in re.findall(r'\d+', os.path.basename(p))])
 sh(['docker', 'cp', zips[-1], J + ':/tmp/pkg353.zip'])
 sh(['docker', 'exec', '-w', '/var/www/html', J, 'php', 'cli/joomla.php', 'extension:install', '--path=/tmp/pkg353.zip'])
@@ -178,8 +180,9 @@ check('M1 update: the old subject and body of the confirmation become its text i
 check('M1b ... the body keeps its blocks around it (appointment box, answers, calendar, change links) but not the Meet button the old text placed itself', all(b in dc.get('text', '') for b in ('{appointment_box}', '{answers_block}', '{calendar_link}', '{change_links}')) and '{meet_button}' not in dc.get('text', '') and '{meet_block}' in dc.get('text', ''), dc.get('text'))
 dr = json.loads(rows['customer_reminder'] or '{}')
 check('M2 the old reminder subject moves too (no body: the reminder text stays the ready-made one)', dr.get('subject') == 'Ricorda: {date} {time}' and 'text' not in dr, rows['customer_reminder'])
-pp = json.loads(sql("SELECT params FROM joom_extensions WHERE element='webgbooking' AND folder='system'"))
-check('M3 the old options are emptied after the copy (nothing is kept twice)', all(not pp.get(k) for k in ('email_subject', 'email_body', 'reminder_subject', 'reminder_body')), {k: pp.get(k) for k in ('email_subject', 'email_body')})
+pp = json.loads(sql("SELECT params FROM joom_extensions WHERE element='com_webgbooking' AND type='component'"))
+pq = json.loads(sql("SELECT params FROM joom_extensions WHERE element='webgbooking' AND folder='system' AND type='plugin'") or '{}')
+check('M3 the old options are emptied after the copy (nothing is kept twice), in the plugin where they were written and in the Options of the component', all(not pp.get(k) and not pq.get(k) for k in ('email_subject', 'email_body', 'reminder_subject', 'reminder_body')), {k: (pp.get(k), pq.get(k)) for k in ('email_subject', 'email_body')})
 jx('rm -f /tmp/mail/*.eml')
 book('def', day(D), '13:00', email='mig353@example.invalid', name='Migrato Uno')
 mg = mails_to('mig353@example.invalid')
@@ -192,10 +195,10 @@ check('M5 running the update again changes nothing (idempotent)', int(sql('SELEC
 sql('DELETE FROM %s' % TBL)
 
 # ============================================================ 6. colours, the element, the build
-pp_edit = adm.get(BASE + '/administrator/index.php?option=com_plugins&task=plugin.edit&extension_id=%s' % sql("SELECT extension_id FROM joom_extensions WHERE element='webgbooking' AND folder='system'"))
+pp_edit = adm.get(BASE + '/administrator/index.php?option=com_config&view=component&component=com_webgbooking')     # 0.36.0: the look is in the Options of the component
 cols = ['mail_color', 'mail_button_color', 'mail_line_color', 'mail_link_color', 'mail_text_color', 'mail_footer_color']
-check('C1 all the colours of the look have a colour picker (not a text box with a hex code)', all(re.search(r'name="jform\[params\]\[%s\]"[^>]*class="[^"]*minicolors' % c, pp_edit) or re.search(r'class="[^"]*minicolors[^"]*"[^>]*name="jform\[params\]\[%s\]"' % c, pp_edit) for c in cols), [c for c in cols if ('jform[params][%s]' % c) not in pp_edit])
-check('C2 the old text fields are gone from the plugin options (the texts are edited in "Email texts"), with a note pointing there', 'jform[params][email_body]' not in pp_edit and 'jform[params][reminder_body]' not in pp_edit and 'Email texts' in pp_edit, '')
+check('C1 all the colours of the look have a colour picker (not a text box with a hex code)', all(re.search(r'name="jform\[%s\]"[^>]*class="[^"]*minicolors' % c, pp_edit) or re.search(r'class="[^"]*minicolors[^"]*"[^>]*name="jform\[%s\]"' % c, pp_edit) for c in cols), [c for c in cols if ('jform[params][%s]' % c) not in pp_edit])
+check('C2 the old text fields are gone from the plugin options (the texts are edited in "Email texts"), with a note pointing there', 'jform[email_body]' not in pp_edit and 'jform[reminder_body]' not in pp_edit and 'Email texts' in pp_edit, '')
 el = open(os.path.join(SRC, 'plg_system_webgbooking', 'yootheme', 'elements', 'booking', 'element.php'), encoding='utf-8').read()
 check('C3 the YOOtheme element edits the email texts with the visual editor (no raw HTML mode), and says where the full list of placeholders is', el.count("'editor' => 'tinymce'") >= 3 and re.search(r"'type' => 'editor',\s+'mode' => 'text/html'", el) is None, '')
 rd = open(os.path.join(ROOT, 'README.md'), encoding='utf-8').read()
@@ -204,7 +207,7 @@ check('C4 the README explains the overrides for developers: the layout from the 
 # ============================================================ 7. defects found live on 0.35.2
 ins = lambda slug, title, **kw: sql("INSERT INTO joom_webgbooking_eventtypes (slug,title,state,listed,duration,location,allow_guest,custom_fields,created,modified) VALUES ('%s','%s',1,0,'30','%s',0,%s,NOW(),NOW())" % (slug, title, kw.get('location', 'meet'), "'" + kw.get('custom_fields', '').replace("'", "''") + "'"))
 sql('DELETE FROM joom_webgbooking_eventtypes')
-sql("UPDATE joom_extensions SET params=JSON_SET(params,'$.mail_from_name','Marco Galassi, WebG','$.host_name','') WHERE element='webgbooking' AND folder='system'")
+sql("UPDATE joom_extensions SET params=JSON_SET(params,'$.mail_from_name','Marco Galassi, WebG','$.host_name','') WHERE element='com_webgbooking' AND type='component'")
 ins('con-marco', 'Appuntamento con Marco Galassi')
 ins('senza-nome', 'Riunione di prova')
 ins('tel-dup', 'Telefono doppio', location='phone', custom_fields='Telefono | tel |')
@@ -224,12 +227,12 @@ m2 = (mails_to('dif2@example.invalid') or [None])[0]
 check('D1 the subject does not repeat the host when the event name already has it: "Confirmed: Appuntamento con Marco Galassi on ..." (no "with ...")', m1 is not None and re.match(r'^Confirmed: Appuntamento con Marco Galassi on \w+ \d\d/\d\d/\d{4} at 14:00$', m1['subject']) is not None, m1 and m1['subject'])
 check('D1b ... and with an event that does not name the host the clean person name is used ("Marco Galassi", not "Marco Galassi, WebG")', m2 is not None and re.match(r'^Confirmed: Riunione di prova with Marco Galassi on ', m2['subject']) is not None and 'WebG on' not in m2['subject'], m2 and m2['subject'])
 check('D1c ... the same name in the sentence of the email: "your appointment with Marco Galassi is confirmed"', m2 is not None and 'your appointment with Marco Galassi is confirmed' in txt(m2['html']), '')
-sql("UPDATE joom_extensions SET params=JSON_SET(params,'$.host_name','Studio Rossi') WHERE element='webgbooking' AND folder='system'")
+sql("UPDATE joom_extensions SET params=JSON_SET(params,'$.host_name','Studio Rossi') WHERE element='com_webgbooking' AND type='component'")
 jx('rm -f /tmp/mail/*.eml')
 book(None, day(D), '15:00', email='dif3@example.invalid', name='Difetto Tre', cfg=cfg_of('senza-nome'))
 m3 = (mails_to('dif3@example.invalid') or [None])[0]
 check('D1d the option "name of whoever takes the appointments" wins when set', m3 is not None and 'with Studio Rossi on' in m3['subject'], m3 and m3['subject'])
-sql("UPDATE joom_extensions SET params=JSON_SET(params,'$.host_name','') WHERE element='webgbooking' AND folder='system'")
+sql("UPDATE joom_extensions SET params=JSON_SET(params,'$.host_name','') WHERE element='com_webgbooking' AND type='component'")
 
 # the order of the links: the question above the links in the html and in the text; the calendar apart from the change links
 if m2:

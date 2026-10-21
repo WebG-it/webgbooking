@@ -94,7 +94,57 @@ return new class () implements InstallerScriptInterface {
 
         $this->ensureReminderTask();
 
+        // a NEW install: the Options start with the ready-made values (a component does not store them by itself, as the plugin used to)
+        if ($type === 'install') {
+            $this->seedOptionDefaults();
+        }
+
         return true;
+    }
+
+    /**
+     * Fresh install only: every option with a ready-made value in the Options form (config.xml of the component) is stored with that value,
+     * as the plugin did when it held the options, so a new site reads the same values an old one has. An update never does this: a key a
+     * site does not have stays absent, exactly as before (the code carries its own defaults), and nothing already there is touched.
+     */
+    private function seedOptionDefaults(): void
+    {
+        try {
+            $file = JPATH_ADMINISTRATOR . '/components/com_webgbooking/config.xml';
+            $x    = is_file($file) ? @simplexml_load_file($file) : false;
+            if (!$x) {
+                return;
+            }
+            $db  = Factory::getContainer()->get(DatabaseInterface::class);
+            $row = $db->setQuery(
+                $db->getQuery(true)->select([$db->quoteName('extension_id'), $db->quoteName('params')])->from($db->quoteName('#__extensions'))
+                    ->where($db->quoteName('type') . ' = ' . $db->quote('component'))->where($db->quoteName('element') . ' = ' . $db->quote('com_webgbooking'))
+            )->loadObject();
+            if (!$row) {
+                return;
+            }
+            $p = json_decode((string) $row->params, true);
+            if (!\is_array($p)) {
+                $p = [];
+            }
+            $added = 0;
+            foreach ($x->xpath('//field') ?: [] as $f) {
+                $n = (string) $f['name'];
+                if ($n === '' || !isset($f['default']) || \in_array((string) $f['type'], ['note', 'rules', 'spacer', 'webhookurl', 'componentlink'], true) || \array_key_exists($n, $p)) {
+                    continue;
+                }
+                $p[$n] = (string) $f['default'];
+                $added++;
+            }
+            if ($added > 0) {
+                $db->setQuery(
+                    $db->getQuery(true)->update($db->quoteName('#__extensions'))->set($db->quoteName('params') . ' = ' . $db->quote((string) json_encode($p)))
+                        ->where($db->quoteName('extension_id') . ' = ' . (int) $row->extension_id)
+                )->execute();
+            }
+        } catch (\Throwable $e) {
+            // Non-fatal: the code has the same defaults.
+        }
     }
 
     /**

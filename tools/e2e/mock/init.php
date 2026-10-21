@@ -41,8 +41,19 @@ foreach (['stripe_sk', 'stripe_whsec', 'brevo_key', 'whp1_headers', 'whp2_header
 }
 $refreshPlain = (string) ($opts['google_refresh'] ?? 'mock-refresh-token');
 unset($opts['google_refresh']);
-$db->setQuery($db->getQuery(true)->update('#__extensions')->set($db->quoteName('params') . ' = ' . $db->quote(json_encode($opts)))
-    ->where("type='plugin' AND element='webgbooking' AND folder='system'"))->execute();
+// 0.36.0: the settings are the Options of the component. The plugin row is kept EMPTY on purpose, so a test passes only if the
+// code reads the component. 'row=plugin' (an old release: the options were the plugin's) writes the plugin row instead.
+$toPlugin = ($opts['row'] ?? '') === 'plugin';
+unset($opts['row']);
+$setRow = function (string $where, array $p) use ($db) {
+    $db->setQuery($db->getQuery(true)->update('#__extensions')->set($db->quoteName('params') . ' = ' . $db->quote(json_encode($p ?: new stdClass())))->where($where))->execute();
+};
+if ($toPlugin) {
+    $setRow("type='plugin' AND element='webgbooking' AND folder='system'", $opts);
+} else {
+    $setRow("type='component' AND element='com_webgbooking'", $opts);
+    $setRow("type='plugin' AND element='webgbooking' AND folder='system'", []);
+}
 
 $secret = (string) $app->get('secret');
 $key = hash('sha256', $secret, true);

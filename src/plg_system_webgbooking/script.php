@@ -292,6 +292,13 @@ return new class () implements InstallerScriptInterface {
             $problems[] = 'email texts: ' . $e->getMessage();
         }
 
+        // 0.36.0: the settings become the Options of the component (after the email texts above, which empty their old options first)
+        try {
+            $this->migrateOptionsToComponent(Factory::getContainer()->get(DatabaseInterface::class));
+        } catch (\Throwable $e) {
+            $problems[] = 'options: ' . $e->getMessage();
+        }
+
         // Not silent any more: a failed ALTER means the plugin would run against a table that lacks columns.
         if ($problems) {
             try {
@@ -365,6 +372,47 @@ return new class () implements InstallerScriptInterface {
         }
         if ($moved) {
             $db->setQuery('UPDATE ' . $db->quoteName('#__extensions') . ' SET ' . $db->quoteName('params') . ' = ' . $db->quote((string) json_encode($params)) . ' WHERE ' . $db->quoteName('extension_id') . ' = ' . (int) $row->extension_id)->execute();
+        }
+    }
+
+    /**
+     * Until 0.35.3 the settings (about 80: availability, emails, look, integrations, payments) were the options of this plugin; from
+     * 0.36.0 they are the Options of the component. Once, and again harmlessly on every update: every key the plugin holds that the
+     * component does not have yet is COPIED into the component (a key the component already has is never overwritten, so a later
+     * edit is never undone). The secrets travel as they are: they are encrypted with the Joomla secret, which is the same for both.
+     * Nothing is removed from the plugin: its old values stay as they were, read only if the component lacks a key, so a failed
+     * or interrupted copy loses nothing and going back to an older release finds its options where it left them.
+     */
+    private function migrateOptionsToComponent(DatabaseInterface $db): void
+    {
+        $plug = $db->setQuery(
+            $db->getQuery(true)->select($db->quoteName('params'))->from($db->quoteName('#__extensions'))
+                ->where($db->quoteName('type') . ' = ' . $db->quote('plugin'))->where($db->quoteName('element') . ' = ' . $db->quote('webgbooking'))->where($db->quoteName('folder') . ' = ' . $db->quote('system'))
+        )->loadResult();
+        $comp = $db->setQuery(
+            $db->getQuery(true)->select([$db->quoteName('extension_id'), $db->quoteName('params')])->from($db->quoteName('#__extensions'))
+                ->where($db->quoteName('type') . ' = ' . $db->quote('component'))->where($db->quoteName('element') . ' = ' . $db->quote('com_webgbooking'))
+        )->loadObject();
+        $pp = json_decode((string) $plug, true);
+        if (!$comp || !\is_array($pp) || !$pp) {
+            return;
+        }
+        $cp = json_decode((string) $comp->params, true);
+        if (!\is_array($cp)) {
+            $cp = [];
+        }
+        $copied = 0;
+        foreach ($pp as $k => $v) {
+            if (!\array_key_exists($k, $cp)) {
+                $cp[$k] = $v;
+                $copied++;
+            }
+        }
+        if ($copied > 0) {
+            $db->setQuery(
+                $db->getQuery(true)->update($db->quoteName('#__extensions'))->set($db->quoteName('params') . ' = ' . $db->quote((string) json_encode($cp)))
+                    ->where($db->quoteName('extension_id') . ' = ' . (int) $comp->extension_id)
+            )->execute();
         }
     }
 };

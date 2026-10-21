@@ -128,5 +128,8 @@ class HtmlView extends BaseHtmlView
             ToolbarHelper::deleteList(Text::_('COM_WEBGBOOKING_CONFIRM_DELETE'), 'booking.delete', 'JTOOLBAR_DELETE');
             ToolbarHelper::divider();
         }
+        if (Factory::getApplication()->getIdentity()->authorise('core.admin', 'com_webgbooking')) {
+            ToolbarHelper::preferences('com_webgbooking');
+        }
     }
 }

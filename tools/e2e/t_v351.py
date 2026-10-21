@@ -41,11 +41,11 @@ def dcfg(body):
 
 
 def set_footer(txt):
-    sql("UPDATE joom_extensions SET params=JSON_SET(params,'$.mail_footer',%s) WHERE element='webgbooking' AND folder='system'" % q(txt))
+    sql("UPDATE joom_extensions SET params=JSON_SET(params,'$.mail_footer',%s) WHERE element='com_webgbooking' AND type='component'" % q(txt))
 
 
 def set_opt(k, v):
-    sql("UPDATE joom_extensions SET params=JSON_SET(params,'$.%s',%s) WHERE element='webgbooking' AND folder='system'" % (k, q(v)))
+    sql("UPDATE joom_extensions SET params=JSON_SET(params,'$.%s',%s) WHERE element='com_webgbooking' AND type='component'" % (k, q(v)))
 
 
 def ini(path):
@@ -139,7 +139,7 @@ set_footer('Privacy: https://www.example.invalid/privacy.html.')
 jx(RENDER)
 check('V7 the full stop at the end of the footer line is not part of the address', 'href="https://www.example.invalid/privacy.html"' in priv(), priv())
 set_footer('Via Roma 1\nPrivacy: https://www.example.invalid/privacy.html')
-sql("UPDATE joom_extensions SET params=JSON_SET(params,'$.mail_footer','Via Roma 1\\nPrivacy: https://www.example.invalid/privacy.html') WHERE element='webgbooking' AND folder='system'")
+sql("UPDATE joom_extensions SET params=JSON_SET(params,'$.mail_footer','Via Roma 1\\nPrivacy: https://www.example.invalid/privacy.html') WHERE element='com_webgbooking' AND type='component'")
 jx(RENDER)
 check('V8 the link is built by the server only (the browser gets the finished label, the script never composes an address)', 'privacyHtml' in js and 'privacy_url' not in js)
 
@@ -224,7 +224,7 @@ check('G8 a hand-made post with day 9 is refused and nothing changes', stored(i_
 
 # plugin options: already check boxes with the day names
 pg = adm.get(edit_url)
-check('G9 the plugin options show the working days as check boxes with the real day names', all(n in pg for _, n in DAYS) and len(re.findall(r'name="jform\[params\]\[work_days\]\[\]"', pg)) == 7, len(re.findall(r'work_days', pg)))
+check('G9 the component options show the working days as check boxes with the real day names', all(n in pg for _, n in DAYS) and len(re.findall(r'name="jform\[work_days\]\[\]"', pg)) == 7, len(re.findall(r'work_days', pg)))
 
 # the YOOtheme element: boxes win, the old field still reads, a saved type wins over both
 cfgs = {

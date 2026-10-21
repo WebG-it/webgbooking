@@ -4,6 +4,9 @@ from html.parser import HTMLParser
 from wgbtest import *
 
 
+OPTIONS_PATH = '/administrator/index.php?option=com_config&view=component&component=com_webgbooking'
+
+
 def admin_login():
     s = Sess()
     h = s.get(BASE + '/administrator/index.php')
@@ -31,7 +34,7 @@ class FormParser(HTMLParser):
 
     def handle_starttag(self, tag, a):
         a = dict(a)
-        if tag == 'form' and a.get('name') == 'adminForm' or (tag == 'form' and 'plugin-form' in (a.get('id') or '')):
+        if tag == 'form' and a.get('name') == 'adminForm' or (tag == 'form' and ('plugin-form' in (a.get('id') or '') or 'component-form' in (a.get('id') or ''))):
             self._in_form = True
             self.action = a.get('action', '')
         if not self._in_form:
@@ -75,10 +78,12 @@ class FormParser(HTMLParser):
 
 def make_admin():
     adm = admin_login()
-    ext = sql("SELECT extension_id FROM joom_extensions WHERE element='webgbooking' AND folder='system'")
-    edit_url = BASE + '/administrator/index.php?option=com_plugins&task=plugin.edit&extension_id=%s' % ext
+    # 0.36.0: the settings are the Options of the component (Components > WebG Booking > Options), not the plugin's
+    edit_url = BASE + OPTIONS_PATH
 
-    def save_options(overrides, task='plugin.apply'):
+    def save_options(overrides, task='component.apply'):
+        # the tests name the fields as the plugin form did (jform[params][x]); the component form calls them jform[x]
+        overrides = {(k.replace('jform[params][', 'jform[', 1) if k.startswith('jform[params][') else k): v for k, v in overrides.items()}
         page = adm.get(edit_url)
         fp = FormParser()
         fp.feed(page)
@@ -88,6 +93,6 @@ def make_admin():
         return post_pairs(adm, url, pairs)
 
     def opts():
-        return json.loads(sql("SELECT params FROM joom_extensions WHERE element='webgbooking' AND folder='system'"))
+        return json.loads(sql("SELECT params FROM joom_extensions WHERE element='com_webgbooking' AND type='component'"))
 
     return adm, edit_url, save_options, opts
