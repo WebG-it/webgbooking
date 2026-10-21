@@ -2250,11 +2250,16 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
 
             // config epoch: bump on request, never lower
             // (the plugin's own value counts too: a site whose options were not copied yet must not start again from 1)
-            $prev  = function (string $k, string $def = '') use ($old): string {
+            $memo  = [];
+            $prev  = function (string $k, string $def = '') use ($old, &$memo): string {
+                // once per key: a clear secret is encrypted with a random IV, and two calls must give the SAME text (or an untouched secret would look changed)
+                if (isset($memo[$k . '|' . $def])) {
+                    return $memo[$k . '|' . $def];
+                }
                 $val = \array_key_exists($k, $old) ? (string) $old[$k] : (string) $this->params->get($k, $def);
 
                 // a secret found in clear (an old copy) is never carried on in clear
-                return \in_array($k, SecretBox::KEYS, true) && SecretBox::isClear($val) ? SecretBox::enc(trim($val)) : $val;
+                return $memo[$k . '|' . $def] = \in_array($k, SecretBox::KEYS, true) && SecretBox::isClear($val) ? SecretBox::enc(trim($val)) : $val;
             };
 
             // Who may change the secrets: com_config also lets in people with "core.options" only. They can change the other settings, not the secrets.

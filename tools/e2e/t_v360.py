@@ -242,14 +242,14 @@ fp = FormParser()
 fp.feed(pg)
 pairs = [(k, v) for k, v in fp.pairs if k != 'jform[work_days][]' and k != 'task'] + [('task', 'component.apply')]
 post_pairs(adm, urllib.parse.urljoin(BASE + '/administrator/', fp.action), pairs)
-check('W1 nothing ticked in the form: what is offered is Monday to Friday (Monday and Wednesday yes; Saturday and Sunday no)', bool(offered(mon)) and bool(offered(wed)) and not offered(sat) and not offered(sun), {'mon': offered(mon)[:2], 'wed': offered(wed)[:2], 'sat': offered(sat)[:2], 'sun': offered(sun)[:2]})
+check('W1 nothing ticked in the form: what is offered is Monday to Friday (a change on purpose: 0.35.3 offered only Sunday) (Monday and Wednesday yes; Saturday and Sunday no)', bool(offered(mon)) and bool(offered(wed)) and not offered(sat) and not offered(sun), {'mon': offered(mon)[:2], 'wed': offered(wed)[:2], 'sat': offered(sat)[:2], 'sun': offered(sun)[:2]})
 jx(RENDER)
 for label, val in (('empty text', ''), ('empty list', '[]')):
     if val == '[]':
         sql("UPDATE joom_extensions SET params=JSON_SET(params,'$.work_days',JSON_ARRAY()) WHERE %s" % COMP)
     else:
         set_comp('work_days', val)
-    check('W2 work_days stored as %s (an old site, or a hand edit): Monday to Friday as well' % label, bool(offered(mon)) and not offered(sun) and not offered(sat), {'mon': offered(mon)[:2], 'sun': offered(sun)[:2]})
+    check('W2 work_days stored as %s (an old site, or a hand edit): Monday to Friday (on 0.35.3 this meant only Sunday, by mistake; changed on purpose)' % label, bool(offered(mon)) and not offered(sun) and not offered(sat), {'mon': offered(mon)[:2], 'sun': offered(sun)[:2]})
 set_comp('work_days', '1,3')
 check('W3 a real choice still wins ("1,3" = Monday and Wednesday only)', bool(offered(mon)) and bool(offered(wed)) and not offered(next_wd(1)) and not offered(sun), '')
 set_comp('work_days', '6')
@@ -306,6 +306,17 @@ pp3, cc3 = plug_params(), comp_params()
 check('R1b a secret cleared with "-" is emptied in both places, the others untouched', pp3.get('stripe_whsec') == '' and cc3.get('stripe_whsec') == '' and pp3.get('whp1_headers') == 'g:KEEPWHP1' and cc3.get('whp1_headers') == 'g:KEEPWHP1', (pp3.get('stripe_whsec'), cc3.get('stripe_whsec'), pp3.get('whp1_headers')))
 save_options({'jform[notify_email]': 'same@wgbtest.invalid'})
 check('R1c a save that does not touch the secrets empties nothing in the plugin', plug_params().get('whp1_headers') == 'g:KEEPWHP1', plug_params())
+sql("UPDATE joom_extensions SET params='{}' WHERE %s" % PLUG)
+jx('php /tmp/mock/init.php >/dev/null')
+
+# R1 must not fire for a secret nobody touched: a CLEAR secret in the component row (encrypted afresh at every call) is not "changed"
+reset_env(render=False)
+jx('php /tmp/mock/init.php >/dev/null')
+set_plug('whp3_headers', 'g:KEEPWHP3')
+sql("UPDATE joom_extensions SET params=JSON_SET(params,'$.whp3_headers',%s) WHERE %s" % (q('X-Clear: stillclear' + 'q' * 10), COMP))
+save_options({'jform[notify_email]': 'untouched@wgbtest.invalid'})
+c9, p9 = comp_params(), plug_params()
+check('R1d a secret in clear in the component row, saved WITHOUT touching it: it is encrypted there and the plugin\'s copy is NOT emptied', c9.get('whp3_headers', '').startswith('g:') and 'stillclear' not in rsql("SELECT params FROM joom_extensions WHERE %s" % COMP) and p9.get('whp3_headers') == 'g:KEEPWHP3', (c9.get('whp3_headers', '')[:4], p9.get('whp3_headers')))
 sql("UPDATE joom_extensions SET params='{}' WHERE %s" % PLUG)
 jx('php /tmp/mock/init.php >/dev/null')
 
@@ -412,8 +423,8 @@ check('F12 the old plain text opens in the editor with its lines kept (paragraph
 check('F13 a stray </div> or </body> does not cut what follows', 'after the div' in R['straydiv']['clean'] and 'after the body' in R['straybody']['clean'] and 'before' in R['straybody']['clean'], (R['straydiv']['clean'], R['straybody']['clean']))
 check('F14 a word in angle brackets next to real tags stays text: "<mario@...>" is shown, not swallowed as a tag', R['angle2']['clean'] == '<p>Mario &lt;mario@example.invalid&gt; writes</p><b>x</b>' and 'Mario <mario@example.invalid> writes' in R['angle2']['text'], (R['angle2']['clean'], R['angle2']['text']))
 check('F15 an ampersand is escaped once, in the stored text and in the drawing (never &amp;amp;)', R['amp2']['clean'] == 'Tom &amp; Jerry <b>s&amp;t</b>' and '&amp;amp;' not in R['amp2']['inline'] and 'Tom &amp; Jerry' in R['amp2']['inline'] and 's&amp;t' in R['amp2']['inline'] and 'Tom & Jerry' in R['amp2']['text'], (R['amp2']['clean'], R['amp2']['inline'], R['amp2']['text']))
-check('F16 a link inside a link is ONE link: no empty anchor left behind (words of the inner link stay)', R['nested']['clean'] == '<a href="https://b.example.invalid/">n</a>', R['nested']['clean'])
-check('F16b ... and a link inside bold inside a link too: one link with the bold words, drawn with rel and colour', R['nest2']['clean'] == '<a href="https://a.example.invalid/"><strong>deep</strong></a>' and R['nest2']['inline'].count('<a ') == 1 and 'rel="noopener noreferrer"' in R['nest2']['inline'], (R['nest2']['clean'], R['nest2']['inline']))
+check('F16 a link inside a link: the empty outer anchor is dropped, only the inner link with its words is left', R['nested']['clean'] == '<a href="https://b.example.invalid/">n</a>', R['nested']['clean'])
+check('F16b ... and a link inside bold inside a link: the outer link is kept with the bold words (the inner link is unwrapped), drawn with rel and colour', R['nest2']['clean'] == '<a href="https://a.example.invalid/"><strong>deep</strong></a>' and R['nest2']['inline'].count('<a ') == 1 and 'rel="noopener noreferrer"' in R['nest2']['inline'], (R['nest2']['clean'], R['nest2']['inline']))
 check('F16c ... no anchor without words anywhere in the filtered vectors', not [k for k, v in R.items() if re.search(r'<a [^>]*></a>', v['clean'])], [k for k, v in R.items() if re.search(r'<a [^>]*></a>', v['clean'])])
 
 # ============================================================ 6. the editor shows the old text without spoiling it

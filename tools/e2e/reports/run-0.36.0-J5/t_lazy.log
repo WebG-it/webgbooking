@@ -1,5 +1,5 @@
 lazy response: {"success":true,"message":null,"messages":null,"data":[]}
 PASS lazy scheduler (plain web request, no cron) sent the 1h reminder
-0	27	2026-10-21 10:51:12
-0	WebG Booking: send appointment reminders	0.056
+0	4	2026-10-21 11:30:56
+0	WebG Booking: send appointment reminders	0.057
 RESULT pass=1 fail=0

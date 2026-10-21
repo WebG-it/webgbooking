@@ -1,4 +1,4 @@
-WebG Booking 0.36.0 pkg sha256 94ef92d2258d488ac38c4dd0204b92bb30ca49fbe01413b98ee2f42d9744a37b - Joomla 5
+WebG Booking 0.36.0 pkg sha256 8289dfc76c5675d43591a6f5b8df474ec2bb59f978c2a76c5356e416c81e863e - Joomla 5
 suite pass fail
 t_core 39 0
 t_flow 30 0
@@ -27,9 +27,9 @@ t_v352_mail 42 0
 t_v352_pay 13 0
 t_v352_tz 46 0
 t_v353 52 0
-t_v360 98 0
-TOTAL regression: 28 suites 1117 pass 0 fail
+t_v360 99 0
+TOTAL regression: 28 suites 1118 pass 0 fail
 t_v350_same RESULT pass=8 fail=0
 t_v360_upgrade RESULT pass=51 fail=0
 t_v360_fresh RESULT pass=9 fail=0
-jed: 0 errors, 7 warnings (reports/jed-0.36.0-J5.md)
+jed: 0 errors, 7 warnings

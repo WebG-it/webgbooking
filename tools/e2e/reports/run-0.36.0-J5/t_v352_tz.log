@@ -6,40 +6,40 @@ PASS V2 Europe/Rome 2026-10: the days the visitor can choose are exactly the day
 PASS V3 Europe/Rome 2026-10: the times of each day, checked for 11 days, are the converted site slots (days that change across midnight included)
 PASS V2 Europe/Rome 2026-11: the days the visitor can choose are exactly the days that have a slot in THEIR zone (20)
 PASS V3 Europe/Rome 2026-11: the times of each day, checked for 12 days, are the converted site slots (days that change across midnight included)
-PASS V4 Europe/Rome: booked through the page (2026-10-21 15:00), the answer is shown
-PASS V4b Europe/Rome: the stored booking is the very instant the visitor picked (2026-10-21 15:00 there), the zone is stored
+PASS V4 Europe/Rome: booked through the page (2026-10-21 15:30), the answer is shown
+PASS V4b Europe/Rome: the stored booking is the very instant the visitor picked (2026-10-21 15:30 there), the zone is stored
 PASS V1 America/New_York: the zone menu is under the calendar, with a label, and the zone of the browser is selected
 PASS V1b America/New_York: the option reads "<name of the zone> (hh:mm)" with the time it is there now, and there are many zones to choose from
 PASS V2 America/New_York 2026-10: the days the visitor can choose are exactly the days that have a slot in THEIR zone (11)
 PASS V3 America/New_York 2026-10: the times of each day, checked for 11 days, are the converted site slots (days that change across midnight included)
 PASS V2 America/New_York 2026-11: the days the visitor can choose are exactly the days that have a slot in THEIR zone (20)
 PASS V3 America/New_York 2026-11: the times of each day, checked for 12 days, are the converted site slots (days that change across midnight included)
-PASS V4 America/New_York: booked through the page (2026-10-21 09:30), the answer is shown
-PASS V4b America/New_York: the stored booking is the very instant the visitor picked (2026-10-21 09:30 there), the zone is stored
+PASS V4 America/New_York: booked through the page (2026-10-21 10:00), the answer is shown
+PASS V4b America/New_York: the stored booking is the very instant the visitor picked (2026-10-21 10:00 there), the zone is stored
 PASS V1 Europe/London: the zone menu is under the calendar, with a label, and the zone of the browser is selected
 PASS V1b Europe/London: the option reads "<name of the zone> (hh:mm)" with the time it is there now, and there are many zones to choose from
 PASS V2 Europe/London 2026-10: the days the visitor can choose are exactly the days that have a slot in THEIR zone (11)
 PASS V3 Europe/London 2026-10: the times of each day, checked for 11 days, are the converted site slots (days that change across midnight included)
 PASS V2 Europe/London 2026-11: the days the visitor can choose are exactly the days that have a slot in THEIR zone (20)
 PASS V3 Europe/London 2026-11: the times of each day, checked for 12 days, are the converted site slots (days that change across midnight included)
-PASS V4 Europe/London: booked through the page (2026-10-21 15:00), the answer is shown
-PASS V4b Europe/London: the stored booking is the very instant the visitor picked (2026-10-21 15:00 there), the zone is stored
+PASS V4 Europe/London: booked through the page (2026-10-21 15:30), the answer is shown
+PASS V4b Europe/London: the stored booking is the very instant the visitor picked (2026-10-21 15:30 there), the zone is stored
 PASS V1 Asia/Tokyo: the zone menu is under the calendar, with a label, and the zone of the browser is selected
 PASS V1b Asia/Tokyo: the option reads "<name of the zone> (hh:mm)" with the time it is there now, and there are many zones to choose from
 PASS V2 Asia/Tokyo 2026-10: the days the visitor can choose are exactly the days that have a slot in THEIR zone (11)
 PASS V3 Asia/Tokyo 2026-10: the times of each day, checked for 11 days, are the converted site slots (days that change across midnight included)
 PASS V2 Asia/Tokyo 2026-11: the days the visitor can choose are exactly the days that have a slot in THEIR zone (21)
 PASS V3 Asia/Tokyo 2026-11: the times of each day, checked for 12 days, are the converted site slots (days that change across midnight included)
-PASS V4 Asia/Tokyo: booked through the page (2026-10-21 23:30), the answer is shown
-PASS V4b Asia/Tokyo: the stored booking is the very instant the visitor picked (2026-10-21 23:30 there), the zone is stored
+PASS V4 Asia/Tokyo: booked through the page (2026-10-21 22:00), the answer is shown
+PASS V4b Asia/Tokyo: the stored booking is the very instant the visitor picked (2026-10-21 22:00 there), the zone is stored
 PASS V1 Asia/Kolkata: the zone menu is under the calendar, with a label, and the zone of the browser is selected
 PASS V1b Asia/Kolkata: the option reads "<name of the zone> (hh:mm)" with the time it is there now, and there are many zones to choose from
 PASS V2 Asia/Kolkata 2026-10: the days the visitor can choose are exactly the days that have a slot in THEIR zone (11)
 PASS V3 Asia/Kolkata 2026-10: the times of each day, checked for 11 days, are the converted site slots (days that change across midnight included)
 PASS V2 Asia/Kolkata 2026-11: the days the visitor can choose are exactly the days that have a slot in THEIR zone (20)
 PASS V3 Asia/Kolkata 2026-11: the times of each day, checked for 12 days, are the converted site slots (days that change across midnight included)
-PASS V4 Asia/Kolkata: booked through the page (2026-10-21 20:30), the answer is shown
-PASS V4b Asia/Kolkata: the stored booking is the very instant the visitor picked (2026-10-21 20:30 there), the zone is stored
+PASS V4 Asia/Kolkata: booked through the page (2026-10-21 21:00), the answer is shown
+PASS V4b Asia/Kolkata: the stored booking is the very instant the visitor picked (2026-10-21 21:00 there), the zone is stored
 PASS V5 a visitor in New York who picks Tokyo in the menu: the calendar is redrawn with the days of Tokyo
 PASS V5b ... and the times of that day are Tokyo's
 PASS V5c ... the menu stays available from the time list, to change again

@@ -6,8 +6,8 @@ Checker: joomla-extensions/jedchecker develop, commit c6a6bce (14 rules). Joomla
 
 - warning [encoding] /packages/com_webgbooking/admin/src/Model/GoogleModel.php:270 You've used encoding in this file. This is not an error, but a JED editor will have to review this file.
 - warning [encoding] /packages/plg_system_webgbooking/src/Booking/SecretBox.php:38 You've used encoding in this file. This is not an error, but a JED editor will have to review this file.
-- warning [encoding] /packages/plg_system_webgbooking/src/Extension/Webgbooking.php:2540 You've used encoding in this file. This is not an error, but a JED editor will have to review this file.
 - warning [encoding] /packages/plg_system_webgbooking/src/Extension/Webgbooking.php:2545 You've used encoding in this file. This is not an error, but a JED editor will have to review this file.
+- warning [encoding] /packages/plg_system_webgbooking/src/Extension/Webgbooking.php:2550 You've used encoding in this file. This is not an error, but a JED editor will have to review this file.
 - warning [Jamss] /packages/com_webgbooking/admin/tmpl/email/default.php:108 ? COM_JEDCHECKER_ERROR_JAMSS_PATTERN#18 - IFRAME element
 - warning [Jamss] /packages/plg_system_webgbooking/src/Booking/FooterText.php:92 ? COM_JEDCHECKER_ERROR_JAMSS_PATTERN#21 - At least two characters in hexadecimal or octal notation
-- warning [Jamss] /packages/plg_system_webgbooking/src/Extension/Webgbooking.php:4897 ? COM_JEDCHECKER_ERROR_JAMSS_PATTERN#21 - At least two characters in hexadecimal or octal notation
+- warning [Jamss] /packages/plg_system_webgbooking/src/Extension/Webgbooking.php:4902 ? COM_JEDCHECKER_ERROR_JAMSS_PATTERN#21 - At least two characters in hexadecimal or octal notation

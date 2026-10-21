@@ -29,9 +29,9 @@ PASS P7 saving the plugin form (it has no fields) keeps what the plugin still ho
 PASS P8 the epoch never goes lower than the plugin's own (7), even if the component did not have it yet
 PASS P8b a secret that only the plugin has survives a save with the box left empty (empty = keep what is stored)
 PASS W0 (start) with every day ticked: Saturday and Sunday are offered
-PASS W1 nothing ticked in the form: what is offered is Monday to Friday (Monday and Wednesday yes; Saturday and Sunday no)
-PASS W2 work_days stored as empty text (an old site, or a hand edit): Monday to Friday as well
-PASS W2 work_days stored as empty list (an old site, or a hand edit): Monday to Friday as well
+PASS W1 nothing ticked in the form: what is offered is Monday to Friday (a change on purpose: 0.35.3 offered only Sunday) (Monday and Wednesday yes; Saturday and Sunday no)
+PASS W2 work_days stored as empty text (an old site, or a hand edit): Monday to Friday (on 0.35.3 this meant only Sunday, by mistake; changed on purpose)
+PASS W2 work_days stored as empty list (an old site, or a hand edit): Monday to Friday (on 0.35.3 this meant only Sunday, by mistake; changed on purpose)
 PASS W3 a real choice still wins ("1,3" = Monday and Wednesday only)
 PASS W3b ... and only Saturday is possible when only Saturday is ticked
 PASS H1 the Options form offers the value in force (the plugin's 15 and "Studio Fallback"), not the default, for keys the component lacked
@@ -42,6 +42,7 @@ PASS B1 a secret found in clear in the plugin's old copy (not copied yet) is enc
 PASS R1 a secret rotated in the Options is emptied in the plugin's old copy (and is new in the component); the secrets not touched stay there as a fallback
 PASS R1b a secret cleared with "-" is emptied in both places, the others untouched
 PASS R1c a save that does not touch the secrets empties nothing in the plugin
+PASS R1d a secret in clear in the component row, saved WITHOUT touching it: it is encrypted there and the plugin's copy is NOT emptied
 PASS R2 a user with core.options only: the ordinary setting changes (host name)
 PASS R2b ... the Stripe key, the Brevo key and the Google secret are NOT changed, and the user is told
 PASS F0 the filter ran over all 44 texts
@@ -61,8 +62,8 @@ PASS F12 the old plain text opens in the editor with its lines kept (paragraph w
 PASS F13 a stray </div> or </body> does not cut what follows
 PASS F14 a word in angle brackets next to real tags stays text: "<mario@...>" is shown, not swallowed as a tag
 PASS F15 an ampersand is escaped once, in the stored text and in the drawing (never &amp;amp;)
-PASS F16 a link inside a link is ONE link: no empty anchor left behind (words of the inner link stay)
-PASS F16b ... and a link inside bold inside a link too: one link with the bold words, drawn with rel and colour
+PASS F16 a link inside a link: the empty outer anchor is dropped, only the inner link with its words is left
+PASS F16b ... and a link inside bold inside a link: the outer link is kept with the bold words (the inner link is unwrapped), drawn with rel and colour
 PASS F16c ... no anchor without words anywhere in the filtered vectors
 PASS E1 the footer is the visual editor of the site (tinymce) with the footer text inside it, not a plain box
 PASS E2 an old plain footer opens in the editor as paragraph + line breaks (the 4 lines survive), its address as a link
@@ -96,4 +97,4 @@ PASS B2 old plain footer on the direct page: breaks and the address as a link, e
 PASS B3 old plain footer: the consent box still takes the address from the line that names privacy
 PASS B4 old plain footer in the text part: the lines as written
 PASS K1 the asset version and the manifests say 0.36.0
-RESULT pass=98 fail=0
+RESULT pass=99 fail=0
