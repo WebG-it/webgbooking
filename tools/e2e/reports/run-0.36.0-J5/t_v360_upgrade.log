@@ -1,0 +1,54 @@
+================ from 0.35.3 to pkg_webgbooking-0.36.0.zip
+PASS 0.35.3 the old release installs
+PASS 0.35.3 start: the options are the plugin's (44 keys), the component has none
+PASS 0.35.3 before: the four bookings work (free + Google, Brevo, webhook with profile, paid + Stripe + payment)
+PASS 0.35.3 the 0.36.0 package installs over it
+PASS 0.35.3 every option of the plugin is now in the Options of the component (44 keys, none missing)
+PASS 0.35.3 ... with the value it had (secrets too: same encrypted text, portable)
+PASS 0.35.3 ... the plugin row keeps its old values (nothing deleted, they are only a fallback)
+PASS 0.35.3 no secret in clear in the database, neither row
+PASS 0.35.3 the secret that was in CLEAR in the plugin is encrypted in both rows after the update (the copy in the component and the plugin's own)
+PASS 0.35.3 the Options form shows the old values (email look, Google, Stripe mode and public key, webhook, analytics, days ...)
+PASS 0.35.3 ... and no secret is sent to the browser
+PASS 0.35.3 the old plain footer opens in the editor with its four lines and its address as a link; the database still has the plain text
+PASS 0.35.3 after: the answers of the booking page are the same as before the update
+PASS 0.35.3 after: the stored bookings are the same as before the update
+PASS 0.35.3 after: the Stripe Checkout Sessions (amount, currency, mode, customer, metadata) are the same as before the update
+PASS 0.35.3 after: every call to Google, Stripe, Brevo and the webhook (address, method, body, the headers that carry the secrets) are the same as before the update
+PASS 0.35.3 after: the pages drawn before the update still book and still start the payment (same config epoch)
+PASS 0.35.3 after: the same emails reach the same people with the same subjects
+PASS 0.35.3 after: every email (customer, staff, payment) is identical to before, html and text
+PASS 0.35.3 after, pages drawn again with 0.36.0: rows unchanged
+PASS 0.35.3 after, pages drawn again with 0.36.0: stripe unchanged
+PASS 0.35.3 after, pages drawn again with 0.36.0: calls unchanged
+PASS 0.35.3 after, pages drawn again: every email identical to before
+PASS 0.35.3 the direct page: the old plain footer is drawn as before (lines and address as a link, new tab)
+PASS 0.35.3 running the same update again changes nothing
+PASS 0.35.3 a value changed in the Options is not undone by an update (the plugin's old value never overwrites)
+================ from 0.35.2 to pkg_webgbooking-0.36.0.zip
+PASS 0.35.2 the old release installs
+PASS 0.35.2 start: the options are the plugin's (46 keys), the component has none
+PASS 0.35.2 before: the four bookings work (free + Google, Brevo, webhook with profile, paid + Stripe + payment)
+PASS 0.35.2 the 0.36.0 package installs over it
+PASS 0.35.2 every option of the plugin is now in the Options of the component (46 keys, none missing)
+PASS 0.35.2 ... with the value it had (secrets too: same encrypted text, portable)
+PASS 0.35.2 ... the plugin row keeps its old values (nothing deleted, they are only a fallback)
+PASS 0.35.2 no secret in clear in the database, neither row
+PASS 0.35.2 the secret that was in CLEAR in the plugin is encrypted in both rows after the update (the copy in the component and the plugin's own)
+PASS 0.35.2 the Options form shows the old values (email look, Google, Stripe mode and public key, webhook, analytics, days ...)
+PASS 0.35.2 ... and no secret is sent to the browser
+PASS 0.35.2 the old plain footer opens in the editor with its four lines and its address as a link; the database still has the plain text
+PASS 0.35.2 the old email texts of the options moved to the email texts, as in 0.35.3, and are empty in the options now
+PASS 0.35.2 after: the answers of the booking page are the same as before the update
+PASS 0.35.2 after: the stored bookings are the same as before the update
+PASS 0.35.2 after: the Stripe Checkout Sessions (amount, currency, mode, customer, metadata) are the same as before the update
+PASS 0.35.2 after: every call to Google, Stripe, Brevo and the webhook (address, method, body, the headers that carry the secrets) are the same as before the update
+PASS 0.35.2 after: the pages drawn before the update still book and still start the payment (same config epoch)
+PASS 0.35.2 after: the same emails reach the same people with the same subjects
+PASS 0.35.2 after, pages drawn again with 0.36.0: rows unchanged
+PASS 0.35.2 after, pages drawn again with 0.36.0: stripe unchanged
+PASS 0.35.2 after, pages drawn again with 0.36.0: calls unchanged
+PASS 0.35.2 the direct page: the old plain footer is drawn as before (lines and address as a link, new tab)
+PASS 0.35.2 running the same update again changes nothing
+PASS 0.35.2 a value changed in the Options is not undone by an update (the plugin's old value never overwrites)
+RESULT pass=51 fail=0

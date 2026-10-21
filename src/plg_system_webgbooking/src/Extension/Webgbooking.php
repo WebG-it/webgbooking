@@ -34,6 +34,7 @@ use Joomla\Event\SubscriberInterface;
 use WebG\Plugin\System\Webgbooking\Booking\DirectPage;
 use WebG\Plugin\System\Webgbooking\Booking\EventTypes;
 use WebG\Plugin\System\Webgbooking\Booking\FooterText;
+use WebG\Plugin\System\Webgbooking\Booking\SecretBox;
 use WebG\Plugin\System\Webgbooking\Booking\Settings;
 use WebG\Plugin\System\Webgbooking\Booking\WidgetConfig;
 use WebG\Plugin\System\Webgbooking\Mail\EmailLayout;
@@ -54,6 +55,8 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
     {
         parent::__construct($dispatcher, $config);
         try {
+            // keys the plugin still holds and the component lacks (a copy that did not happen) are copied now, once: the Options form then shows the real value
+            Settings::heal(Factory::getContainer()->get(DatabaseInterface::class), $this->params);
             $this->params = Settings::merged($this->params);
         } catch (\Throwable $e) {
         }
@@ -507,7 +510,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
     }
 
     /**
-     * Normalise an event config: element values win, empty/missing values fall back to the plugin options.
+     * Normalise an event config: element values win, empty/missing values fall back to the Options of the component.
      * Returns ['dur' => minutes, 'bb' => buffer before, 'ba' => buffer after, 'loc' => meet|phone|choice, 'name' => string].
      */
     private function resolveEvent(array $e): array
@@ -815,7 +818,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
     }
 
     /**
-     * Reminder plan stored with the booking (element override > plugin options > defaults).
+     * Reminder plan stored with the booking (element override > Options of the component > defaults).
      * ['on' => bool, 'times' => [minutes...], 'subject' => string, 'body' => string]
      */
     private function reminderPlan(array $r): array
@@ -1170,7 +1173,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
     private array $secretFail = [];
 
     /**
-     * Stripe secret of the plugin options, decrypted, or ''.
+     * Stripe secret of the Options of the component, decrypted, or ''.
      * - Found in clear (set by hand in the database / imported options): it is encrypted and written back on this
      *   first read, and keeps working.
      * - Stored encrypted but undecryptable (the Joomla "secret" changed): '' + a log line WITHOUT values + the admin
@@ -2176,7 +2179,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
     }
 
     /**
-     * Plugin options save.
+     * Save of the Options of the component (and of the plugin form, which has no options of its own any more).
      * - Stripe secrets are encrypted at rest (same AES-256-GCM scheme as the Google token). Empty box = keep the
      *   stored value, "-" = clear it.
      * - A key that does not belong to the chosen mode (live key + "test", or the opposite) is an ERROR: the key and
@@ -2227,9 +2230,11 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             // come back, so: every field of the form has a key, and every other stored key is kept as it was.
             $fields = Settings::formFields();
             if ($fields) {
+                $types = Settings::formTypes();
                 foreach ($fields as $f) {
                     if (!\array_key_exists($f, $new)) {
-                        $new[$f] = '';
+                        // a box with nothing ticked posts nothing (a real choice: empty); any other field that did not arrive keeps the value in force (component, else the plugin's)
+                        $new[$f] = ($types[$f] ?? '') === 'checkboxes' ? '' : $this->params->get($f, '');
                     }
                 }
                 foreach ($old as $k => $v) {
@@ -2245,7 +2250,34 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
 
             // config epoch: bump on request, never lower
             // (the plugin's own value counts too: a site whose options were not copied yet must not start again from 1)
-            $prev  = fn(string $k, string $def = ''): string => \array_key_exists($k, $old) ? (string) $old[$k] : (string) $this->params->get($k, $def);
+            $prev  = function (string $k, string $def = '') use ($old): string {
+                $val = \array_key_exists($k, $old) ? (string) $old[$k] : (string) $this->params->get($k, $def);
+
+                // a secret found in clear (an old copy) is never carried on in clear
+                return \in_array($k, SecretBox::KEYS, true) && SecretBox::isClear($val) ? SecretBox::enc(trim($val)) : $val;
+            };
+
+            // Who may change the secrets: com_config also lets in people with "core.options" only. They can change the other settings, not the secrets.
+            if (!$app->getIdentity()->authorise('core.admin', Settings::COMPONENT)) {
+                $touched = false;
+                foreach (SecretBox::KEYS as $k) {
+                    if (trim((string) ($new[$k] ?? '')) !== '') {
+                        $touched = true;
+                    }
+                    $new[$k] = '';                                     // empty = keep what is stored (below)
+                }
+                if (trim((string) ($new['google_client_secret'] ?? '')) !== $prev('google_client_secret')) {
+                    $touched = true;
+                }
+                $new['google_client_secret'] = $prev('google_client_secret');
+                if ($touched) {
+                    $app->enqueueMessage(Text::_('PLG_SYSTEM_WEBGBOOKING_SECRETS_ADMIN_ONLY'), 'warning');
+                }
+            }
+            $before = [];
+            foreach (SecretBox::KEYS as $k) {
+                $before[$k] = $prev($k);
+            }
             $epoch = max(1, (int) ($old['config_epoch'] ?? 0), (int) $this->params->get('config_epoch', 1));
             if (!empty($new['config_bump']) && (string) $new['config_bump'] === '1') {
                 $epoch++;
@@ -2286,6 +2318,17 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
                 $freshSk = '';
             }
             $table->params = (string) json_encode($new);
+
+            // a secret that was changed or cleared here is emptied in the plugin's old copy too (only these: the others stay as a fallback)
+            $rot = [];
+            foreach (SecretBox::KEYS as $k) {
+                if ((string) ($new[$k] ?? '') !== $before[$k]) {
+                    $rot[] = $k;
+                }
+            }
+            if ($rot) {
+                Settings::clearInPlugin($db, $rot);
+            }
 
             if ($freshSk !== '') {
                 $chk = $this->checkStripeKey($freshSk);
@@ -2412,7 +2455,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
 
     /**
      * A signed config is honoured only for the CURRENT epoch and while younger than the plugin's lifetime.
-     * Epoch: bump it (plugin options, "Invalidate cached configurations") and every page rendered before - including
+     * Epoch: bump it (Options of the component, "Invalidate cached configurations") and every page rendered before - including
      * copies cached by Cloudflare - stops booking until it is re-rendered; use it whenever an element changes price.
      * Lifetime (default 30 days, 0 = unlimited) is the backstop: long enough to survive even a monthly Cloudflare
      * "cache everything" rule, short enough that a stale paid/free configuration cannot live forever.
@@ -2593,7 +2636,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
     }
 
     /**
-     * A header profile saved in the plugin options (Integrations tab): a NAME the element refers to, and behind it
+     * A header profile saved in the Options of the component (Integrations tab): a NAME the element refers to, and behind it
      * the headers with their secrets (encrypted, never sent back to any form, never put in the page markup).
      * One "Header: value" per line. Optional lines: "URL: https://..." (the only address the headers go to) and
      * "HOSTS: a.example.com, b.example.com" (further hosts an element may point at while using this profile).
@@ -3459,7 +3502,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
         }
     }
 
-    /** Branding from the plugin options. Neutral by default: no logo, blue accent, the site name. */
+    /** Branding from the Options of the component. Neutral by default: no logo, blue accent, the site name. */
     private function mailBrand(): array
     {
         $accent = EmailLayout::hex((string) $this->params->get('mail_color', ''), '#2b59c3');
@@ -5064,13 +5107,12 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
      * Authoritative slot computation for a day, in the SITE timezone:
      * working hours / interval / duration, minus min-notice and Google busy times.
      */
-    /** Availability rules read once from the plugin params. */
+    /** Availability rules read once from the settings (Options of the component). */
     private function slotConfig(array $ev = []): array
     {
         $ws = explode(':', (string) $this->params->get('work_start', '09:00'));
         $we = explode(':', (string) $this->params->get('work_end', '18:00'));
-        $wd = $this->params->get('work_days', [1, 2, 3, 4, 5]);
-        $wd = array_values(array_map('intval', \is_array($wd) ? $wd : explode(',', (string) $wd)));
+        $wd = Settings::workDays($this->params->get('work_days', null));
 
         return [
             'start'  => !empty($ev['ws']) ? ((int) explode(':', $ev['ws'])[0]) * 60 + (int) explode(':', $ev['ws'])[1] : ((int) ($ws[0] ?? 9)) * 60 + (int) ($ws[1] ?? 0),

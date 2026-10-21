@@ -1,0 +1,43 @@
+PASS Z0 the page tells the script the site zone (siteTz) and the label of the zone menu
+PASS Z0b the upgrade created the column that keeps the customer zone
+PASS Z1 a booking that carries the exact instant and the visitor zone is accepted, the zone is stored
+PASS Z2 the customer email says the time in THEIR zone, naming it (e.g. "05:00 (EDT, America/New_York)")
+PASS Z2b ... not the site time with the site zone as the appointment time
+PASS Z3 default customer subject: "Confirmed|Confermato: <event> with|con <host> ... at|alle <time in their zone>"
+PASS Z3b ... and the day in the subject is the day THEIR calendar shows (2026-10-26)
+PASS Z4 the .ics keeps the true instant in UTC and says the time in their zone in the description
+PASS Z5 the customer email has the questions with their answers, the change question and the two links (reschedule, cancel)
+PASS Z5b ... "Hi/Ciao <name>, your appointment with <host> is confirmed" and the invitee asked questions (phone and notes included)
+PASS Z6 the staff subject is "New Event: <name> - 10:00 <dow>, <d> <mon> <year> - <event>" in the SITE time
+PASS Z6b ... the body has the invitee email as a link, the place as a Meet line, the zone of the customer with their time, the questions in bold under their text
+PASS Z6c ... and a button that leads to the booking in the panel
+PASS Z6d ... the order of the Calendly notice: event type, invitee, invitee email, date and time, place
+PASS Z7 a time that is not the instant the page shows (ts off by 30 minutes) is refused, nothing is booked
+PASS Z8 a zone PHP does not know is ignored (booked in the site zone, no zone stored)
+PASS Z8b a zone with odd characters is ignored too
+PASS Z9 a booking without zone (an old page in cache) keeps the site time and zone in its email
+PASS Z10 zone "EST": not a zone, falls back to the site zone (nothing stored)
+PASS Z10 zone "CEST": not a zone, falls back to the site zone (nothing stored)
+PASS Z10 zone "CET": not a zone, falls back to the site zone (nothing stored)
+PASS Z10 zone "GMT+2": not a zone, falls back to the site zone (nothing stored)
+PASS Z10 zone "Asia/Calcutta": kept
+PASS Z10 zone "UTC": kept
+PASS Z10 zone "Europe/Rome": kept
+PASS X1 customer email: the answers and notes are plain text, no link made from an address they contain
+PASS X2 customer email: the notes are cut at 300 characters with an ellipsis
+PASS X3 the staff email is as before: complete notes (no cut), the address still a link
+PASS X4 the admin detail stylesheet has real fallbacks (no variable that falls back to itself)
+PASS B1 the manage page shows date and time in the customer's zone (and has ids the page can update)
+PASS B2 the reschedule answer carries the new date and time as the customer sees them (the header showed the old ones until a reload)
+PASS B3 the zone of the booking follows the new choice
+PASS B4 the script writes that date and time into the page header on success
+PASS B5 the customer email for the move: "Rescheduled|Spostato: ..." with the time in the new zone
+PASS B6 the staff email for the move: "Event moved|Evento spostato: ..." in the site time
+PASS R1 the reminder gives the time in the customer's zone, naming it
+PASS R1b ... and the subject too (the time of the reminder subject is theirs)
+PASS S0 cancelled from the panel: the booking is cancelled and the customer is told
+PASS S1 ... and the staff gets a notice too, saying it was done from the panel (a trace in the mailbox)
+PASS S2 the customer's cancellation notice has the new default subject ("Canceled|Annullato: <event> with|con <host> ...")
+PASS S3 a cancellation by the customer: the staff subject is "Canceled|Evento annullato: ..." (not "by you")
+PASS S4 "Confirm and tell the customer" from the panel: the customer is told and the staff gets a trace
+RESULT pass=42 fail=0

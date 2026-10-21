@@ -1,0 +1,41 @@
+PASS asset cache-buster in the rendered page equals the installed package version (0.36.0)
+PASS tokens present (form + ev)
+PASS widget cfg: hour duration 60 / choice
+PASS widget cfg: half duration 30 / phone
+PASS widget cfg: default falls back to plugin duration 30 / meet / no redirect
+PASS 60 min element: last slot 17:00, first 09:00
+PASS 30 min element: last slot 17:30
+PASS default element (30 min global): last slot 17:30
+PASS tampered ev falls back to global defaults (30 min)
+PASS missing ev (old cached page) falls back to global defaults
+PASS hour/phone booking ok
+PASS row: duration 60, buffers 15/15, phone, event name, no meeting url
+PASS Google event created WITHOUT Meet
+PASS Google event: 60 min; this booking has a guest, so the customer number is NOT in title, place or description (the business calls)
+PASS emails sent (customer, guest, staff)
+PASS customer email says "we call you at X", no Meet button
+PASS customer email has no meet link / no Google Meet button
+PASS ics: LOCATION is the call, DTEND 60 min after DTSTART
+PASS ics duration is 60 min
+PASS ics SUMMARY is the event name
+PASS guest email does not reveal the customer phone
+PASS staff email mentions the phone call and number
+PASS reminders pre-marked: 24h not sent for a booking in 3 days? (24h still ahead => not marked)
+PASS after 10:00-11:00 (buf 15/15), 60-min slots: 09:00, 10:00, 10:30, 11:00 gone
+PASS 30-min slots: 09:00 ok, 09:30..11:00 gone (existing buffers), 11:30 ok
+PASS overlapping 30-min booking at 10:30 is REJECTED (different start, same time range)
+PASS booking inside the 15-min buffer is rejected
+PASS adjacent 09:00-09:30 booking accepted (gap >= buffer)
+PASS phone-call element without phone rejected
+PASS phone-call element with junk phone rejected
+PASS phone-call element with 2-digit phone rejected
+PASS choice element, customer picks phone, no phone -> rejected
+PASS choice element, customer picks Meet, no phone -> accepted
+PASS Meet booking stores location meet + Meet link from Google
+PASS Google event has conferenceData for Meet booking, 60 min
+PASS invalid posted location on a choice element falls back to Meet (accepted)
+PASS fixed phone element ignores a posted location=meet (still phone)
+PASS 8 parallel bookings of the same slot -> exactly 1 stored
+PASS racing 16:00(60min) vs 16:30(30min): never two overlapping bookings stored
+
+RESULT pass=39 fail=0

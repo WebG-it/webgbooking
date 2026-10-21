@@ -1,0 +1,10 @@
+PASS N1 a new install stores the ready-made value of every option in the Options of the component (68)
+PASS N1b ... nothing secret, nothing invented: the secrets and the headers are empty or absent
+PASS N2 the plugin starts without options of its own
+PASS N3 the Options screen opens on a new site and shows the ready-made values (hours, slot every 30 minutes, test mode, the address of the booking page)
+PASS N3b ... and the permissions tab
+PASS N4 saving the Options on a new site stores the change and keeps every other value (an empty colour picker saves "none", which reads as no colour, as it always did)
+PASS N5 the offered times follow the ready-made hours (09:00 to 18:00, every 30 minutes) on a working day
+PASS N5b ... and nothing on a Saturday
+PASS N6 a booking on a new site works (confirmed, an email to the customer)
+RESULT pass=9 fail=0

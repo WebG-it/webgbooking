@@ -1,0 +1,136 @@
+PASS T1 the event types table was created by the install
+PASS T1b it has the columns the plugin and the component read
+PASS D1 /prenota/<slug> opens the page (200)
+PASS D1b title, duration, place, description, widget on the page
+PASS D1c noindex in the header and in the page, no cache, no referrer
+PASS D1d phone ready: viewport meta and the responsive CSS file
+PASS D1e the widget carries the saved type: 30 minutes, Meet, a signed form and availability token, no price
+PASS D1f the sealed token names the type and the page source
+PASS D1g the page source does not show the staff address (it travels sealed in the token)
+PASS D2 the long address (component view) opens the same page
+PASS D3 /index.php/prenota/<slug> (friendly URLs without rewriting) opens the page
+PASS D3b upper case and a trailing slash are forgiven
+PASS D3c a link with tracking parameters (utm_*) opens the page
+PASS D3d a language prefix in front (multilingual sites) is accepted
+PASS D3e extra path segments after the slug are not taken over
+PASS D4 an unknown slug under /prenota is NOT taken over (the site answers its own 404)
+PASS D4b an unknown slug on the long address: our own "not found" page, status 404, noindex
+PASS D4c a one-letter slug is not a slug (not taken over)
+PASS D5 title and description are escaped (no script, no tag, no javascript: link)
+PASS S1 a secret event opens with its link
+PASS S2 an unpublished event does not open (the site answers its own 404)
+PASS S2b unpublished on the long address: not found page, 404
+PASS S3 /prenota (no slug) shows the index of the public events
+PASS S3b the index NEVER lists a secret or an unpublished event
+PASS S3c the index is noindex too
+PASS S3d the long address without an event shows the index
+PASS S4 option "list of public events" off: /prenota is left to the site
+PASS S4b ... and the single events still open
+PASS S5 option "first part of the address": the new path opens the page
+PASS S5b ... and the old one is left to the site
+PASS S5c back to the default path
+PASS S6 a menu item of the site on /prenota wins over the index
+PASS S6b ... the single events still open (the menu item is only /prenota)
+PASS S6c a menu item on the very same path as an event wins over it
+PASS S6d menu item removed: the event opens again
+PASS B1 availability of the direct page: slots for a day
+PASS B2 free booking from the link: confirmed at once
+PASS B2b stored with the type: title as event name, 30 minutes, Meet link, Google event
+PASS B2c the booking remembers the direct page as its source (the "choose again" buttons lead back to it)
+PASS B3 customer email and the staff email of the type (not the plugin address)
+PASS B3b the staff address is stored on the booking (reschedule and cancel reach the same people)
+PASS B3c the confirmation email carries the manage link
+PASS B4 the booked slot is not offered any more (the next one, right after the 30 minutes, is)
+PASS B4b a second visitor cannot book the same slot
+PASS B5 cancel with the manage link: booking cancelled
+PASS B5b the slot is free again
+PASS B6 "manual confirmation" of the type: the booking waits as pending
+PASS Q1 the questions of the type are on the page
+PASS Q2 a required question left empty: refused by the server
+PASS Q3 answers saved with the labels of the type
+PASS Q4 a select answer that is not in the list of the type is dropped
+PASS L1 duration changed after the page was drawn: booking refused with "reload the page", nothing stored
+PASS L1b after reloading, the booking uses the new duration (60 minutes)
+PASS L2 a question added after the page was drawn: refused with "reload the page"
+PASS L3 price added after the page was drawn: the page drawn as free cannot book it for free
+PASS L4 type unpublished after the page was drawn: refused, "no longer available"
+PASS L4b ... and the availability call offers nothing any more
+PASS L4c published again: slots are back
+PASS L5 type deleted after the page was drawn: refused
+PASS L6 availability follows the CURRENT definition of the type: only Mondays, 15:00-17:00, from an old page
+PASS L6b a slot outside the type hours is refused even if the old page showed it
+PASS L7 a type renamed after the page was drawn still books (the title is not a reason to reload) and the NEW title is stored
+PASS P1 paid page: price on the page and in the widget, place to choose
+PASS P2 paid booking from the link: redirected to Stripe, slot held (awaiting_payment, 4900 EUR)
+PASS P2b Stripe Checkout Session: amount from the type, its charge description, booking id
+PASS P2c nothing else ran before the payment (no email, no Google event)
+PASS P3 the held slot is not offered
+PASS P4 payment completed (webhook): confirmed and paid, even though the price on the type changed meanwhile (the customer paid what the session said)
+PASS P4b customer email after the payment mentions the payment; staff is told
+PASS P4c a Google event with the phone call (no Meet link)
+PASS P5 the price changed after the page was drawn: refused with "reload the page", no Checkout Session opened
+PASS P5b after reloading, the new price (5900) is what is charged
+PASS P6 the payment cancel page opens and says nothing was charged
+PASS P6b its "choose again" button leads back to the direct page
+PASS P7 an unreadable price in the database: the page says bookings are paused, no booking
+PASS P7b ... and the server refuses it (never a free booking of a paid event)
+PASS E1 an element with a saved type takes duration and place from it (45 min, phone)
+PASS E1b ... and the title from the type when the element has none, without repeating it as a subtitle
+PASS E1c the sealed token names the type but not a "page" source (the actions stay the element's)
+PASS E2 the type wins over what the element says by hand (90 min / Meet / 10 EUR are ignored)
+PASS E2b the element keeps its own heading
+PASS E3 booking from such an element: the type's definition is stored (title as name, 45 min, phone)
+PASS E4 a paid saved type picked by an element charges the type's price (2900)
+PASS E4b the staff address of the element (not the type) is kept
+PASS E5 the type was repriced after the page was drawn: refused with "reload the page"
+PASS E6 the questions of the saved type are in the element
+PASS E7 a saved type that no longer exists: the element says so instead of guessing
+PASS E7b ... and its booking is refused
+PASS E8 an unpublished saved type: same, "no longer available"
+PASS E9 et_none: an element with an empty/zero saved type behaves exactly like one configured by hand (same token, no type in it, 20 min)
+PASS E9 et_zero: an element with an empty/zero saved type behaves exactly like one configured by hand (same token, no type in it, 20 min)
+PASS E9b a hand-configured element still books (20 minutes)
+PASS A1 the list opens, with the new menu entry and its empty message
+PASS A1b the submenu of the component has "Event types"
+PASS A2 the new-event form opens, with the fields
+PASS A3 saving a new type: stored, slug made from the title, published, public, put at the end
+PASS A3b ... and its link works at once
+PASS A4 the list shows it with a "Copy link" button carrying the address (friendly URLs on, no rewriting: index.php/prenota/<slug>)
+PASS A4b ... the copy script is loaded from the media folder
+PASS A4c ... and it has an Open link, state and visibility badges
+PASS A5 the edit page shows the link to send, with its Copy link button, and the warning about changing the slug
+PASS A5b ... and the alternative long address, also copyable
+PASS A6 refused: empty title (message shown, nothing stored)
+PASS A6 refused: price that cannot be read (message shown, nothing stored)
+PASS A6 refused: currency we do not charge in (message shown, nothing stored)
+PASS A6 refused: duration out of range (message shown, nothing stored)
+PASS A6 refused: hours with only one end (message shown, nothing stored)
+PASS A6 refused: hours reversed (message shown, nothing stored)
+PASS A6 refused: days out of range (message shown, nothing stored)
+PASS A6 refused: a staff address that is not one (message shown, nothing stored)
+PASS A6 refused: thank-you page with a bad address (message shown, nothing stored)
+PASS A6 refused: slug already used (message shown, nothing stored)
+PASS A7 a slug typed with spaces, capitals and symbols is cleaned to letters, digits and hyphens
+PASS A7b a secret event saved without an address gets one nobody can guess (title plus 16 random hex characters)
+PASS A7c ... and it opens with that link, while the public index does not list it
+PASS A8 a paid type saves (amount as typed, currency, place)
+PASS A9 editing a type keeps its own slug and updates the rest
+PASS A10 unpublish from the list: the link stops working
+PASS A10b publish: it works again
+PASS A10c delete without the form token: refused, nothing deleted
+PASS A10d delete with the token: gone, and its link is gone with it; bookings are not touched
+PASS X1 an administrator without the rights sees the list (core.manage) but no New / Delete buttons
+PASS X2 ... and cannot open the new-event form
+PASS X3 ... nor the edit form
+PASS X4 ... posting delete / unpublish / save by hand changes nothing
+PASS A11 plugin options: "first part of the address" and "list of public events"
+PASS A11b the path option is cleaned by Joomla (letters, digits, hyphens) and the page answers on it
+PASS A12 friendly URLs on, no rewriting: the link is index.php/prenota/<slug>
+PASS A12b friendly URLs and rewriting on: the link is the short /prenota/<slug>
+PASS A12c friendly URLs off: the link is the long address
+PASS A12d ... and that address opens the page with the site set that way
+PASS A12e ... and the short address keeps working too (the page does not depend on the site router)
+PASS A12f the edit page also offers the long address as a second copy button
+PASS U1 installing the package over a site that has no event types table creates it
+PASS U1b ... and the element and the bookings keep working
+RESULT pass=135 fail=0

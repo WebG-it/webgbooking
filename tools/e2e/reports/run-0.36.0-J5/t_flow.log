@@ -1,0 +1,32 @@
+PASS A0 booking made
+PASS A1 manage page shows the phone appointment and a signed ev token
+PASS A2 reschedule onto another booking is rejected
+PASS A3 shifting by 30 min inside its own old slot is accepted (own booking does not block itself)
+PASS A4 DB moved, duration still 60
+PASS A5 Google event patched with the 60 min length
+PASS A6 customer got the "moved" email with .ics REQUEST and the phone line
+PASS A7 second reschedule within 60 s is throttled
+PASS B1 cancel page confirms
+PASS B2 DB status cancelled (self-service cancel writes the row)
+PASS B3 Google event deleted
+PASS B4 customer cancellation email is HTML with .ics CANCEL
+PASS B5 staff notified when the CUSTOMER cancels
+PASS B6 cancelled slot is free again
+PASS C0 admin login
+PASS C1.0 seed booking
+PASS C1.1 seed booking
+PASS C1.2 seed booking
+PASS C2 admin list renders with Location column and the phone
+PASS C3 admin detail (0.35.2 layout) shows duration, location, event, the Call button and the scheduled reminders as dates
+PASS C4 bulk cancel: the two selected are cancelled, the third (free booking, now confirmed at once) is untouched
+PASS C5 bulk cancel deleted both Google events
+PASS C6 each customer got the cancellation email (HTML + ics CANCEL)
+PASS C7 an admin cancellation tells the staff too (a trace: "cancelled by you from the panel"), once per booking
+PASS C8 admin sees what happened (messages)
+PASS C9 cancelling an already-cancelled booking sends nothing
+PASS C10 detail page has a Cancel button
+PASS C11 single cancel from the detail page works (DB, Google, email)
+PASS C12 row created by 0.30.0 (NULL new columns) cancels fine, customer mailed and the staff gets a trace, no Google call
+PASS C13 CSV export has Location/Duration/Event columns appended
+
+RESULT pass=30 fail=0

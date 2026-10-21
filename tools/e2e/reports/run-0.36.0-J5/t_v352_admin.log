@@ -1,0 +1,54 @@
+PASS F0 the page renders, no PHP error
+PASS F1 header: the customer name is the title (h2) with the status as a text badge
+PASS F2 the date is written in full, with the time range, duration and event type
+PASS F3 the raw date (2026-..) is not shown as text anywhere outside attributes
+PASS F4 the big button: "Join with Google Meet" opens the right link in a new tab, rel noopener
+PASS F5 customer card: email, phone and guest are links
+PASS F5b no customer time zone row when the booking has none
+PASS F6 answers: each question in bold (dt) with the answer under it (dd), then the notes with the line break
+PASS F7 history lists the real events in time order: created, Google event, customer mail, staff mail, then the reminders still to come
+PASS F8 reminders are real dates and hours (appointment minus the offset), flagged "Upcoming"
+PASS F9 created and effect times are shown in the site time zone (Rome)
+PASS F10 no raw numbers or step names outside the technical box
+PASS F11 the technical box exists, is CLOSED by default (no open attribute) and holds effects, tries, source page, ids and the manage link
+PASS F12 the manage token appears only inside the technical box, once
+PASS F13 headings in order: h2 name then h3 sections, no h1 inside the card area
+PASS F14 sections have accessible names (aria-labelledby points at a heading)
+PASS F15 the stylesheet is the component asset (no inline style attributes in the card area)
+PASS F16 the CSS file is served, uses Bootstrap variables
+PASS F17 the toolbar: Cancel yes, "Confirm and tell the customer" no (already confirmed), same tasks as before
+PASS P1 the phone booking has a big "Call" button with a tel: link on the customer number, and no Meet button
+PASS P2 a phone booking with no number: a clear line, no broken tel: link
+PASS M1 no Meet link yet: a plain line instead of a button, no empty href
+PASS M2 the technical box shows the pending effects state
+PASS H1 hostile name, notes, answers and event type are escaped everywhere
+PASS H2 a javascript: Meet link or source page never becomes a link
+PASS H3 hostile phone: the tel: link only carries digits and +
+PASS B1 bare booking: renders without warnings
+PASS B2 no empty value anywhere: no empty dd / dt / li / link, no "Answers and notes" box, no "None" or "null"
+PASS B3 the history still has the creation line
+PASS B4 date and time alone in the header (no duration), the not-yet-available line for Meet
+PASS B5 technical box still there, closed, with the number and no manage link
+PASS R1 past reminders show as sent with their real date; none is "upcoming"
+PASS R2 a reminder whose time was past when the booking was made (7 days) is not claimed as sent, and 10080 minutes is never written
+PASS R3 a completed booking has a "status set" line and the badge in text
+PASS C1 cancelled: line "Booking cancelled", red text badge, no Meet button, no upcoming reminder
+PASS C2 cancelled: the toolbar has no Cancel button (as before)
+PASS C3 moved: a confirmed booking with seq > 0 shows "Appointment moved"
+PASS Y1 paid: payment card (amount, status, paid at) and a history line; the Stripe ids only in the technical box
+PASS Y2 paid and cancelled: the refund notice is in the payment card
+PASS Y3 awaiting payment: badge text and "Slot held until" a formatted time
+PASS Z1 customer time zone shown with the customer local time when it differs from the site
+PASS Z2 same offset as the site: the zone is shown, no second time
+PASS Z3 an unknown zone name is ignored without errors
+PASS Z4 a NULL zone: no row
+PASS T1 pending: both "Confirm and tell the customer" and Cancel in the toolbar, badge "Pending"
+PASS T2 the toolbar action still works: confirmed, and the page then shows the badge
+PASS T3 Cancel from the detail still cancels, and the page then reads "Booking cancelled"
+PASS T4 the Back button is there
+PASS X1 without the state right: the page is readable but the toolbar has no Confirm / Cancel
+PASS X2 ... and posting the tasks by hand changes nothing
+PASS N1 a booking that does not exist: no PHP error
+PASS D1 dark mode: every colour in the stylesheet goes through a Bootstrap / Atum variable (the only hex values are var() fallbacks)
+
+RESULT pass=52 fail=0

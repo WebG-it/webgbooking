@@ -153,7 +153,7 @@ final class WidgetConfig
 
     /**
      * EVENT TYPE: duration, buffers, where the meeting happens, availability of this event. Empty duration and buffers
-     * fall back to the plugin options (resolved server-side on every request).
+     * fall back to the Options of the component (resolved server-side on every request).
      */
     public static function eventCfg(array $props): array
     {
@@ -251,11 +251,10 @@ final class WidgetConfig
         $calStyle = $enum($props['cal_style'] ?? '', ['calendly', 'plain'], 'calendly');
         $headCol  = preg_match('/^#[0-9a-fA-F]{3,8}$/', (string) ($props['header_color'] ?? '')) ? $props['header_color'] : '';
 
-        // Availability comes from the plugin Options (backend); the widget builds real slots from it.
+        // Availability comes from the Options of the component (backend); the widget builds real slots from it.
         $pp = self::pluginParams();
         $timeOk = fn($v, $def) => preg_match('/^\d{1,2}:\d{2}$/', (string) $v) ? (string) $v : $def;
-        $wd = $pp->get('work_days', [1, 2, 3, 4, 5]);
-        $workDays = array_values(array_map('intval', \is_array($wd) ? $wd : explode(',', (string) $wd)));
+        $workDays = Settings::workDays($pp->get('work_days', null));
 
         $customDefs = self::customDefs((string) ($props['custom_fields'] ?? ''));
         $evCfg      = self::eventCfg($props);
@@ -271,7 +270,7 @@ final class WidgetConfig
 
         [$priceCfg, $priceBad] = self::priceCfg($props);
 
-        // Reminders: element override (on/off, times, text); empty times/text fall back to the plugin options.
+        // Reminders: element override (on/off, times, text); empty times/text fall back to the Options of the component.
         $remCfg = [
             'on'      => !isset($props['act_reminder_on']) || !empty($props['act_reminder_on']),
             'times'   => Webgbooking::parseTimes((string) ($props['reminder_times'] ?? '')),
@@ -308,7 +307,7 @@ final class WidgetConfig
                 'on'     => !empty($props['act_webhook_on']),
                 'url'    => preg_match('#^https?://[^\s]+$#i', trim((string) ($props['webhook_url'] ?? ''))) ? trim((string) $props['webhook_url']) : '',
                 'method' => (string) ($props['webhook_method'] ?? 'POST'),
-                // Only the NAME of a header profile: the headers (and their secrets) live in the plugin options, never in this markup.
+                // Only the NAME of a header profile: the headers (and their secrets) live in the Options of the component, never in this markup.
                 'profile' => mb_substr(trim((string) ($props['webhook_profile'] ?? '')), 0, 60),
             ],
             'brevo' => [

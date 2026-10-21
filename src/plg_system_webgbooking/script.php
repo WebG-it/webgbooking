@@ -397,9 +397,30 @@ return new class () implements InstallerScriptInterface {
         if (!$comp || !\is_array($pp) || !$pp) {
             return;
         }
+        // a secret found in clear in the plugin's options (typed in the database, or never saved from the form) is encrypted FIRST, in the plugin's
+        // own copy too: nothing is copied to the component in clear, and nothing stays in clear in either place
+        $box = JPATH_PLUGINS . '/system/webgbooking/src/Booking/SecretBox.php';
+        if (!is_file($box)) {
+            throw new \RuntimeException('secretbox');
+        }
+        require_once $box;
+        [$pp, $nClear] = \WebG\Plugin\System\Webgbooking\Booking\SecretBox::protect($pp);
+        if ($nClear > 0) {
+            $db->setQuery(
+                $db->getQuery(true)->update($db->quoteName('#__extensions'))->set($db->quoteName('params') . ' = ' . $db->quote((string) json_encode($pp)))
+                    ->where($db->quoteName('type') . ' = ' . $db->quote('plugin'))->where($db->quoteName('element') . ' = ' . $db->quote('webgbooking'))->where($db->quoteName('folder') . ' = ' . $db->quote('system'))
+            )->execute();
+        }
         $cp = json_decode((string) $comp->params, true);
         if (!\is_array($cp)) {
             $cp = [];
+        }
+        [$cp] = \WebG\Plugin\System\Webgbooking\Booking\SecretBox::protect($cp);      // (and a clear secret already in the component)
+        // the old email texts: the step before has moved them to the email texts and emptied them in the plugin; an old copy of them must not live on in the component
+        foreach (['email_subject', 'email_body', 'reminder_subject', 'reminder_body'] as $legacy) {
+            if (\array_key_exists($legacy, $pp) && trim((string) $pp[$legacy]) === '') {
+                $cp[$legacy] = '';
+            }
         }
         $copied = 0;
         foreach ($pp as $k => $v) {
@@ -408,7 +429,7 @@ return new class () implements InstallerScriptInterface {
                 $copied++;
             }
         }
-        if ($copied > 0) {
+        if ($copied > 0 || $nClear > 0 || json_encode($cp) !== (string) $comp->params) {
             $db->setQuery(
                 $db->getQuery(true)->update($db->quoteName('#__extensions'))->set($db->quoteName('params') . ' = ' . $db->quote((string) json_encode($cp)))
                     ->where($db->quoteName('extension_id') . ' = ' . (int) $comp->extension_id)

@@ -1,0 +1,24 @@
+PASS A1 options form shows the webhook URL to register
+PASS A1b secret fields are password boxes marked "not set"
+PASS A2 saving stores both secrets ENCRYPTED (AES-GCM prefix), never in clear
+PASS A2b the key was checked with Stripe on save (account shown)
+PASS A3 re-opening the form NEVER echoes the key or its ciphertext; shows "set"
+PASS A4 saving with the secret boxes empty keeps the stored secrets, other options change
+PASS A5 after the save/encrypt round trip the stored key still works against Stripe
+PASS A6 a key Stripe refuses is reported (401), not silently accepted
+PASS A7 a live key with test mode selected is an ERROR and is not saved
+PASS A8 a dash clears the secrets
+PASS A9 list: payment column with amount and state, Stripe reference, translated status badges
+PASS A10 status filter has the new states and works
+PASS A11 detail: payment status, amount, paid at, Stripe PI and session
+PASS A12 CSV export: payment columns appended with amount 29.00 EUR and PI
+PASS A13 admin cancelling a PAID booking: warning to refund by hand from Stripe; staff gets the trace; customer mailed
+PASS A13b cancelled-but-paid shows "refund by hand" in the list
+PASS A14 admin cancelling an unpaid hold: slot released, Stripe session closed, no email, no refund notice
+PASS A15 deleting a confirmed booking from the admin also removes its Google event
+PASS A15b deleting an open Stripe hold closes its session; the admin is told
+PASS A16 reminder goes to the customer (with the manage link) AND to the guest
+PASS A16b guest reminder: no manage/cancel link, no customer phone number
+PASS A16c no repeat
+
+RESULT pass=22 fail=0

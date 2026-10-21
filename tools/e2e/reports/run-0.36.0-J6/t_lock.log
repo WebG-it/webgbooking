@@ -1,0 +1,3 @@
+PASS while another session holds the day lock the booking waits (~8 s) and is refused, nothing stored
+PASS after the lock is released the same slot books fine
+RESULT pass=2 fail=0

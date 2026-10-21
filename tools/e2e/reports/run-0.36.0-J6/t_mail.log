@@ -1,0 +1,63 @@
+--- 1. structure of every email
+PASS M1 customer confirmation: complete structure (viewport, colour schemes, dark and mobile CSS, 600 px, preheader, lang, no script/on*, safe links, plain text alternative)
+PASS M1 staff new booking: complete structure (viewport, colour schemes, dark and mobile CSS, 600 px, preheader, lang, no script/on*, safe links, plain text alternative)
+PASS M2 the customer email has title, appointment box (service, date with weekday, time with zone, duration, where), main button, footer
+PASS M3 the plain-text alternative carries the same facts: title, date, time, the Meet address, the manage address
+PASS M4 the staff email is operational: customer table (name, email, phone), the answers of the form, the booking number, and the button "Open in the backend" to that booking
+PASS M4b ...and its text alternative has the same data
+PASS M5 customer rescheduled: same layout and structure
+PASS M5 staff moved: same layout and structure
+PASS M5 customer cancelled: same layout and structure
+PASS M5 staff cancelled: same layout and structure
+PASS M5b titles say what happened
+PASS M5c the reschedule email still carries the .ics (calendar update) and the cancel one the .ics CANCEL
+--- 2. escaping
+PASS X0 the booking was accepted
+PASS X1 hostile name, phone and notes in the booking: the customer, guest and staff emails hold no script/img/on* element and no unsafe link
+PASS X2 ...the hostile text is there as TEXT (escaped), nothing lost, in the HTML
+PASS X3 ...and as plain text in the text alternative (no double escaping, no entities)
+--- 3. branding
+PASS B1 the logo chosen with the media field (value with the #joomlaImage suffix) is shown, full address under the site, with the site name as alt text
+PASS B2 the main colour is the accent line and the box edge; the button colour is the button background, its text is white on the dark teal
+PASS B3 an unreadable main colour (pale yellow) does not make unreadable links: every link colour reads at 4.5:1 on white
+PASS B4 the footer text is in the footer (lines kept, the address as a link), and the sender name is the one set in the options
+PASS B5 the plain-text alternative has the footer text too
+PASS B6 neutral by default (no options): no logo, the site name as text in the header, the default blue accent, clean footer
+--- 4. custom text
+PASS C1 an element with its own email text: the text is in the body of the layout, which stays (header, title, appointment box, footer, meet button)
+PASS C2 ...and in the plain-text alternative
+--- 5. staff subject dates
+PASS D1 the staff subject of a new booking has the date as "28 Oct 2026" (day, month name, year: no ISO order)
+PASS D2 the staff subject of a moved appointment and the previous slot in its text use the same order
+PASS D3 the staff subject of a cancelled appointment too
+--- 6. brand colours
+PASS W1 top line in its own colour, box edge in the main colour, button in its colour with dark text (white would not read on peach)
+PASS W2 links in the chosen colour (it already reads on white), text and titles in the chosen text colour
+PASS W3 footer background in its colour, footer text light on it, dark-mode footer rule kept
+PASS W4 in dark mode the link colour follows the line colour (peach), not a derived one
+PASS W5 a text colour that does not read on white is ignored, a link colour too pale is darkened until it reads
+PASS W6 a light footer background gets dark footer text with a thin top border, and in dark mode still turns dark with light text
+PASS W7 invalid values in the new options are ignored: nothing of them reaches the markup, the default look stays
+PASS W8 a logo without a dark version keeps a white plate in dark mode (no dark rule on its header); with a dark version the header turns dark
+PASS W8b ...with a dark version the header turns dark and the dark logo is shown
+--- 7. body colour, business name, footer
+PASS Y1 every paragraph of the body has its text colour (the intro paragraphs used to come out as color:;)
+PASS Y2 ...and it is the text colour of the options
+PASS Y3 business name: the alt text of the logo and the first footer line use it (not the site name)
+PASS Y3b ...in the staff email footer note too, and in the text alternative
+PASS Y3c without a logo the header text is the business name
+PASS Y4 footer text cut with zero-width spaces so Gmail and Apple Mail do not turn the address, phone or VAT number into links (reads the same)
+PASS Y4b ...URLs stay whole, and the plain-text part keeps the text as written (no invisible characters)
+PASS Y5 footer links keep a readable colour whatever the mail app does: rules for .footer a, Gmail (u + #body), Samsung, Apple data detectors, body id
+--- 8b. header and footer layout
+PASS V1 default (logo left, coloured band, footer in the card): band on top, no thin line, logo not centred, footer row inside the card
+PASS V2 centred logo with a thin line: logo centred, 3 px line in the main colour under it across the content width, NO band on top
+PASS V2b the line sits between the logo and the content, and the title keeps its box and button
+PASS V2c without a logo the business name in the header follows the position too
+PASS V3 footer on the page background: it comes after the card, centred, in dark text on the light page, not inside the card
+PASS V3b in dark mode the footer text is light and it has no band of its own
+PASS V3c the text alternative and the zero-width cutting are the same as in the card
+PASS V4 invalid values of the three options fall back to left, band and footer in the card
+PASS Z1 across all 52 emails of this suite (all kinds, all colour options) no style attribute holds an empty value such as "color:;"
+
+RESULT pass=53 fail=0

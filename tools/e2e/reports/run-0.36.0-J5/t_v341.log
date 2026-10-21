@@ -1,0 +1,79 @@
+--- 1+3. exfiltration of profile headers
+PASS X1 element with its OWN address and a profile that does not allow it: NOTHING is sent (no call at all)
+PASS X2 ...the step is closed as an error, the log says why and the staff is told
+PASS X2b the booking itself is fine
+PASS X3 the same element once the profile lists the host (HOSTS:): delivered, with the profile headers
+PASS X4 no element address, the profile has its own (URL: line /hook2): goes there with the headers
+PASS X4b ...the profile address is /hook here: delivered with the profile header
+PASS X5 headers over plain http are refused (https required when there are headers)
+PASS X6 a profile that is named but does not exist: nothing is sent, not even to the plugin-wide address
+PASS X7 the plugin-wide webhook names a profile that does not exist: nothing is sent
+PASS X8 a profile stored encrypted that cannot be decrypted (rotated Joomla secret): nothing is sent
+PASS X9 the plugin-wide profile still goes to the plugin-wide address
+--- 2. Brevo consent
+PASS C1 a forged newsletter=1 on an element WITHOUT the newsletter box is ignored: nothing reaches Brevo
+PASS C2 ...and the plain newsletter webhook is not called either
+PASS C2b with the box on the element and the tick, the newsletter webhook IS called
+PASS C3 tick + lists: double opt-in (never a direct subscription, never listIds on /v3/contacts)
+PASS C4 tick + lists but NO double opt-in template: no subscription at all, error in the log, the staff is told, the booking works
+PASS C5 "every booking" without the tick: contact created WITHOUT lists, no listIds and no updateEnabled in the call
+PASS C6 "every booking" WITH the tick and lists but no template: no subscription, no contact with lists
+PASS C7 tick but the element has no lists: just the contact, no list
+--- 4. sealed token
+PASS T1 the page of "hookprof" shows no webhook address, staff recipient or Brevo setting (token is sealed: starts with v2.)
+PASS T1 the page of "hookother" shows no webhook address, staff recipient or Brevo setting (token is sealed: starts with v2.)
+PASS T1 the page of "staffto" shows no webhook address, staff recipient or Brevo setting (token is sealed: starts with v2.)
+PASS T1 the page of "brevo1" shows no webhook address, staff recipient or Brevo setting (token is sealed: starts with v2.)
+PASS T1 the page of "paidhook" shows no webhook address, staff recipient or Brevo setting (token is sealed: starts with v2.)
+PASS T2 the server still reads the full content (recipient, price, fields) after checking the signature
+PASS T3 token size: the typical sealed token stays small (under 4 KB)
+PASS T4 a changed ciphertext is refused
+PASS T4 a changed signature is refused
+PASS T4 a truncated token is refused
+PASS T4 the sealed part with another signature is refused
+PASS T4b nothing was stored for the forgeries
+PASS T5 compatibility: a page cached before the update (readable old-format token, same epoch) still books
+PASS T6 an old token (no signed newsletter flag) cannot subscribe anyone: the tick is ignored
+--- 5. SSRF
+PASS N1 loopback, private, link-local (cloud metadata), CGNAT, IPv6 local, IPv4-in-IPv6 and multicast are NOT public
+PASS N2 real public addresses are
+PASS N3 173.245.48.5 in 173.245.48.0/20 -> True
+PASS N3 173.245.64.1 in 173.245.48.0/20 -> False
+PASS N3 2606:4700::1 in 2606:4700::/32 -> True
+PASS N3 2607:4700::1 in 2606:4700::/32 -> False
+PASS N3 8.8.8.8 in 173.245.48.0/20 -> False
+PASS N3 1.2.3.4 in garbage -> False
+PASS N4 a customer-chosen address that resolves to an internal network (here 127.0.0.1) is refused: no call, closed as error, log and staff
+PASS N5 "hooklit": refused (cloud-metadata address / localhost / credentials in the URL)
+PASS N5 "hookloc": refused (cloud-metadata address / localhost / credentials in the URL)
+PASS N5 "hookcred": refused (cloud-metadata address / localhost / credentials in the URL)
+PASS N6 a redirect from the receiver is NOT followed (one request, none to the Location), and the log says so
+PASS N7 the outbox of failed deliveries is capped at 200: a 201st is not queued, the log says so
+--- 6. CF-Connecting-IP
+PASS P1 a forged CF-Connecting-IP from a connection that is NOT Cloudflare changes nothing: the visitor is the connection address (the rate limit cannot be dodged)
+PASS P2 when the connection comes from a listed Cloudflare range (the option adds ranges) the header IS used
+--- 7. GET warning
+PASS G1 the element label says GET puts the customer data in the address (logs of every server)
+PASS G2 the plugin option label says it too, in English and in Italian (language files)
+--- 8. attributes
+PASS A1 markup is stripped from names and mapped answers
+PASS A2 a long mapped answer is capped (200)
+PASS A3 first name and surname are capped at 60 characters
+PASS A4 a link in the name fields is refused (the field is left out, not saved)
+PASS A5 an email address in the name fields is refused
+PASS A6 a web address (www.) in the name fields is refused
+--- 9. confirm and tell the customer
+PASS Z1 the element customer-email settings are saved on the booking
+PASS Z2 the confirmation email uses the element's own subject and text
+PASS Z3 an element that does NOT email the customer: the booking is confirmed but no email goes out, and the admin is told
+--- 10. purge
+PASS Y1 alert markers older than 30 days are removed by the scheduled task, recent ones stay
+--- 11. language
+PASS L1 the builder element in en-GB: labels come from the language files (no unresolved key)
+PASS L2 ...and the customer-email body has no fixed Italian default in en-GB (the translated default template of the plugin applies)
+PASS L1 the builder element in it-IT: labels come from the language files (no unresolved key)
+PASS L2 ...and the customer-email body has no fixed Italian default in it-IT (the translated default template of the plugin applies)
+PASS L3 every language file of the package parses with Joomla own parser and has the same keys in en-GB and it-IT (6 files)
+PASS L4 quotes inside a string are written the Joomla 5/6 way (backslash-quote) and read back as quotes
+
+RESULT pass=67 fail=0

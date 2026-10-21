@@ -41,12 +41,15 @@ final class FooterText
         if ($s === '' || !self::isRich($s)) {
             return $s;
         }
+        // the document tags are noise (and a stray </body> would cut what follows); a "<" that does not open a real tag is a word: "<mario@x.it>"
+        $s = (string) preg_replace('#</?(?:html|body|head)\b[^>]*>#i', '', $s);
+        $s = (string) preg_replace('#<(?!/?[a-zA-Z][a-zA-Z0-9]*[\s/>]|!--|\?)#', '&lt;', $s);
         $doc = new \DOMDocument();
         $prev = libxml_use_internal_errors(true);
-        $doc->loadHTML('<?xml encoding="utf-8" ?><!DOCTYPE html><html><body><div id="wgbroot">' . $s . '</div></body></html>', LIBXML_NONET | LIBXML_COMPACT);
+        $doc->loadHTML('<?xml encoding="utf-8" ?><!DOCTYPE html><html><body>' . $s . '</body></html>', LIBXML_NONET | LIBXML_COMPACT);
         libxml_clear_errors();
         libxml_use_internal_errors($prev);
-        $root = $doc->getElementById('wgbroot');
+        $root = $doc->getElementsByTagName('body')->item(0);
         if (!$root) {
             return trim(htmlspecialchars(strip_tags($s), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'));
         }
@@ -58,7 +61,7 @@ final class FooterText
         return trim($out);
     }
 
-    private static function walk(\DOMNode $node): string
+    private static function walk(\DOMNode $node, bool $inLink = false): string
     {
         $out = '';
         foreach ($node->childNodes as $c) {
@@ -74,17 +77,22 @@ final class FooterText
                 continue;
             }
             if (!\in_array($tag, self::ALLOWED, true)) {
-                $out .= self::walk($c);          // an unknown tag: keep its words, lose the tag
+                $out .= self::walk($c, $inLink); // an unknown tag: keep its words, lose the tag
                 continue;
             }
             if ($tag === 'br') {
                 $out .= '<br>';
             } elseif ($tag === 'a') {
+                if ($inLink) {
+                    $out .= self::walk($c, true);        // a link inside a link: one link only, the inner words stay
+                    continue;
+                }
                 $href = self::url((string) $c->getAttribute('href'));
-                $in   = self::walk($c);
-                $out .= $href !== '' ? '<a href="' . htmlspecialchars($href, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '">' . $in . '</a>' : $in;
+                $in   = self::walk($c, true);
+                $void = trim(str_replace("\xC2\xA0", ' ', strip_tags($in))) === '' && stripos($in, '<br>') === false;
+                $out .= $href !== '' && !$void ? '<a href="' . htmlspecialchars($href, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '">' . $in . '</a>' : $in;
             } else {
-                $out .= '<' . $tag . '>' . self::walk($c) . '</' . $tag . '>';
+                $out .= '<' . $tag . '>' . self::walk($c, $inLink) . '</' . $tag . '>';
             }
         }
 
@@ -101,10 +109,12 @@ final class FooterText
         if ($u === '' || strlen($u) > 2000 || preg_match('/[<>"\'\\\\`]/', $u)) {
             return '';
         }
-        if (preg_match('#^https?://[^/?\#]+#i', $u) === 1) {
-            return $u;
+        // a web address: no user name and password in front of the host ("https://good.example@evil.example/" is evil.example)
+        if (preg_match('#^https?://([^/?\#]+)#i', $u, $m) === 1) {
+            return strpos($m[1], '@') === false ? $u : '';
         }
-        if (preg_match('#^mailto:[^?]+(\?.*)?$#i', $u) === 1) {
+        // one mail address, nothing else (no second recipient, no subject, no body)
+        if (preg_match('/^mailto:[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+$/i', $u) === 1) {
             return $u;
         }
 

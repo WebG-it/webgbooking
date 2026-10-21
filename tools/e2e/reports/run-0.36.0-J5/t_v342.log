@@ -1,0 +1,30 @@
+PASS Q1 curl not usable: the pinned HTTP client is NOT built (the call is refused, no fall back to the stream transport)
+PASS Q1b curl usable: the client is built (normal case)
+PASS Q1c the pinned client asks for the curl transport only (getHttp(..., ['curl']))
+PASS Q1d both callers handle the missing client: the webhook is refused (staff told), the newsletter webhook is skipped with a log line
+PASS Q2 a normal http(s) address is accepted
+PASS Q2b backslash, "@", "#", other schemes and spaces are refused
+PASS Q3 ::ffff:a.b.c.d is read as a.b.c.d (the other forms are left as they are)
+PASS Q3b ...so a Cloudflare address that arrives as ::ffff:173.245.48.5 falls in the IPv4 range
+PASS Q4 the HOSTS: help warns against hosts shared between customers (hooks.zapier.com, hook.*.make.com) and points to the URL: line, in both languages
+PASS Q5 the Brevo "every booking" option says it creates a contact for anyone who books, even without marketing consent, in both languages
+PASS Q5b ...and the builder shows it in Italian (no unresolved key)
+--- 6. IP diagnostics line
+PASS D1 REMOTE_ADDR 173.245.48.5, header - -> noheader, v4, tail "8.5"
+PASS D1 REMOTE_ADDR ::ffff:173.245.48.5, header 198.51.100.9 -> cloudflare, v4mapped, tail "0.9"
+PASS D1 REMOTE_ADDR 2606:4700::1, header 2001:db8::5 -> cloudflare, v6, tail "::5"
+PASS D1 REMOTE_ADDR 8.8.8.8, header - -> direct, v4, tail "8.8"
+PASS D1 REMOTE_ADDR 8.8.8.8, header 1.2.3.4 -> unrecognized, v4, tail "8.8"
+PASS D1 REMOTE_ADDR not-an-ip, header - -> direct, unknown, tail ""
+PASS D1 REMOTE_ADDR ::ffff:8.8.8.8, header 1.2.3.4 -> unrecognized, v4mapped, tail "8.8"
+PASS D1 REMOTE_ADDR 8.8.8.8, header 8.8.8.8 -> restored, v4, tail "8.8"
+PASS D1 REMOTE_ADDR ::ffff:8.8.8.8, header 8.8.8.8 -> restored, v4mapped, tail "8.8"
+PASS D1b only three characters of the detected address come out (never the address, never a hash)
+PASS D2 the bookings list of a component administrator shows the line: direct, IPv4, last three characters
+PASS D2b ...and neither the full address nor a hash is on the screen
+PASS D3 a Cloudflare header from a connection OUTSIDE the ranges: "Cloudflare not recognised", the header is ignored (tail is the connection one)
+PASS D4 the same header from a connection inside a listed Cloudflare range: "through Cloudflare", the tail is the header address
+PASS D5 a Cloudflare-range connection with no header: says every visitor shows the edge address
+PASS D6 the line is built only for core.admin (checked in the view)
+
+RESULT pass=27 fail=0

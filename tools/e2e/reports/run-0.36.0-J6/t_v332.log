@@ -1,0 +1,20 @@
+--- 1. confirmed at once
+PASS V1a a free booking is stored as CONFIRMED (it used to stay "pending")
+PASS V1b the default customer email says "Appointment confirmed" / "Appuntamento confermato", not "request"
+PASS V1c the default body says the appointment is confirmed
+PASS V1d the answer shown in the widget says confirmed, not "request sent"
+PASS V1e element option "Manual confirmation": the booking stays pending and the email is the "request" one (today's flow)
+PASS V1f ...and its widget answer is still "request sent"
+PASS V1g a paid booking is confirmed at payment as before
+PASS V1h reminders cover confirmed free bookings (status is in the reminder set)
+--- 2. staff recipient
+PASS V2a the new-booking staff email goes to the element recipient
+PASS V2b the recipient is stored on the booking
+PASS V2c RESCHEDULE: the staff email goes to the element recipient (not to the plugin notify address)
+PASS V2d CANCEL by the customer: the staff email goes to the element recipient
+PASS V2e no recipient on the element: the plugin notify address is used (fallback)
+PASS V2f ...also for the cancellation of that booking
+PASS V2g NEEDS_REVIEW alert (paid but slot taken) goes to the element recipient
+PASS V2h the "effects did not complete" alert for a booking goes to the element recipient
+
+RESULT pass=16 fail=0

@@ -25,7 +25,7 @@ OLDS = args or [os.path.join(ROOT, 'dist', 'pkg_webgbooking-0.35.3.zip'), os.pat
 COMP = "element='com_webgbooking' AND type='component'"
 PLUG = "element='webgbooking' AND folder='system' AND type='plugin'"
 BKEY = 'xkeysib-' + R(40)
-S1, S2 = 'sec' + R(18), 'sec' + R(18)
+S1, S2, S3 = 'sec' + R(18), 'sec' + R(18), 'sec' + R(18)
 PK = 'pk_' + 'test_' + R(24)
 NL = chr(92) + 'n'
 FOOTER = 'Rossi Studio S.r.l.\nVia Roma 1, 10100 Torino\nP.IVA 01234567890\nPrivacy: https://www.example.invalid/privacy.html'
@@ -73,6 +73,7 @@ def seed(legacy=False):
         kv['email_body'] = '<p>Gentile {name}, la aspettiamo.</p>'
     jx("php /tmp/mock/init.php %s >/dev/null" % ' '.join("'%s=%s'" % (k, v) for k, v in kv.items()))
     sql("UPDATE joom_extensions SET params=JSON_SET(params,'$.mail_footer',%s) WHERE %s" % (q(FOOTER), PLUG))
+    sql("UPDATE joom_extensions SET params=JSON_SET(params,'$.whp2_name','zap','$.whp2_headers',%s) WHERE %s" % (q('X-Zap: ' + S3), PLUG))      # a secret typed in clear in the database, as it can happen on an old site
     sql('DELETE FROM joom_webgbooking_eventtypes')
     ins_type()
     jx(RENDER)
@@ -163,7 +164,7 @@ def diff(a, b, what):
 
 def no_clear_secrets():
     raw = rsql("SELECT CONCAT(IFNULL(params,'')) FROM joom_extensions WHERE %s UNION ALL SELECT IFNULL(params,'') FROM joom_extensions WHERE %s" % (COMP, PLUG))
-    return not any(s in raw for s in (SK, WHSEC, BKEY, S1, S2))
+    return not any(s in raw for s in (SK, WHSEC, BKEY, S1, S2, S3))
 
 
 SECRETS = ('stripe_sk', 'stripe_whsec', 'brevo_key', 'whp1_headers')
@@ -187,16 +188,17 @@ for old in OLDS:
     check('%s the 0.36.0 package installs over it' % ov, install(NEW) and version() == '0.36.0', version())
     comp, plug = params(COMP), params(PLUG)
     miss = [k for k in before_plug if k not in comp]
-    changed = {k: (before_plug[k], comp[k]) for k in before_plug if k in comp and comp[k] != before_plug[k] and k not in ('email_subject', 'email_body')}
+    changed = {k: (before_plug[k], comp[k]) for k in before_plug if k in comp and comp[k] != before_plug[k] and k not in ('email_subject', 'email_body', 'whp2_headers')}
     check('%s every option of the plugin is now in the Options of the component (%d keys, none missing)' % (ov, len(before_plug)), not miss, miss)
     check('%s ... with the value it had (secrets too: same encrypted text, portable)' % ov, not changed, changed)
-    check('%s ... the plugin row keeps its old values (nothing deleted, they are only a fallback)' % ov, all(plug.get(k) == v for k, v in before_plug.items() if k not in ('email_subject', 'email_body')), {k: (v, plug.get(k)) for k, v in before_plug.items() if plug.get(k) != v and k not in ('email_subject', 'email_body')})
+    check('%s ... the plugin row keeps its old values (nothing deleted, they are only a fallback)' % ov, all(plug.get(k) == v for k, v in before_plug.items() if k not in ('email_subject', 'email_body', 'whp2_headers')), {k: (v, plug.get(k)) for k, v in before_plug.items() if plug.get(k) != v and k not in ('email_subject', 'email_body', 'whp2_headers')})
     check('%s no secret in clear in the database, neither row' % ov, no_clear_secrets() and all(str(comp.get(k, '')).startswith('g:') for k in SECRETS), [k for k in SECRETS if not str(comp.get(k, '')).startswith('g:')])
+    check('%s the secret that was in CLEAR in the plugin is encrypted in both rows after the update (the copy in the component and the plugin\'s own)' % ov, str(comp.get('whp2_headers', '')).startswith('g:') and str(plug.get('whp2_headers', '')).startswith('g:') and all(str(plug.get(k, 'g:')).startswith('g:') or plug.get(k) == '' for k in ('stripe_sk', 'stripe_whsec', 'brevo_key', 'whp1_headers', 'whp2_headers')), (str(comp.get('whp2_headers', ''))[:4], str(plug.get('whp2_headers', ''))[:4]))
     pg = adm.get(edit_url)
     fp = FormParser(); fp.feed(pg)
     form = dict(fp.pairs)
     check('%s the Options form shows the old values (email look, Google, Stripe mode and public key, webhook, analytics, days ...)' % ov, all(form.get('jform[%s]' % k) == str(before_plug[k]) for k in ('notify_email', 'mail_business_name', 'mail_from_name', 'host_name', 'google_client_id', 'google_calendar_id', 'stripe_mode', 'stripe_pk', 'booking_webhook', 'newsletter_webhook', 'gtm_id', 'ga4_id', 'meeting_url', 'reminder_times', 'whp1_name', 'window_days')), {k: (form.get('jform[%s]' % k), before_plug[k]) for k in ('notify_email', 'mail_business_name', 'stripe_pk', 'window_days', 'reminder_times') if form.get('jform[%s]' % k) != str(before_plug[k])})
-    check('%s ... and no secret is sent to the browser' % ov, all(form.get('jform[%s]' % k, '') == '' for k in SECRETS) and not any(s in pg for s in (SK, WHSEC, BKEY, S1, S2)) and 'value="g:' not in pg, '')
+    check('%s ... and no secret is sent to the browser' % ov, all(form.get('jform[%s]' % k, '') == '' for k in SECRETS) and not any(s in pg for s in (SK, WHSEC, BKEY, S1, S2, S3)) and 'value="g:' not in pg, '')
     shown = re.search(r'<textarea[^>]*name="jform\[mail_footer\]"[^>]*>(.*?)</textarea>', pg, re.S)
     shown = html.unescape(shown.group(1)).strip() if shown else ''
     check('%s the old plain footer opens in the editor with its four lines and its address as a link; the database still has the plain text' % ov, shown.count('<br>') == 3 and 'Privacy: <a href="https://www.example.invalid/privacy.html">' in shown and params(COMP).get('mail_footer') == FOOTER, shown)

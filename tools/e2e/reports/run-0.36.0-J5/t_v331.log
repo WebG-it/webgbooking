@@ -1,0 +1,23 @@
+--- 1. stuck pending effects
+PASS V1a paid booking stuck in fx_state pending: the task runs the effects (state done, customer mail sent)
+PASS V1b free booking stuck in pending: the task runs the effects too
+PASS V1c a pending row that is only seconds old is NOT taken (its process may still be alive)
+PASS V1d a second run does nothing more: effects ran exactly once (no extra mail, no extra Google event)
+PASS V1e one Google event per recovered booking (2), not more
+--- 2. Google event idempotency
+PASS V2a response lost after the event was created: booking kept, flagged for retry, the event already exists once at Google
+PASS V2b the retry does NOT create a second event: still ONE event at Google
+PASS V2c the retry recovers the existing event (id and Meet link stored on the booking)
+PASS V2d the event id is deterministic (base32hex), derived from the booking, and contains no token
+PASS V2e the Meet requestId is the same on every attempt for the booking
+--- 3. separate guest step
+PASS V3a the guest mail fails but the customer mail was sent and recorded as its own step
+PASS V3b the retry does NOT send the customer mail again (still exactly one)
+PASS V3c only the guest step is being retried (tries went up, state still retry)
+--- 5. livemode / key prefix
+PASS V5a a paid session WITHOUT livemode is a mismatch: not confirmed (it used to be skipped)
+PASS V5b the return page does not confirm it either
+PASS V5c a key with an unknown prefix is refused at save (error, not saved)
+PASS V5d a stored key with an unknown prefix cannot open a payment either
+
+RESULT pass=17 fail=0

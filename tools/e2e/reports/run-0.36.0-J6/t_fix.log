@@ -1,0 +1,102 @@
+--- 1. test/live
+PASS F1a session.livemode=true on a test-mode site: webhook does NOT confirm (mismatch) and alerts the staff
+PASS F1b return page with a livemode mismatch does not confirm either
+PASS F1c a live key with mode "test": paid booking refused, nothing stored, staff alerted
+PASS F1d options save with a live key + mode test is an ERROR: key and mode NOT saved
+PASS F1e switching to live while the stored key is a test key is refused too (mode stays test)
+PASS F1f admin list shows the TEST MODE banner while Stripe is in test
+PASS F1g no test banner once live
+PASS F1h live key + live mode: paid booking opens a payment
+--- 2. Google
+PASS F2a freeBusy failing: the month offers NO slots and says the calendar is unavailable (fail closed)
+PASS F2b booking refused while the calendar cannot be read; nothing stored
+PASS F2c ONE alert to the staff for 6 requests (throttled), not one per request
+PASS F2d freeBusy is cached ~90 s: three identical month calls = ONE Google request
+PASS F2e booking confirmation reads Google FRESH (not the cache) and a created event purges the cache
+PASS F2f Google event creation fails: booking kept, flagged "retry", staff alerted
+PASS F2g customer is told the link comes shortly (no empty Meet link)
+PASS F2h the steps that worked are recorded (customer + staff mail), the others are not duplicated later
+PASS F2i the task retries: Google event + Meet link created, state done, stored config cleared
+PASS F2j exactly ONE new email: the "here is your link" mail (customer confirmation/staff mails NOT repeated)
+PASS F2k a further run does nothing
+--- 3. effects after payment, orphans
+PASS F3a SMTP down at payment time: the booking is PAID and confirmed, effects flagged for retry (not mute, not lost)
+PASS F3b SMTP back: the retry sends the customer + staff emails once, no second Google event
+PASS F3c paid + Google down: customer gets the confirmation with "link shortly" and the payment line
+PASS F3d after the retry: link mail sent, state done
+PASS F3e hold cancelled by the admin while the customer pays: payment recorded on the row, status stays cancelled, staff alerted to refund
+PASS F3f hold DELETED while paying: no row, the staff is told about the paid session anyway
+PASS F3g a session of another site/product on the same Stripe account stays ignored
+PASS F3h day lock busy: webhook answers 503, NOTHING changes (Stripe will redeliver)
+PASS F3i redelivery after the lock is free confirms it
+--- 4. GA4 events
+PASS F4a return page redirects to the thank-you page with a random one-time token (no personal data in the URL)
+PASS F4b the thank-you page pushes the booking event with value, currency and transaction id
+PASS F4c reloading the page does NOT fire it again (single-use token)
+PASS F4d returning to the payment page again redirects without a new token (fires once per booking)
+PASS F4e element WITHOUT thank-you page: the return page itself loads the GTM container and pushes the event with value/currency
+PASS F4f the same event name is configurable per element (analytics_event default)
+--- 5. availability per element
+PASS F5a only Tuesday and Thursday are offered
+PASS F5b slots 15:00-18:30 (30 min inside 15:00-19:00)
+PASS F5c element notice 48 h: nothing in the next 2 days; window 14 days: nothing after
+PASS F5d server refuses a Monday for that element even with its valid token
+PASS F5e a valid slot books
+PASS F5f the overrides are stored with the booking
+PASS F5g rescheduling to a Monday is refused (the booking keeps its element rules)
+PASS F5h other elements keep the global hours
+--- 6. config epoch / lifetime
+PASS F6a before the bump the page books
+PASS F6b "Invalidate cached configurations" raises the epoch (1 -> 2) and the switch resets
+PASS F6c a page cached BEFORE the bump (old price/free config) can no longer book; the message says reload
+PASS F6d the regenerated page books with the new epoch
+PASS F6e a configuration older than the lifetime (30 days) is refused
+PASS F6f lifetime 0 = no limit: the same old token is accepted
+--- 7. ics
+PASS F7a customer .ics UID is an HMAC of the id, not the manage token
+PASS F7b guest .ics has the same UID but NO customer phone
+PASS F7c customer .ics still has the number ("I call you on ...")
+PASS F7d a booking made BEFORE 0.33.0 keeps its old UID so the calendar entry still matches its cancellation
+--- 8. anti-abuse
+PASS F8a per-IP limit: the 4th and 5th booking from the same address in an hour are refused
+PASS F8b the IP is not stored: only a hash
+PASS F8c per-IP open holds: the second concurrent paid hold is refused
+PASS F8d global cap of open holds: the third is refused and the staff is alerted
+PASS F8e three ABANDONED paid holds by one email do not lock that email out (expired rows are not counted)
+PASS F8f reminders go ONLY to confirmed bookings (awaiting_payment, expired, needs_review get none)
+--- 9. pending_ctx
+PASS F9a an open hold keeps its stored config (needed after payment)
+PASS F9b after payment and completed effects the stored config is NULL
+PASS F9c after the hold dies (cancel page) it is NULL
+PASS F9d after the scheduled expiry it is NULL
+PASS F9e a free booking whose effects are done has no stored config either
+--- 10. secrets
+PASS F10a a secret found in clear works AND is encrypted on first read
+PASS F10b undecryptable secret: paid booking refused, a log line WITHOUT values names the option
+PASS F10c admin list warns that the key cannot be decrypted (different from "not configured")
+PASS F10d restricted key (account read forbidden): saved and verified through a Checkout Sessions read
+PASS F10e restricted key that cannot be verified at all: still SAVED, reported as "not verifiable" (not blocked)
+PASS F10f the restricted key creates a Checkout Session
+--- 11. amounts
+PASS F11a strict amount parser: exact cents for clear inputs, refusal (not guessing) for ambiguous/malformed ones
+PASS F11b an element whose price is "49.999" is flagged invalid in the widget
+PASS F11c ...and refuses bookings (it does NOT turn into a free event)
+PASS F11d an unsupported currency (JPY) is invalid too
+PASS F11e "1.234,50" in "chf" (lowercase) is a valid CHF 1234.50 price
+PASS F11f Stripe got amount 123450 and currency chf
+--- 12. headers
+PASS F12 manage page: Cache-Control no-store, Referrer-Policy no-referrer, X-Robots-Tag noindex
+PASS F12 payreturn: Cache-Control no-store, Referrer-Policy no-referrer, X-Robots-Tag noindex
+PASS F12 paycancel: Cache-Control no-store, Referrer-Policy no-referrer, X-Robots-Tag noindex
+PASS F12 json token: Cache-Control no-store, Referrer-Policy no-referrer, X-Robots-Tag noindex
+PASS F12 json month: Cache-Control no-store, Referrer-Policy no-referrer, X-Robots-Tag noindex
+PASS F12b the HTML pages carry meta robots noindex + referrer no-referrer
+--- 13. small fixes
+PASS F13a booking webhook payload: "event" is booking.created (no duplicate key overriding it), event name in "event_name"
+PASS F13b redirect "/\evil.example" is dropped; element webhook URL with ftp:// is dropped
+PASS F13c the OAuth callback no longer puts exception text in the redirect URL
+PASS F13d package and all children carry the same version
+PASS F13e a failing ALTER during install is logged and reported (not silent)
+PASS F13f after the rights are back, reinstalling repairs the table
+
+RESULT pass=87 fail=0

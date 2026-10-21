@@ -6,9 +6,11 @@
      ("Privacy Policy") shows in the customer email, the staff email, the plain-text part, the direct page and gives the consent box its address;
      the old plain text (4 lines) is drawn as before and opens in the editor with its line breaks.
 The update from 0.35.2 / 0.35.3 with real options is in t_v360_upgrade.py. Needs WGB_E2E_ADMIN_PASS."""
-import sys, os, re, json, html, subprocess, tempfile
+import sys, os, re, json, html, subprocess, tempfile, base64, urllib.parse
 from wgbtest import *
 from t_admin_lib import *
+import t_pay_lib as tp
+from t_pay_lib import SK as _PAYSK
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, '..', '..'))
@@ -186,8 +188,10 @@ check('P5 the cache switch ("invalidate cached configurations") raises the epoch
 sql("UPDATE joom_extensions SET params=JSON_SET(params,'$.stripe_sk',%s,'$.stripe_mode','test') WHERE %s" % (q(SK), COMP))
 jx('php /tmp/mock/runrem.php >/dev/null 2>&1')
 jx(RENDER)
-bk = book('paid60', day(3), '10:00', email='p5@example.invalid')
-check('P6 a Stripe key found in clear in the component row is encrypted when first used (and the payment still starts)', comp_params().get('stripe_sk', '').startswith('g:') and bk.get('ok') is True and bk.get('pay_url', bk.get('url', '')) != '' or comp_params().get('stripe_sk', '').startswith('g:'), (comp_params().get('stripe_sk', '')[:4], str(bk)[:200]))
+tp.set_mock_key(SK)
+jx('rm -f /tmp/gmock/log.jsonl')
+bk = book('paid30', day(3), '10:00', email='p5@example.invalid')
+check('P6 a Stripe key found in clear in the component row is encrypted when first used, AND the payment really starts (redirect to the Stripe page, a Checkout Session created with that key)', comp_params().get('stripe_sk', '').startswith('g:') and SK not in rsql("SELECT params FROM joom_extensions WHERE %s" % COMP) and bk.get('ok') is True and str(bk.get('redirect', '')).startswith('https://checkout.stripe.test/c/pay/') and len(tp.stripe_calls('POST', '/v1/checkout/sessions')) == 1, (comp_params().get('stripe_sk', '')[:4], str(bk)[:200]))
 reset_env(render=False)
 jx('php /tmp/mock/init.php >/dev/null')
 # saving the plugin's own (empty) form must never wipe its old values
@@ -213,6 +217,126 @@ check('P8b a secret that only the plugin has survives a save with the box left e
 sql("UPDATE joom_extensions SET params='{}' WHERE %s" % PLUG)
 jx('php /tmp/mock/init.php >/dev/null')
 
+# ---- no working day ticked: the days offered are Monday to Friday, as in every release before (not "only Sunday")
+import datetime as _dt
+
+
+def next_wd(wd):
+    d = _dt.date.today() + _dt.timedelta(days=2)
+    while d.weekday() != wd:
+        d += _dt.timedelta(days=1)
+    return d.isoformat()
+
+
+def offered(dd):
+    return month(page_cfg('def')['ev'], dd, dd).get(dd, [])
+
+
+reset_env(render=True)
+jx('php /tmp/mock/init.php >/dev/null')
+jx(RENDER)
+mon, wed, sat, sun = next_wd(0), next_wd(2), next_wd(5), next_wd(6)
+check('W0 (start) with every day ticked: Saturday and Sunday are offered', bool(offered(sat)) and bool(offered(sun)), (offered(sat)[:2], offered(sun)[:2]))
+pg = adm.get(edit_url)
+fp = FormParser()
+fp.feed(pg)
+pairs = [(k, v) for k, v in fp.pairs if k != 'jform[work_days][]' and k != 'task'] + [('task', 'component.apply')]
+post_pairs(adm, urllib.parse.urljoin(BASE + '/administrator/', fp.action), pairs)
+check('W1 nothing ticked in the form: what is offered is Monday to Friday (Monday and Wednesday yes; Saturday and Sunday no)', bool(offered(mon)) and bool(offered(wed)) and not offered(sat) and not offered(sun), {'mon': offered(mon)[:2], 'wed': offered(wed)[:2], 'sat': offered(sat)[:2], 'sun': offered(sun)[:2]})
+jx(RENDER)
+for label, val in (('empty text', ''), ('empty list', '[]')):
+    if val == '[]':
+        sql("UPDATE joom_extensions SET params=JSON_SET(params,'$.work_days',JSON_ARRAY()) WHERE %s" % COMP)
+    else:
+        set_comp('work_days', val)
+    check('W2 work_days stored as %s (an old site, or a hand edit): Monday to Friday as well' % label, bool(offered(mon)) and not offered(sun) and not offered(sat), {'mon': offered(mon)[:2], 'sun': offered(sun)[:2]})
+set_comp('work_days', '1,3')
+check('W3 a real choice still wins ("1,3" = Monday and Wednesday only)', bool(offered(mon)) and bool(offered(wed)) and not offered(next_wd(1)) and not offered(sun), '')
+set_comp('work_days', '6')
+check('W3b ... and only Saturday is possible when only Saturday is ticked', bool(offered(sat)) and not offered(mon), '')
+jx('php /tmp/mock/init.php >/dev/null')
+
+# ---- the plugin's old value is never lost by the first save of the Options (the form offers the value in force)
+reset_env(render=False)
+jx('php /tmp/mock/init.php >/dev/null')
+set_plug('buffer_before', '15')
+set_plug('host_name', 'Studio Fallback')
+sql("UPDATE joom_extensions SET params=JSON_REMOVE(params,'$.buffer_before','$.host_name') WHERE %s" % COMP)
+pgx = adm.get(edit_url)
+fpx = FormParser()
+fpx.feed(pgx)
+fx = dict(fpx.pairs)
+check('H1 the Options form offers the value in force (the plugin\'s 15 and "Studio Fallback"), not the default, for keys the component lacked', fx.get('jform[buffer_before]') == '15' and fx.get('jform[host_name]') == 'Studio Fallback', (fx.get('jform[buffer_before]'), fx.get('jform[host_name]')))
+check('H1b ... and the component now holds them (the copy that had not happened was done)', comp_params().get('buffer_before') == '15' and comp_params().get('host_name') == 'Studio Fallback', (comp_params().get('buffer_before'), comp_params().get('host_name')))
+# the same, when the form does not send a field at all and the component lacks it
+set_plug('google_sheet_id', 'sheet-fallback')
+sql("UPDATE joom_extensions SET params=JSON_REMOVE(params,'$.google_sheet_id','$.meeting_url') WHERE %s" % COMP)
+set_plug('meeting_url', 'https://meet.example.invalid/fb')
+pgy = adm.get(edit_url)
+fpy = FormParser()
+fpy.feed(pgy)
+sql("UPDATE joom_extensions SET params=JSON_REMOVE(params,'$.google_sheet_id','$.meeting_url') WHERE %s" % COMP)
+pairs = [(k, v) for k, v in fpy.pairs if k not in ('jform[google_sheet_id]', 'jform[meeting_url]', 'task')] + [('task', 'component.apply')]
+post_pairs(adm, urllib.parse.urljoin(BASE + '/administrator/', fpy.action), pairs)
+cz = comp_params()
+check('H2 a field the form did not send and the component lacked keeps the plugin\'s value after a save (only a ticked-nothing check box means empty)', cz.get('google_sheet_id') == 'sheet-fallback' and cz.get('meeting_url') == 'https://meet.example.invalid/fb', (cz.get('google_sheet_id'), cz.get('meeting_url')))
+check('H3 a value the administrator CLEARS in the form stays cleared (the plugin\'s old value does not come back)', (save_options({'jform[host_name]': ''}) is not None) and comp_params().get('host_name') == '' and effective('host_name')['all']['host_name'] in (None, ''), (comp_params().get('host_name'), effective('host_name')))
+sql("UPDATE joom_extensions SET params='{}' WHERE %s" % PLUG)
+jx('php /tmp/mock/init.php >/dev/null')
+
+# ---- secrets: never in clear, rotated = emptied in the plugin's old copy, and only an Administrator changes them
+reset_env(render=False)
+jx('php /tmp/mock/init.php >/dev/null')
+sql("UPDATE joom_extensions SET params=JSON_REMOVE(params,'$.stripe_whsec') WHERE %s" % COMP)
+set_plug('stripe_whsec', 'whsec_' + 'CLEARV360' + 'x' * 20)
+adm.get(edit_url)
+pc, pp_ = rsql("SELECT params FROM joom_extensions WHERE %s" % COMP), rsql("SELECT params FROM joom_extensions WHERE %s" % PLUG)
+check('B1 a secret found in clear in the plugin\'s old copy (not copied yet) is encrypted: in clear in neither row, "g:" in both', 'CLEARV360' not in pc + pp_ and json.loads(pc).get('stripe_whsec', '').startswith('g:') and json.loads(pp_).get('stripe_whsec', '').startswith('g:'), (pc[:0], json.loads(pp_).get('stripe_whsec', '')[:4]))
+# rotate and clear
+set_plug('brevo_key', 'g:KEEPBREVO')
+set_plug('stripe_whsec', 'g:KEEPWHSEC')
+set_plug('whp1_headers', 'g:KEEPWHP1')
+sql("UPDATE joom_extensions SET params=JSON_SET(params,'$.brevo_key','g:KEEPBREVO','$.stripe_whsec','g:KEEPWHSEC','$.whp1_headers','g:KEEPWHP1') WHERE %s" % COMP)
+BK2 = 'xkeysib-' + 'v360new' + 'e' * 40
+save_options({'jform[brevo_key]': BK2})
+pp2, cc2 = plug_params(), comp_params()
+check('R1 a secret rotated in the Options is emptied in the plugin\'s old copy (and is new in the component); the secrets not touched stay there as a fallback', pp2.get('brevo_key') == '' and cc2.get('brevo_key', '').startswith('g:') and cc2.get('brevo_key') != 'g:KEEPBREVO' and pp2.get('stripe_whsec') == 'g:KEEPWHSEC' and pp2.get('whp1_headers') == 'g:KEEPWHP1', (pp2.get('brevo_key'), pp2.get('stripe_whsec'), pp2.get('whp1_headers')))
+save_options({'jform[stripe_whsec]': '-'})
+pp3, cc3 = plug_params(), comp_params()
+check('R1b a secret cleared with "-" is emptied in both places, the others untouched', pp3.get('stripe_whsec') == '' and cc3.get('stripe_whsec') == '' and pp3.get('whp1_headers') == 'g:KEEPWHP1' and cc3.get('whp1_headers') == 'g:KEEPWHP1', (pp3.get('stripe_whsec'), cc3.get('stripe_whsec'), pp3.get('whp1_headers')))
+save_options({'jform[notify_email]': 'same@wgbtest.invalid'})
+check('R1c a save that does not touch the secrets empties nothing in the plugin', plug_params().get('whp1_headers') == 'g:KEEPWHP1', plug_params())
+sql("UPDATE joom_extensions SET params='{}' WHERE %s" % PLUG)
+jx('php /tmp/mock/init.php >/dev/null')
+
+# someone with "core.options" but not "core.admin" can change the settings, not the secrets
+MGR, MGRPW = 'mgr360', 'Mgr360-' + 'pw-' + 'Zz91!'
+jx("cd /var/www/html && php cli/joomla.php user:add --username=%s --password='%s' --email=mgr360@wgbtest.invalid --name='Mgr Test' --usergroup=Manager >/dev/null 2>&1" % (MGR, MGRPW))
+sql("UPDATE joom_assets SET rules='{\"core.manage\":{\"6\":1},\"core.options\":{\"6\":1}}' WHERE name='com_webgbooking'")
+sql("UPDATE joom_assets SET rules=JSON_SET(IF(rules IN ('', 'null'), '{}', rules), '$.\"core.manage\"', JSON_OBJECT('6', 1), '$.\"core.options\"', JSON_OBJECT('6', 1)) WHERE name='com_config'")
+ms = Sess()
+h0 = ms.get(BASE + '/administrator/index.php')
+tk = re.findall(r'<input type="hidden" name="([0-9a-f]{32})" value="1"', h0)
+dd = {'username': MGR, 'passwd': MGRPW, 'option': 'com_login', 'task': 'login', 'return': base64.b64encode(b'index.php').decode()}
+for k_ in tk:
+    dd[k_] = '1'
+ms.post(BASE + '/administrator/index.php', dd)
+mp = ms.get(edit_url)
+fpm = FormParser()
+fpm.feed(mp)
+if not fpm.pairs:
+    print('NOTE: the test user could not open the Options screen:', re.sub(r'<[^>]+>', ' ', mp)[:200])
+cc_before = comp_params()
+SK2 = 'sk_' + 'test_' + 'mgr360' + 'z' * 20
+pm = [(k, v) for k, v in fpm.pairs if k not in ('jform[stripe_sk]', 'jform[google_client_secret]', 'jform[host_name]', 'jform[brevo_key]', 'task')] + [('jform[stripe_sk]', SK2), ('jform[brevo_key]', 'xkeysib-' + 'mgr' * 14), ('jform[google_client_secret]', 'changed-by-manager'), ('jform[host_name]', 'Changed By Manager'), ('task', 'component.apply')]
+outm = post_pairs(ms, urllib.parse.urljoin(BASE + '/administrator/', fpm.action), pm)
+cc_after = comp_params()
+check('R2 a user with core.options only: the ordinary setting changes (host name)', bool(fpm.pairs) and cc_after.get('host_name') == 'Changed By Manager', (bool(fpm.pairs), cc_after.get('host_name')))
+check('R2b ... the Stripe key, the Brevo key and the Google secret are NOT changed, and the user is told', (cc_after.get('stripe_sk') or '') == (cc_before.get('stripe_sk') or '') and (cc_after.get('brevo_key') or '') == (cc_before.get('brevo_key') or '') and cc_after.get('google_client_secret') == cc_before.get('google_client_secret') and 'Administrator permission' in html.unescape(outm), (cc_before.get('google_client_secret'), cc_after.get('google_client_secret')))
+sql("DELETE FROM joom_users WHERE username='%s'" % MGR)
+sql("UPDATE joom_assets SET rules='{}' WHERE name='com_webgbooking'")
+jx('php /tmp/mock/init.php >/dev/null')
+
 # ============================================================ 5. the footer filter, on its own
 VEC = {
     'script': '<script>alert(1)</script>Ciao',
@@ -222,6 +346,10 @@ VEC = {
     'tabjs': '<a href="java&#9;script:alert(1)">x</a>',
     'entjs': '<a href="&#106;avascript:alert(1)">x</a>',
     'newlinejs': '<a href="jav\nascript:alert(1)">x</a>',
+    'userinfo': '<a href="https://www.example.invalid@evil.example/">x</a>',
+    'userinfo2': '<a href="http://user:pw@evil.example/">x</a>',
+    'mailmulti': '<a href="mailto:a@example.invalid,b@example.invalid">x</a>',
+    'mailq': '<a href="mailto:a@example.invalid?subject=hi&amp;cc=b@example.invalid">x</a>',
     'zwsp': '<a href="java&#8203;script:alert(1)">x</a>',
     'nbsp': '<a href="jav&nbsp;ascript:alert(1)">x</a>',
     'data': '<a href="data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==">x</a>',
@@ -244,6 +372,11 @@ VEC = {
     'unclosed': '<p><b>open',
     'spaces': '<a href=" https://x.example.invalid/ok ">sp</a>',
     'nested': '<a href="https://a.example.invalid/"><a href="https://b.example.invalid/">n</a></a>',
+    'straydiv': '<p>one</p></div>after the div',
+    'straybody': 'before</body><p>after the body</p>',
+    'angle2': '<p>Mario <mario@example.invalid> writes</p><b>x</b>',
+    'amp2': '<span>Tom &amp; Jerry</span> <b>s&amp;t</b>',
+    'nest2': '<a href="https://a.example.invalid/"><strong><a href="https://b.example.invalid/">deep</a></strong></a>',
     'plain': 'Via Roma 1\nP.IVA 01234567890\nPrivacy: https://www.example.invalid/privacy.html',
     'angle': 'Mario <mario@example.invalid> a < b & c > d',
     'objemb': '<object data="x"></object><embed src="x"><applet code="x"></applet>after',
@@ -266,7 +399,7 @@ check('F2 the filter is idempotent (a filtered text filtered again is the same)'
 check('F3 a good link keeps its address and its words, and loses every attribute but href', R['good']['clean'] == '<a href="https://www.example.invalid/privacy">Privacy Policy</a>', R['good']['clean'])
 check('F3b ... and is drawn with rel="noopener noreferrer" (and the attributes the page asks for)', 'href="https://www.example.invalid/privacy" class="f-link" style="color:#fff;text-decoration:underline;" rel="noopener noreferrer">Privacy Policy</a>' in R['good']['inline'], R['good']['inline'])
 check('F4 mailto links are kept', R['mailto']['clean'] == '<a href="mailto:info@example.invalid">Scrivici</a>', R['mailto']['clean'])
-check('F5 javascript:, data:, vbscript: and protocol-relative links lose the link and keep the words (also when written with a tab, a new line, an entity, other case)', all(R[k]['clean'] == 'x' for k in ('js', 'JS', 'tabjs', 'entjs', 'newlinejs', 'zwsp', 'nbsp', 'data', 'vb', 'protorel')), {k: R[k]['clean'] for k in ('js', 'JS', 'tabjs', 'entjs', 'newlinejs', 'zwsp', 'nbsp', 'data', 'vb', 'protorel')})
+check('F5 javascript:, data:, vbscript: and protocol-relative links lose the link and keep the words (also when written with a tab, a new line, an entity, other case)', all(R[k]['clean'] == 'x' for k in ('js', 'JS', 'tabjs', 'entjs', 'newlinejs', 'zwsp', 'nbsp', 'userinfo', 'userinfo2', 'mailmulti', 'mailq', 'data', 'vb', 'protorel')), {k: R[k]['clean'] for k in ('js', 'JS', 'tabjs', 'entjs', 'newlinejs', 'zwsp', 'nbsp', 'userinfo', 'userinfo2', 'mailmulti', 'mailq', 'data', 'vb', 'protorel')})
 check('F6 script, style, iframe, form, object, embed, textarea, meta and base disappear WITH what is inside', R['script']['clean'] == 'Ciao' and R['iframe']['clean'] == 'Z' and R['form']['clean'] == 'F' and R['styletag']['clean'] == 'S' and not DANGER.search(R['objemb']['clean']) and R['textarea']['clean'] == 't' and R['meta']['clean'] == 'm' and R['img']['clean'] == 'T' and R['svg']['clean'] == 'T', {k: R[k]['clean'] for k in ('script', 'iframe', 'form', 'styletag', 'objemb', 'textarea', 'meta', 'img', 'svg')})
 check('F7 bold, italic, em, strong and paragraphs stay; other tags lose the tag and keep the words', R['format']['clean'] == '<b>bold</b> <i>it</i> <em>e</em> <strong>s</strong>' and R['blocks']['clean'] == 'Titleonedsp' and R['onclick']['clean'] == '<p>Hi</p>' and R['style']['clean'] == '<p>S</p>', (R['format']['clean'], R['blocks']['clean'], R['onclick']['clean'], R['style']['clean']))
 check('F8 a text with no tags is the old plain text: not touched, not "rich"; a word in angle brackets ("<mario@...>", "a < b") is a word', not R['plain']['rich'] and R['plain']['clean'] == VEC['plain'] and not R['angle']['rich'] and R['angle']['clean'] == VEC['angle'], (R['plain'], R['angle']))
@@ -276,6 +409,13 @@ check('F11 the privacy address is the href of the link whose words (or address) 
 ed = R['plain']['editor']
 check('F12 the old plain text opens in the editor with its lines kept (paragraph with line breaks) and its address as a link', ed.count('<br>') == 2 and ed.startswith('<p>Via Roma 1<br>P.IVA 01234567890<br>Privacy: <a href="https://www.example.invalid/privacy.html">https://www.example.invalid/privacy.html</a></p>'), ed)
 
+check('F13 a stray </div> or </body> does not cut what follows', 'after the div' in R['straydiv']['clean'] and 'after the body' in R['straybody']['clean'] and 'before' in R['straybody']['clean'], (R['straydiv']['clean'], R['straybody']['clean']))
+check('F14 a word in angle brackets next to real tags stays text: "<mario@...>" is shown, not swallowed as a tag', R['angle2']['clean'] == '<p>Mario &lt;mario@example.invalid&gt; writes</p><b>x</b>' and 'Mario <mario@example.invalid> writes' in R['angle2']['text'], (R['angle2']['clean'], R['angle2']['text']))
+check('F15 an ampersand is escaped once, in the stored text and in the drawing (never &amp;amp;)', R['amp2']['clean'] == 'Tom &amp; Jerry <b>s&amp;t</b>' and '&amp;amp;' not in R['amp2']['inline'] and 'Tom &amp; Jerry' in R['amp2']['inline'] and 's&amp;t' in R['amp2']['inline'] and 'Tom & Jerry' in R['amp2']['text'], (R['amp2']['clean'], R['amp2']['inline'], R['amp2']['text']))
+check('F16 a link inside a link is ONE link: no empty anchor left behind (words of the inner link stay)', R['nested']['clean'] == '<a href="https://b.example.invalid/">n</a>', R['nested']['clean'])
+check('F16b ... and a link inside bold inside a link too: one link with the bold words, drawn with rel and colour', R['nest2']['clean'] == '<a href="https://a.example.invalid/"><strong>deep</strong></a>' and R['nest2']['inline'].count('<a ') == 1 and 'rel="noopener noreferrer"' in R['nest2']['inline'], (R['nest2']['clean'], R['nest2']['inline']))
+check('F16c ... no anchor without words anywhere in the filtered vectors', not [k for k, v in R.items() if re.search(r'<a [^>]*></a>', v['clean'])], [k for k, v in R.items() if re.search(r'<a [^>]*></a>', v['clean'])])
+
 # ============================================================ 6. the editor shows the old text without spoiling it
 reset_env(render=False)
 jx('php /tmp/mock/init.php >/dev/null')
@@ -284,7 +424,7 @@ set_comp('mail_footer', OLD)
 pg = adm.get(edit_url)
 m = re.search(r'<textarea[^>]*name="jform\[mail_footer\]"[^>]*>(.*?)</textarea>', pg, re.S)
 shown = html.unescape(m.group(1)).strip() if m else ''
-check('E1 the footer is an editor (the visual editor of the site) and not a plain box', 'joomla-editor-' in pg[max(0, pg.find('jform[mail_footer]') - 1500):pg.find('jform[mail_footer]') + 300] or 'tox-' in pg or 'tinymce' in pg.lower(), '')
+check('E1 the footer is the visual editor of the site (tinymce) with the footer text inside it, not a plain box', re.search(r'(?:js-editor-tinymce|<joomla-editor-tinymce)[^>]*>\s*<textarea\s+name="jform\[mail_footer\]"', pg, re.S) is not None, pg[max(0, pg.find('jform[mail_footer]') - 300):pg.find('jform[mail_footer]') + 60])
 check('E2 an old plain footer opens in the editor as paragraph + line breaks (the 4 lines survive), its address as a link', m is not None and shown.count('<br>') == 3 and shown.startswith('<p>Rossi Studio S.r.l.<br>Via Roma 1, 10100 Torino<br>P.IVA 01234567890<br>Privacy: <a href="https://www.example.invalid/privacy.html">'), shown)
 check('E3 opening the Options does not change what is stored (only a save does)', comp_params().get('mail_footer') == OLD, comp_params().get('mail_footer'))
 out = save_options({'jform[mail_footer]': '<p>Rossi Studio S.r.l.<br />Via Roma 1</p><p><a href="https://www.example.invalid/privacy" target="_blank" rel="noopener" onclick="x()">Privacy Policy</a> <script>alert(1)</script></p>'})
@@ -354,7 +494,7 @@ r = book(None, day(3), '11:00', email='ostile@example.invalid', cfg=dcfg(dp2))
 ms = [decode_mail(mail_text(p)) for p in mails()[since:]]
 cm2 = next((m for m in ms if 'ostile@' in m['rcpt']), None)
 fl2 = (re.search(r'<footer class="bk-foot">(.*?)</footer>', dp2, re.S) or [0, ''])[1]
-check('D11 a hostile footer written in the database (not through the form) is cleaned again when drawn: email, text part and direct page', cm2 is not None and not re.search(r'<script|<iframe|<img[^>]*onerror|javascript:|\sonclick', cm2['html'] + fl2) and 'Via Roma 1' in cm2['html'] and 'alert' not in cm2['text'] + fl2 or (cm2 is not None and not re.search(r'<script|<iframe|javascript:|\sonclick', cm2['html'] + fl2)), (cm2 and re.findall(r'<p class="f2".*?</p>', cm2['html'], re.S), fl2))
+check('D11 a hostile footer written in the database (not through the form) is cleaned again when drawn: email, text part and direct page', cm2 is not None and not re.search(r'<script|<iframe|<img[^>]*onerror|javascript:|\sonclick', cm2['html'] + fl2) and 'Via Roma 1' in cm2['html'].replace('\u200b', '') and 'Privacy Policy' in cm2['html'].replace('\u200b', '') and 'alert' not in cm2['html'] + cm2['text'] + fl2, (cm2 and re.findall(r'<p class="f2".*?</p>', cm2['html'], re.S), fl2))
 
 # ============================================================ 8. the old plain text: as before
 reset_env(render=False)

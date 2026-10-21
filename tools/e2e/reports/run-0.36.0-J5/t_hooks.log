@@ -1,0 +1,4 @@
+PASS booking ok
+PASS webhook POST has location, duration, event
+PASS Sheet row keeps the first 11 columns and APPENDS location, duration, event
+RESULT pass=3 fail=0

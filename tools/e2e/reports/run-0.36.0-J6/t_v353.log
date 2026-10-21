@@ -1,0 +1,53 @@
+PASS E1 the list of emails has one entry for each of the 16 emails, in three groups
+PASS E1b ... the language of the texts can be chosen (it-IT, en-GB) and a link leads to the look (logo, colours, footer)
+PASS E1c the component menu has "Email texts"
+PASS E2 an email opens in the editor: subject, title, body (visual editor), closing, the words of the buttons; Preview, Send me a test, Restore
+PASS E2b ... the body is never empty: it holds the ready-made text, with its blocks
+PASS E3 the "Insert placeholder" menu lists the documented placeholders with their meaning, {amount} and {payment_block} included
+PASS E3b ... every placeholder of the list has a readable description in both languages (no raw language key on the page)
+PASS E3c the Italian text is the ready-made one: "Il tuo appuntamento è confermato", {name}, {host}
+PASS P1 the preview of all 16 emails x 2 languages works with sample data: subject, formatted body, no raw language key, no placeholder left over
+PASS P2 the preview creates no booking and sends no email
+PASS P3 Italian: weekday and month in lower case in the subject and the box ("lunedì", not "Lunedì"), the zone named in Italian (not "Eastern ... Time")
+PASS P4 the preview shows what is in the form (not saved): own subject, title, text, button words, the blocks still formatted
+PASS P4b ... and nothing was stored by looking
+PASS P5 "Send me a test": one email to the administrator who asks, marked as a test, with sample data; no booking made
+PASS S1 saving stores ONLY what differs from the ready-made text (subject, title, text, the Meet button), nothing else
+PASS S1b ... the stored text is cleaned: no script, no on* attribute, no javascript: link; bold and the https link stay
+PASS S2 the next booking uses the changed text: subject, title, own wording, the Meet button with the new words
+PASS S2b ... the blocks the text keeps are formatted (appointment box, change links); a block it left out is not there (no calendar link, no "your answers")
+PASS S2c ... the dangerous pieces are gone from the email, the safe link is a real link
+PASS S2d ... the plain-text twin has the same words and the blocks
+PASS S3 the other language and the other emails are untouched (still the ready-made texts)
+PASS S4 an empty field falls back to the ready-made text (never an empty email)
+PASS S5 a text that ends up equal to the ready-made one is not stored (no line): the email follows the product from now on
+PASS S6 one changed field = one stored field
+PASS S7 "Restore the default text" removes the line; the ready-made text applies again
+PASS S8 a text changed in Italian is stored for it-IT only
+PASS L1 a layout override in the template (templates/<tpl>/html/layouts/webgbooking/email/default.php) is used for the HTML of the emails
+PASS L1b ... and the plain-text twin is the standard one (its own override file is separate)
+PASS L2 an override that is broken never loses the email: the standard layout is used
+PASS L3 without the override the standard layout is back (the product never changed)
+PASS L4 a Joomla language override changes the ready-made text: in the email and in the editor (the default it starts from, and the one "Restore" brings back)
+PASS M1 update: the old subject and body of the confirmation become its text in the new editor, in the site language
+PASS M1b ... the body keeps its blocks around it (appointment box, answers, calendar, change links) but not the Meet button the old text placed itself
+PASS M2 the old reminder subject moves too (no body: the reminder text stays the ready-made one)
+PASS M3 the old options are emptied after the copy (nothing is kept twice), in the plugin where they were written and in the Options of the component
+PASS M4 the next booking is written with the migrated text: its subject, its words, and the standard blocks around
+PASS M4b ... exactly one Meet link block (the one the old text placed)
+PASS M5 running the update again changes nothing (idempotent)
+PASS C1 all the colours of the look have a colour picker (not a text box with a hex code)
+PASS C2 the old text fields are gone from the plugin options (the texts are edited in "Email texts"), with a note pointing there
+PASS C3 the YOOtheme element edits the email texts with the visual editor (no raw HTML mode), and says where the full list of placeholders is
+PASS C4 the README explains the overrides for developers: the layout from the template, the Joomla language overrides, the placeholders
+PASS D1 the subject does not repeat the host when the event name already has it: "Confirmed: Appuntamento con Marco Galassi on ..." (no "with ...")
+PASS D1b ... and with an event that does not name the host the clean person name is used ("Marco Galassi", not "Marco Galassi, WebG")
+PASS D1c ... the same name in the sentence of the email: "your appointment with Marco Galassi is confirmed"
+PASS D1d the option "name of whoever takes the appointments" wins when set
+PASS D2 html: "Add to Google Calendar" is its own line, then the question, then Reschedule and Cancel
+PASS D2b plain text: the question is ABOVE the links, like in the html
+PASS D3 a phone appointment: the number is in "Location" (and the call notice), never again as an answer
+PASS D3b a Meet appointment where a question asks for the phone and got the same number: shown once (the number is not repeated as the question), the other answer stays
+PASS D3c the staff email keeps everything (phone and every answer)
+PASS D4 the zone is named in words in the email ("Central European ... Time"), not as an abbreviation and an identifier
+RESULT pass=52 fail=0

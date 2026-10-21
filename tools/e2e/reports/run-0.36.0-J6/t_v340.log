@@ -1,0 +1,80 @@
+--- 1. secrets
+PASS K1 the Brevo key is stored ENCRYPTED, not in clear
+PASS K2 the header profile is stored encrypted: neither header value is in the database in clear
+PASS K3 saving a new key checks it at once (GET /v3/account with the api-key header) and says so
+PASS K4 the profile save says how many headers are valid (2: Host, Content-Type and the line without a colon are refused)
+PASS K5 the options page never shows the key or the header values again (only "set")
+PASS K6 saving something else keeps both secrets untouched (empty = keep)
+PASS K7 a key Brevo refuses is saved with a clear warning (HTTP 401), not silently
+PASS K8 a profile may carry the endpoint ("URL:" line) so a secret hook address never needs to be in the page
+PASS K9 the public markup of "brevo1" holds no key and no header value
+PASS K9 the public markup of "hookprof" holds no key and no header value
+PASS K9 the public markup of "hookprof_url" holds no key and no header value
+PASS K9 the public markup of "paidhook" holds no key and no header value
+PASS K10 the signed token carries only the profile NAME
+--- 2. webhook profiles
+PASS W1 the element webhook carries the profile headers (Authorization, X-Api-Key)
+PASS W2 forbidden header lines are ignored: Host stays the real host, Content-Type stays JSON
+PASS W3 the payload names the event: booking.created
+PASS W4 an element with its OWN address and no profile never gets the plugin-wide profile (no credentials sent to another endpoint)
+PASS W5 the plugin-wide webhook uses the plugin-wide profile
+PASS W6 a profile with a "URL:" line is the endpoint when the element has none
+PASS W7 an unknown profile name sends NOTHING (no fall back), says so in the log and the staff is told
+PASS W8 no header value ever reaches the log
+--- 3. webhook events
+PASS V0 hook_cfg is stored on the booking with the profile NAME only
+PASS V1 RESCHEDULED: the webhook hears booking.rescheduled with the new and the previous slot, with the profile headers
+PASS V2 CANCELLED by the customer: booking.cancelled, cancelled_by customer, status cancelled
+PASS V3 CANCELLED by the staff from the admin: booking.cancelled, cancelled_by staff
+PASS V4a an unpaid hold is NOT announced to the webhook
+PASS V4 PAID: booking.paid with status confirmed, payment_status paid and the amount
+PASS V5 EXPIRED: the hold that lapsed is announced as booking.expired
+PASS V5b EXPIRED also when Stripe says the session expired
+PASS V6 the receiver is down (500): the reschedule still works for the customer and the event waits in the outbox
+PASS V6b still inside the backoff: nothing is re-sent yet
+PASS V6c once the receiver is back the scheduled task delivers it, once, and empties the outbox
+PASS V7 a receiver that REFUSES (401) is not retried forever: nothing in the outbox, the log says it
+--- 4. confirm and tell the customer
+PASS M1 a pending booking shows the button "Confirm and tell the customer" on its detail page
+PASS M2 a booking that is already confirmed does not show it
+PASS M3 the click confirms the booking and sends the customer the "Appointment confirmed" email (with the .ics)
+PASS M3b the admin is told in a clear line
+PASS M4 a second click does nothing: no second email, the admin is told it was not waiting
+PASS M5 the webhook hears booking.confirmed (confirmed_by staff)
+--- 5. staff email "moved"
+PASS S1 the staff email of a reschedule says "Appointment moved" (not "New booking")
+PASS S2 ...with the new slot in the subject and the previous one in the text
+PASS S3 a NEW booking has the "New Event" subject
+--- 6. Brevo
+PASS B1 a booking on an element set to "every booking" creates the contact (POST /v3/contacts, api-key header)
+PASS B2 NOME = first word, COGNOME = the rest, SMS in E.164 (spaces removed)
+PASS B3 extra attributes come from the form answers (CITTA=Citta, progetto = progetto, case and spaces forgiven)
+PASS B4 without the newsletter tick the contact is saved WITHOUT any list (no subscription without consent)
+PASS B4b ...and the call carries no listIds and no updateEnabled (never overwrites an existing contact)
+PASS B5 the step is recorded and the booking is done
+PASS B6 the customer sees nothing about Brevo
+PASS B7 newsletter tick on a "newsletter only" element with lists 7 and 12: the subscription goes THROUGH double opt-in (lists 7 and 12, NOME only), no direct contact
+PASS B8 the same email again (anyone can type any email): the existing contact is left EXACTLY as it was, no overwrite, no error
+PASS B9 no newsletter tick on a "newsletter only" element: Brevo is not called at all
+PASS B10 phone "333 777 0002" -> +393337770002
+PASS B10 phone "0039 333 777 0003" -> +393337770003
+PASS B10 phone "non e un numero" -> None
+PASS B10 phone "+39 12" -> None
+PASS B10 phone "" -> None
+PASS B10 phone "+44 7911 123456" -> +447911123456
+PASS B11 double opt-in with the newsletter tick: POST doubleOptinConfirmation (template 5, list 12, redirect) and NO direct contact creation
+PASS B12 double opt-in element without the tick: nothing is sent to Brevo (no consent)
+PASS B13 double opt-in turned on WITHOUT a template: no contact is added without consent, the staff is told, the booking works
+PASS B14 Brevo down (500): the booking is confirmed, the customer email and the Google event are done
+PASS B15 ...and only the Brevo step is left to retry (fx_state retry)
+PASS B16 Brevo back: the scheduled task adds the contact, the booking is done, NOTHING is sent twice (mails, events)
+PASS B17 Brevo answers 429 (rate limit): retried, not an error
+PASS B18 an attribute Brevo does not know (400): the booking works, nothing is shown to the customer
+PASS B19 ...the step ends as "error" (a retry could not fix it), the booking is done, no retry loop
+PASS B20 ...the log explains it with Brevo's reason, without the customer email or any key
+PASS B21 ...and the staff gets one email about it, in the element recipient or the plugin address, without the key
+PASS B22 the next task run does not call Brevo again for it
+PASS B23 a key Brevo refuses (401): booking works, error step, log says the key is refused, staff mailed
+PASS B24 Brevo switched on for the element but no key in the plugin options: booking works, clear log line, staff mailed
+
+RESULT pass=72 fail=0

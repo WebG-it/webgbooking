@@ -1,0 +1,36 @@
+PASS M0 the booking works and the Meet link is stored
+PASS M1 the event is confirmed and blocks the time, said out loud (not left to the default)
+PASS M2 title unchanged: "<event> - <customer>"
+PASS M3 the place is "Google Meet: <link>"
+PASS M4 description: kind of appointment and length
+PASS M5 ... how it takes place: the Meet link
+PASS M6 ... the phone number
+PASS M7 ... the notes
+PASS M8 ... the answers to the questions, with their labels
+PASS M9 ... the link to move or cancel (the customer's own manage link)
+PASS M10 the insert asks Google to send the invite (sendUpdates=all) and creates the Meet
+PASS M11 the insert already has description, place and the confirmed/opaque fields, but not the Meet link (Google makes it)
+PASS M12 a second call adds the Meet link to description and place WITHOUT a second invite email (sendUpdates=none), and touches only those two fields
+PASS M13 the attendee is the customer, nobody else
+PASS R1 the customer reschedules
+PASS R2 the same event moves (no second event) and keeps everything in the description
+PASS R3 the reschedule PATCH carries start, end, description and place (the conference is not touched)
+PASS R4 the place still has the link
+PASS G1 a booking with a guest: the guest sees the description, so it has NO link to move or cancel (and not the token)
+PASS G2 ... the guest is named, the type and the Meet link are there, but NOTHING personal of the customer: no phone number, no notes, no answers
+PASS G3 the guest is an attendee of the event
+PASS G4 after a reschedule the description still has no link to move or cancel
+PASS G5 phone appointment with a guest: no number of the customer in the title, the place or the description, and still says the business calls
+PASS O1 option "management link in the Google event" set to No: no link, no token (the rest of the description stays)
+PASS O2 ... and Yes (the default) writes it again
+PASS O3 the option exists in the Options of the component, default Yes
+PASS P1 phone appointment: place "Phone call: I will call you on <number>"
+PASS P2 ... the description says the business calls, with the number
+PASS P3 ... no sentence tells the customer to call, no Meet, no conference in the insert
+PASS P4 the insert has no conferenceData, and no second call (there is no link to add)
+PASS P5 the answers and the manage link are there too
+PASS H1 hostile notes and answers: the description has no angle brackets and no markup
+PASS H2 ... and no control characters, bounded size
+PASS C0 the event of the guest booking is in Google before the cancellation
+PASS C1 cancelling from the manage link still removes the event from Google (and the booking is cancelled)
+RESULT pass=35 fail=0

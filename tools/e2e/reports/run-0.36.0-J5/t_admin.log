@@ -1,0 +1,9 @@
+PASS component options form has jform[reminders_enabled]
+PASS component options form has jform[reminder_times]
+PASS component options form has jform[slot_duration]
+PASS component options: reminder text description present
+PASS the plugin has no options of its own: its form shows only the link to the component options
+PASS task plugin edit page opens and is enabled
+PASS Scheduled Tasks list shows the WebG Booking reminders task
+PASS "New task" type chooser lists the WebG routine
+RESULT pass=8 fail=0

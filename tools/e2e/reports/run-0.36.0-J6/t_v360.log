@@ -1,0 +1,99 @@
+PASS S1 the component Options hold every field the plugin had (76 fields), none lost, none renamed
+PASS S1b ... the only new field is the permissions box
+PASS S2 the plugin has no option of its own: one note with the link to the Options
+PASS S3 the footer text is an editor (type footereditor, an editor field with the line breaks kept), the secrets are still secret fields
+PASS S3b ... and the field prefix of the plugin is declared where the custom fields are used
+PASS S4 core.admin is declared by the component (who may open the Options)
+PASS O1 the Options screen of the component has the field of every setting
+PASS O1b ... in tabs: availability, email look, integrations, payments, permissions
+PASS O1c ... and the Stripe webhook address is shown there (read only), the secrets are never sent back to the form
+PASS O2 the "Options" button is in the toolbar of the bookings screen
+PASS O2 the "Options" button is in the toolbar of the eventtypes screen
+PASS O2 the "Options" button is in the toolbar of the emails screen
+PASS O3 the plugin form shows no option and says where they are (with the button to the Options)
+PASS O3b the Email texts screen links the look (logo, colours, footer) to the Options, no longer to the plugin
+PASS R1 a key the component has wins over the plugin (both for the plugin code and for everybody else)
+PASS R2 a key that only the plugin has is still found (nothing is lost if a key was not copied)
+PASS R3 a key the component has EMPTY stays empty (the old plugin value does not come back)
+PASS P1 saving the Options stores them in the component (the change is there)
+PASS P1b ... the other settings are exactly as they were (nothing dropped by the save)
+PASS P1d ... and hold nothing that is only on the screen (no permissions box, no notes, no read-only address)
+PASS P1c ... the stored settings are not in the plugin row (it stays as it was: empty here)
+PASS P2 settings that are not on the screen (the old email texts, the hidden switches) survive a save
+PASS P3 unticking every working day is a real choice: the component stores "nothing" and the old plugin value does not come back
+PASS P4 a Stripe key and a Brevo key saved in the Options are encrypted in the component row and written in clear nowhere (neither row)
+PASS P4c ... refused: error shown, previous key and mode kept
+PASS P5 the cache switch ("invalidate cached configurations") raises the epoch of the component and goes back to No
+PASS P6 a Stripe key found in clear in the component row is encrypted when first used, AND the payment really starts (redirect to the Stripe page, a Checkout Session created with that key)
+PASS P7 saving the plugin form (it has no fields) keeps what the plugin still holds, it is never wiped
+PASS P8 the epoch never goes lower than the plugin's own (7), even if the component did not have it yet
+PASS P8b a secret that only the plugin has survives a save with the box left empty (empty = keep what is stored)
+PASS W0 (start) with every day ticked: Saturday and Sunday are offered
+PASS W1 nothing ticked in the form: what is offered is Monday to Friday (Monday and Wednesday yes; Saturday and Sunday no)
+PASS W2 work_days stored as empty text (an old site, or a hand edit): Monday to Friday as well
+PASS W2 work_days stored as empty list (an old site, or a hand edit): Monday to Friday as well
+PASS W3 a real choice still wins ("1,3" = Monday and Wednesday only)
+PASS W3b ... and only Saturday is possible when only Saturday is ticked
+PASS H1 the Options form offers the value in force (the plugin's 15 and "Studio Fallback"), not the default, for keys the component lacked
+PASS H1b ... and the component now holds them (the copy that had not happened was done)
+PASS H2 a field the form did not send and the component lacked keeps the plugin's value after a save (only a ticked-nothing check box means empty)
+PASS H3 a value the administrator CLEARS in the form stays cleared (the plugin's old value does not come back)
+PASS B1 a secret found in clear in the plugin's old copy (not copied yet) is encrypted: in clear in neither row, "g:" in both
+PASS R1 a secret rotated in the Options is emptied in the plugin's old copy (and is new in the component); the secrets not touched stay there as a fallback
+PASS R1b a secret cleared with "-" is emptied in both places, the others untouched
+PASS R1c a save that does not touch the secrets empties nothing in the plugin
+PASS R2 a user with core.options only: the ordinary setting changes (host name)
+PASS R2b ... the Stripe key, the Brevo key and the Google secret are NOT changed, and the user is told
+PASS F0 the filter ran over all 44 texts
+PASS F1 nothing dangerous survives the filter: no script, style, iframe, img, svg, form, object, handler, style or class attribute, javascript:, vbscript:, data: or protocol-relative address
+PASS F2 the filter is idempotent (a filtered text filtered again is the same)
+PASS F3 a good link keeps its address and its words, and loses every attribute but href
+PASS F3b ... and is drawn with rel="noopener noreferrer" (and the attributes the page asks for)
+PASS F4 mailto links are kept
+PASS F5 javascript:, data:, vbscript: and protocol-relative links lose the link and keep the words (also when written with a tab, a new line, an entity, other case)
+PASS F6 script, style, iframe, form, object, embed, textarea, meta and base disappear WITH what is inside
+PASS F7 bold, italic, em, strong and paragraphs stay; other tags lose the tag and keep the words
+PASS F8 a text with no tags is the old plain text: not touched, not "rich"; a word in angle brackets ("<mario@...>", "a < b") is a word
+PASS F9 the filter closes what was left open, lower-cases the tags, trims the address, writes & as &amp;, drops comments and empty paragraphs
+PASS F10 plain-text version: tags gone, a link is "words (address)", a link whose words are its address is the address, paragraphs and breaks are lines
+PASS F11 the privacy address is the href of the link whose words (or address) say privacy; nothing else gives one
+PASS F12 the old plain text opens in the editor with its lines kept (paragraph with line breaks) and its address as a link
+PASS F13 a stray </div> or </body> does not cut what follows
+PASS F14 a word in angle brackets next to real tags stays text: "<mario@...>" is shown, not swallowed as a tag
+PASS F15 an ampersand is escaped once, in the stored text and in the drawing (never &amp;amp;)
+PASS F16 a link inside a link is ONE link: no empty anchor left behind (words of the inner link stay)
+PASS F16b ... and a link inside bold inside a link too: one link with the bold words, drawn with rel and colour
+PASS F16c ... no anchor without words anywhere in the filtered vectors
+PASS E1 the footer is the visual editor of the site (tinymce) with the footer text inside it, not a plain box
+PASS E2 an old plain footer opens in the editor as paragraph + line breaks (the 4 lines survive), its address as a link
+PASS E3 opening the Options does not change what is stored (only a save does)
+PASS E4 saving from the form stores the filtered text (script and handler gone, the link kept with only its address)
+PASS E5 injection through the form (script) is cleaned on save
+PASS E5 injection through the form (onclick) is cleaned on save
+PASS E5 injection through the form (js) is cleaned on save
+PASS E5 injection through the form (style) is cleaned on save
+PASS E5 injection through the form (iframe) is cleaned on save
+PASS E5 injection through the form (data) is cleaned on save
+PASS D0 a booking from the link works with the rich footer
+PASS D1 customer email: the footer shows "Privacy Policy" as a link, the address is not shown as text
+PASS D2 staff email: same
+PASS D3 the footer keeps its lines (breaks) and has no paragraph inside a paragraph
+PASS D4 the text-only part: no tag, the link is "Privacy Policy (address)", lines kept
+PASS D4b ... and in the staff email too
+PASS D5 no script, handler, javascript: or style from the footer in either email (the colour of the link is the only style)
+PASS D6 the direct page (/prenota): the footer shows the link with words, opens in a new tab, noopener noreferrer, no address shown
+PASS D6b ... lines kept in the page footer too
+PASS D7 the consent box links "privacy policy" to the address of the link in the footer
+PASS D7b ... also in the YOOtheme element (same widget)
+PASS D8 the "Privacy policy address" option still wins over the footer
+PASS D9 a footer with links that do not say privacy gives no address to the consent box (the plain label stays)
+PASS D10 the words may say privacy (any case) instead of the address
+PASS D12 the preview of an email shows the footer link with words (HTML) and "Privacy Policy (address)" in the plain-text version, no tag in it
+PASS D11 a hostile footer written in the database (not through the form) is cleaned again when drawn: email, text part and direct page
+PASS B1 old plain footer in the email: lines separated by <br>, the web address a link in the footer colour (as in 0.35.x)
+PASS B1b ... and has no rel attribute (nothing added to a plain text footer: it is drawn exactly as before)
+PASS B2 old plain footer on the direct page: breaks and the address as a link, exactly the old markup
+PASS B3 old plain footer: the consent box still takes the address from the line that names privacy
+PASS B4 old plain footer in the text part: the lines as written
+PASS K1 the asset version and the manifests say 0.36.0
+RESULT pass=98 fail=0

@@ -1,0 +1,25 @@
+PASS seed b1
+PASS seed b2
+PASS seed b3
+PASS seed b4
+PASS seed b5
+PASS seed b7
+PASS R0 plan snapshot: element override 2h vs default 24h,1h
+PASS R0b plan keeps element subject/body
+PASS R1 booking less than 24h ahead pre-marks the 24h reminder as already behind us (slot chosen from the clock)
+PASS R2 scheduler task ran OK
+PASS R3 exactly the due ones were mailed (b1 and b2 only)
+PASS R4 element override: custom subject and body with {location} {duration} {event}
+PASS R5 default reminder for a phone appointment says we call, no Meet button, no .ics
+PASS R6 reminders_sent updated (b1 [120], b2 both marked)
+PASS R7 cancelled / past / far / old rows untouched
+PASS R8 running again sends nothing (no duplicates)
+PASS R9 scheduler records the task as OK (exit 0)
+PASS R10 two schedulers at once: the reminder is sent once
+PASS R11 four raw engine runs at once: still ONE email (atomic claim)
+PASS R12 SMTP down: send fails, claim is released (reminders_sent back to [])
+PASS R13 SMTP back: the next run sends it
+PASS R14 reschedule to a far date resets the reminders (nothing marked as sent)
+PASS R15 plugin master switch off: no reminder
+
+RESULT pass=23 fail=0

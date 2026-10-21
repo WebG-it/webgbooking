@@ -1,0 +1,14 @@
+PASS P1 paid booking with the visitor zone: redirected to Stripe, slot held, the zone stored
+PASS P2 the Stripe page text names the appointment in the customer's zone, not in the site's
+PASS P3 before the payment: no email, no Google event
+PASS P4 payment completed (webhook): confirmed and paid
+PASS P5 the confirmation email after the payment: the time in New York (27/10/2026 05:00, EDT) and the payment line
+PASS P5b ... subject "Confirmed|Confermato: <event> with|con <host> ... at|alle <time in their zone>"
+PASS P5c ... their answers (the four questions, phone included) as plain text, the change links
+PASS P6 the staff notice: subject in the SITE time, the line with the customer zone and their time, the payment line, the questions
+PASS P7 the Google event is created only after the payment, confirmed and busy, with the answers in the description
+PASS L1 payment after the hold with the slot taken: needs review, money recorded
+PASS L2 the customer is told at once, and the time in the email is THEIR time (06:00, EDT)
+PASS L3 the staff alert goes out and states the SITE time (11:00)
+PASS E1 payment never made, hold lapsed: the cancel page opens, says the payment was not completed and offers to choose again (noindex)
+RESULT pass=13 fail=0

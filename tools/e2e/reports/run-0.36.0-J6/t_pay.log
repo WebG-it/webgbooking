@@ -1,0 +1,58 @@
+PASS P0 keys are stored encrypted (g: prefix), the raw key is nowhere in the options
+PASS P1 free event: confirmed as before (no redirect, no Stripe call)
+PASS P2a widget cfg carries the price text and hold time
+PASS P2 paid booking answers with a redirect to the Stripe page, not a confirmation
+PASS P2b row: awaiting_payment / pending / 2900 EUR / session id / hold ~30 min
+PASS P2c hold is 29-30 minutes from now
+PASS P2d Checkout Session request: amount, currency, receipt_email, customer_email, metadata, success/cancel URLs
+PASS P2e secret key sent only to Stripe as a Bearer header (never in the body/URL)
+PASS P2f NOTHING else ran: no email, no Google event, no webhook/sheet
+PASS P3 the held slot is not offered any more
+PASS P3b a second visitor cannot take the held slot
+PASS P4 forged price in the signed config is rejected
+PASS P4b missing config token is rejected (no free booking of a paid event)
+PASS P4c nothing stored for the forgeries
+PASS P5 webhook with a WRONG secret -> 400, booking untouched
+PASS P5b webhook with a made-up signature -> 400
+PASS P5c webhook without the header -> 400
+PASS P5d correctly signed but 1 hour old (replay) -> 400
+PASS P5e payload altered after signing -> 400
+PASS P5f no signing secret configured -> every webhook rejected (400)
+PASS P5g live-mode event on a test-mode site is acknowledged and ignored
+PASS P6 valid signed checkout.session.completed -> confirmed + paid
+PASS P6b customer confirmation says "Payment received: 29,00 €"
+PASS P6c guest invited, staff notified (with the paid line)
+PASS P6d Google event + Meet for the paid booking created only now (one)
+PASS P6e webhook and Sheet row sent now (paid booking)
+PASS P7 same event delivered again -> duplicate, no second effect
+PASS P7b same payment under a NEW event id -> "already", still one effect
+PASS P7c unknown session -> ignored (200)
+PASS P8 return page with the session still UNPAID: nothing confirmed ("in elaborazione")
+PASS P8b forged "paid" URL parameters change nothing
+PASS P8c return page with another session id -> not found
+PASS P8d paid session at Stripe -> return page confirms the booking and redirects to the thank-you page
+PASS P8e the Stripe GET used the secret key as Bearer
+PASS P8f return page reloaded: no duplicate email
+PASS P8g the late webhook after the return page is a no-op
+PASS P9 an expired hold stops blocking the slot even before the task runs
+PASS P9b scheduled task marks it expired and closes the Stripe session
+PASS P9c expired booking sent nothing
+PASS P9d checkout.session.expired webhook -> expired
+PASS P9e hold lapsed but Stripe says paid -> the task confirms instead of expiring
+PASS P10 late webhook, slot still free -> booking confirmed anyway
+PASS P11a the freed slot was taken by another visitor
+PASS P11 late webhook, slot TAKEN -> needs_review, marked paid (no silent double meeting)
+PASS P11b staff alert sent; the late payer is told by ONE email that the time is no longer available (not a confirmation), and no extra Google event is created
+PASS P11c alert mentions refund by hand and the payment reference
+PASS P11d needs_review does not block the slot of the other booking (single booking at 17:00 active)
+PASS P12 amount at Stripe differs from the price -> needs_review (not confirmed) + staff alert
+PASS P13 customer backs out of Stripe: booking expired, slot free again, Stripe session closed
+PASS P14 Stripe refuses the key: clean error to the visitor, the held slot is released at once
+PASS P15 Stripe not configured: paid event refuses to book, nothing stored
+PASS P16 paid booking cancelled by the customer well ahead (>24h): cancelled, Google event removed
+PASS P16b customer told the amount will be refunded; staff told to refund by hand
+PASS P17 booking in less than 24h: manage page explains it cannot be cancelled online, no cancel button
+PASS P17b forced cancel POST inside 24h is refused
+PASS P17c reschedule inside 24h is refused
+
+RESULT pass=56 fail=0

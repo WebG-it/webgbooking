@@ -1,0 +1,9 @@
+PASS S0 the previous package installs
+PASS S0b the new package installs over it
+PASS S1 the same test elements are rendered by both packages (43)
+PASS S2 the markup around the widget is identical, element by element
+PASS S3 the widget configuration (labels, price text, duration, places, questions, availability token content) is identical
+PASS S4 the sealed form token of every element has the same content (questions, event, price, staff, webhook, Brevo, reminders ...), no new key for hand-made elements (44 tokens)
+PASS S5 no hand-made element carries a saved type in its token
+PASS S6 the update carried the options of the plugin to the Options of the component (the test options are all there)
+RESULT pass=8 fail=0

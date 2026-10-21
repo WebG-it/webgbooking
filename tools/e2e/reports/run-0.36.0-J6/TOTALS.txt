@@ -1,0 +1,35 @@
+WebG Booking 0.36.0 pkg sha256 94ef92d2258d488ac38c4dd0204b92bb30ca49fbe01413b98ee2f42d9744a37b - Joomla 6
+suite pass fail
+t_core 39 0
+t_flow 30 0
+t_rem 23 0
+t_lazy 1 0
+t_hooks 3 0
+t_admin 8 0
+t_lang 2 0
+t_lock 2 0
+t_pay 56 0
+t_pay_admin 22 0
+t_fix 87 0
+t_v331 17 0
+t_google 22 0
+t_v332 16 0
+t_v340 72 0
+t_v341 67 0
+t_v342 27 0
+t_v343 36 0
+t_mail 53 0
+t_v350 135 0
+t_v351 61 0
+t_v352 35 0
+t_v352_admin 52 0
+t_v352_mail 42 0
+t_v352_pay 13 0
+t_v352_tz 46 0
+t_v353 52 0
+t_v360 98 0
+TOTAL regression: 28 suites 1117 pass 0 fail
+t_v350_same RESULT pass=8 fail=0
+t_v360_upgrade RESULT pass=51 fail=0
+t_v360_fresh RESULT pass=9 fail=0
+jed: 0 errors, 7 warnings (reports/jed-0.36.0-J6.md)

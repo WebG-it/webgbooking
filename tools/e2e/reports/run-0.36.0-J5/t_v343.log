@@ -1,0 +1,44 @@
+--- 1. session and hold
+PASS E1 30 minute hold: the Stripe session ends exactly when the hold ends (Stripe's own 30 minute floor gives it a few seconds more, and the hold follows the session)
+PASS E1b the payment page itself says until when the slot is held and what happens after (custom text of the Checkout page)
+PASS E2 45 minute hold: session end = hold end = creation + 45 minutes
+--- 2. old tab
+PASS S1 after the hold the task releases the slot and closes the Stripe session
+PASS S2 the customer opens the old tab the next day and tries to pay: Stripe refuses (the session is expired), nothing is charged, the booking stays released
+PASS S3 the return page of an expired booking says in plain words that the time ran out, the slot was released, no charge, choose again
+PASS S3b ...with a button back to the booking page the customer came from
+PASS S4 the cancel page (browser back from Stripe) of an expired booking says the same, with the same button
+PASS S5 the customer who presses "back" while the hold is still running gets the "you did not complete the payment" page (not the expired one) and the slot is freed
+PASS S6 the released slot can be booked by someone else at once
+--- 3. late payment
+PASS L1 paid at the edge of the hold with the slot taken meanwhile: the booking is NOT confirmed, it needs review, money recorded
+PASS L1b the reason is stored: the time is no longer available
+PASS L2 the CUSTOMER gets an email at once: payment received but the time is no longer available, refund or choose another time, with the link back
+PASS L2b ...and the staff alert still goes out as before
+PASS L3 the return page says so too (not the vague "we are checking"), with the button to choose another time
+PASS L3b the other customer who took the slot keeps it, confirmed
+PASS L4 the same payment announced again (redelivery) does not send the customer a second email
+PASS L5 paid after the hold but the slot is still free: the booking is CONFIRMED, the customer gets the normal confirmation (not the "no longer available" one)
+PASS L5b the return page of the confirmed late payment sends the customer to the thank-you page
+PASS L6 payment first noticed by the return page (slot taken): the page says it, one email only even when the webhook arrives after
+PASS A1 the session completes but the money is not there yet (bank debit): nothing is confirmed
+PASS A2 the money arrives days later and the slot was taken: needs review, the customer is told by email at once
+PASS A3 the money arrives days later and the slot is free: confirmed
+PASS L7 the calendar cannot be read when the late payment arrives: needs review, and the customer is told "we are checking" (not that the time is gone)
+--- 4. payment line
+PASS P1 customer email of a PAID booking whose custom text has no {payment_block}: the "Payment received" line is added under the text
+PASS P1b staff email with a custom text: the line "Paid: amount (Stripe pi_...)" is always there
+PASS P2 a text that already has {payment_block}: the line appears once (the layout shows it, the placeholder adds nothing)
+PASS P3 a text that writes {amount} itself: the amount is in the text and the payment line of the layout is still there, once
+--- 5. cancel page
+PASS C1 the customer cancels a PAID booking outside the lock window: the page itself says "We will refund the amount you paid (29,00 ...)"
+PASS C2 a free booking: cancelled page without any refund line
+PASS C3 inside the 24 hour window the customer gets the message already in place (write to us), and the booking stays
+--- 6. old default text
+PASS O1 legacyc: the old Italian default saved by the builder is treated as empty: the customer gets the current translated default (not the fixed Italian text)
+PASS O2 legacyc: and the staff gets the current default (not "Nuova prenotazione:" in fixed Italian)
+PASS O1 legacyc2: the old Italian default saved by the builder is treated as empty: the customer gets the current translated default (not the fixed Italian text)
+PASS O2 legacyc2: and the staff gets the current default (not "Nuova prenotazione:" in fixed Italian)
+PASS O3 the same text with one word changed is a real customisation: it is kept as written
+
+RESULT pass=36 fail=0

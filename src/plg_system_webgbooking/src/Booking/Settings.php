@@ -71,6 +71,79 @@ final class Settings
         )->execute();
     }
 
+    /** Working days from a stored value (a list, "1,2,3", or nothing at all): nothing ticked or empty = Monday to Friday, as in every release before. */
+    public static function workDays($v): array
+    {
+        $a = \is_array($v) ? $v : explode(',', (string) $v);
+        $a = array_values(array_unique(array_map('intval', array_filter($a, static fn($x) => trim((string) $x) !== ''))));
+
+        return $a ?: [1, 2, 3, 4, 5];
+    }
+
+    /** Empty these keys in the plugin's old copy of the settings (a rotated or cleared secret must not survive there). */
+    public static function clearInPlugin(DatabaseInterface $db, array $keys): void
+    {
+        $where = static fn($q) => $q->where($db->quoteName('type') . ' = ' . $db->quote('plugin'))->where($db->quoteName('element') . ' = ' . $db->quote('webgbooking'))->where($db->quoteName('folder') . ' = ' . $db->quote('system'));
+        $raw   = (string) $db->setQuery($where($db->getQuery(true)->select($db->quoteName('params'))->from($db->quoteName('#__extensions'))))->loadResult();
+        $p     = json_decode($raw, true);
+        if (!\is_array($p)) {
+            return;
+        }
+        $changed = false;
+        foreach ($keys as $k) {
+            if (isset($p[$k]) && $p[$k] !== '') {
+                $p[$k]   = '';
+                $changed = true;
+            }
+        }
+        if ($changed) {
+            $db->setQuery($where($db->getQuery(true)->update($db->quoteName('#__extensions'))->set($db->quoteName('params') . ' = ' . $db->quote((string) json_encode($p)))))->execute();
+        }
+    }
+
+    /** Copy into the component the keys the plugin still holds and the component lacks (never overwrites, never deletes). */
+    public static function heal(DatabaseInterface $db, Registry $pluginParams): void
+    {
+        $pp = $pluginParams->toArray();
+        if (!$pp) {
+            return;
+        }
+        // a clear secret in the plugin's old copy is encrypted there before anything is copied
+        [$prot, $n] = SecretBox::protect($pp);
+        if ($n > 0) {
+            $only = array_intersect_key($prot, array_flip(SecretBox::KEYS));
+            $row  = (string) $db->setQuery($db->getQuery(true)->select($db->quoteName('params'))->from($db->quoteName('#__extensions'))->where($db->quoteName('type') . ' = ' . $db->quote('plugin'))->where($db->quoteName('element') . ' = ' . $db->quote('webgbooking'))->where($db->quoteName('folder') . ' = ' . $db->quote('system')))->loadResult();
+            $rp   = json_decode($row, true);
+            if (\is_array($rp)) {
+                $db->setQuery($db->getQuery(true)->update($db->quoteName('#__extensions'))->set($db->quoteName('params') . ' = ' . $db->quote((string) json_encode($only + $rp)))->where($db->quoteName('type') . ' = ' . $db->quote('plugin'))->where($db->quoteName('element') . ' = ' . $db->quote('webgbooking'))->where($db->quoteName('folder') . ' = ' . $db->quote('system')))->execute();
+            }
+            $pp = $prot;
+        }
+        $comp = self::componentRow($db);
+        $miss = array_diff_key($pp, $comp);
+        if ($miss) {
+            self::setComponent($db, $miss + $comp);
+            // the Options screen reads the component through Joomla's per-request copy, loaded before this plugin: bring that copy up to date too
+            try {
+                ComponentHelper::getComponent(self::COMPONENT)->params = new Registry($miss + $comp);
+            } catch (\Throwable $e) {
+            }
+        }
+    }
+
+    /** Names and types of the fields of the Options form. */
+    public static function formTypes(): array
+    {
+        $file = JPATH_ADMINISTRATOR . '/components/' . self::COMPONENT . '/config.xml';
+        $out  = [];
+        $x    = is_file($file) ? @simplexml_load_file($file) : false;
+        foreach ($x ? ($x->xpath('//field') ?: []) : [] as $f) {
+            $out[(string) $f['name']] = (string) $f['type'];
+        }
+
+        return $out;
+    }
+
     /** Names of the fields of the Options form (config.xml of the component), without the notes. */
     public static function formFields(): array
     {
