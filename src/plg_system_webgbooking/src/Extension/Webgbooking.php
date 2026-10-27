@@ -43,7 +43,7 @@ use WebG\Plugin\System\Webgbooking\Mail\EmailTemplates;
 final class Webgbooking extends CMSPlugin implements SubscriberInterface
 {
     /** Cache-buster for the bundled front-end assets (wgb.css/js, UIkit). Bump when those change. */
-    public const ASSET_VER = '0.36.1';
+    public const ASSET_VER = '0.36.2';
 
     protected $autoloadLanguage = true;
 
@@ -3336,7 +3336,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
         }
 
         $row = null;
-        if ($mode !== 'delete') {
+        if ($mode !== 'delete' && $mode !== 'header') {
             // always the booking as it is NOW, never the copy a slow request carried around
             $row = $db->setQuery($db->getQuery(true)->select('*')->from($db->quoteName('#__webgbooking_bookings'))->where($db->quoteName('id') . ' = ' . (int) $id))->loadObject();
             if (!$row) {
@@ -3356,6 +3356,10 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
         $tab  = trim((string) ($g->sheet_tab ?? ''));
         $base = 'https://sheets.googleapis.com/v4/spreadsheets/' . rawurlencode($sheetId);
         $rng  = static fn(string $a1): string => rawurlencode(($tab !== '' ? "'" . str_replace("'", "''", $tab) . "'!" : '') . $a1);
+
+        if ($mode === 'header') {
+            return $this->sheetHeaderEnsure($base, $rng, $token, $tab);
+        }
 
         // where is this booking? (column O, now). Raw values: a column the admin formatted (thousands separator ...) still compares as the number it is
         [$c, $d, $raw] = $this->sheetReq('GET', $base . '/values/' . $rng('O:O') . '?valueRenderOption=UNFORMATTED_VALUE', $token);
@@ -3432,6 +3436,123 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
         [$c, , $raw] = $this->sheetReq('POST', $base . '/values/' . $rng('A1') . ':append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS', $token, ['values' => $rows]);
 
         return ($c >= 200 && $c < 300) ? $this->sheetOk() : $this->sheetFail($c, $raw);
+    }
+
+    /** What the last header check found (read by adminSheetHeader): written | inserted | present | foreign | '' */
+    private string $sheetHdr = '';
+
+    /**
+     * The header, when the Sheet is chosen in the component (0.36.2). Looks at row 1 of the tab:
+     *  - empty                          -> write the header there (written)
+     *  - already OUR header (A1 is one of our labels, any language) -> nothing (present)
+     *  - a booking row (A1 a date-time, or an id in O1 and no label) -> ONE row is inserted on top and the header written in it; the data
+     *    below is not touched (inserted). Rows are found by id in column O, so the shift is harmless
+     *  - anything else (a header written by the user)               -> nothing (foreign)
+     * Saving twice never adds a second row: after the first time A1 is our label.
+     */
+    private function sheetHeaderEnsure(string $base, callable $rng, string $token, string $tab): string
+    {
+        $this->sheetHdr = '';
+        [$c, $d, $raw] = $this->sheetReq('GET', $base . '/values/' . $rng('A1:O1') . '?valueRenderOption=UNFORMATTED_VALUE', $token);
+        if ($c < 200 || $c >= 300) {
+            return $this->sheetFail($c, $raw);
+        }
+        $cells = array_values((array) (((array) ($d['values'] ?? []))[0] ?? []));
+        $a1    = $cells[0] ?? '';
+        $o1    = $cells[14] ?? '';
+        $any   = false;
+        foreach ($cells as $x) {
+            if (trim((string) $x) !== '') {
+                $any = true;
+            }
+        }
+        $hdr = $this->sheetHeader();
+        $put = function () use ($base, $rng, $token, $hdr): string {
+            [$c2, , $raw2] = $this->sheetReq('PUT', $base . '/values/' . $rng('A1:O1') . '?valueInputOption=USER_ENTERED', $token, ['majorDimension' => 'ROWS', 'values' => [$hdr]]);
+
+            return ($c2 >= 200 && $c2 < 300) ? '' : $this->sheetFail($c2, $raw2);
+        };
+
+        if (!$any) {
+            if ($put() !== '') {
+                return 'retry';
+            }
+            $this->sheetHdr = 'written';
+
+            return $this->sheetOk();
+        }
+
+        // our first label in every language we ship (the sheet may have been written while the site spoke the other one)
+        $labels = [Text::_('PLG_SYSTEM_WEBGBOOKING_SHEET_H_CREATED')];
+        foreach (['it-IT', 'en-GB'] as $l) {
+            $f = JPATH_PLUGINS . '/system/webgbooking/language/' . $l . '/plg_system_webgbooking.ini';
+            $v = is_file($f) ? (@parse_ini_file($f, false, INI_SCANNER_RAW)['PLG_SYSTEM_WEBGBOOKING_SHEET_H_CREATED'] ?? '') : '';
+            if ($v !== '') {
+                $labels[] = trim((string) $v, '"');
+            }
+        }
+        if (\is_string($a1) && \in_array(trim($a1), $labels, true)) {
+            $this->sheetHdr = 'present';
+
+            return $this->sheetOk();
+        }
+
+        $isDate = (\is_int($a1) || \is_float($a1) || (\is_string($a1) && is_numeric($a1))) ? ((float) $a1 >= 36526) : (\is_string($a1) && preg_match('/^\d{1,4}[-\/.]\d{1,2}[-\/.]\d{1,4}/', trim($a1)) === 1);
+        $isId   = (\is_int($o1) || \is_float($o1)) ? ((float) (int) $o1 === (float) $o1 && (float) $o1 > 0) : (\is_string($o1) && ctype_digit(trim($o1)) && trim($o1) !== '');
+        if (!$isDate && !($isId && trim((string) $a1) !== '' && $a1 !== null)) {
+            $this->sheetHdr = 'foreign';
+
+            return $this->sheetOk();
+        }
+
+        // a booking is in row 1: one row on top, then the header in it
+        [$c, $d, $raw] = $this->sheetReq('GET', $base . '?fields=' . rawurlencode('sheets.properties(sheetId,title,index)'), $token);
+        if ($c < 200 || $c >= 300) {
+            return $this->sheetFail($c, $raw);
+        }
+        $gid = null;
+        foreach ((array) ($d['sheets'] ?? []) as $s) {
+            $p = (array) ($s['properties'] ?? []);
+            if (($tab === '' && (int) ($p['index'] ?? 0) === 0) || ($tab !== '' && (string) ($p['title'] ?? '') === $tab)) {
+                $gid = (int) ($p['sheetId'] ?? 0);
+                break;
+            }
+        }
+        if ($gid === null) {
+            return $this->sheetFail(400, '');
+        }
+        [$c, , $raw] = $this->sheetReq('POST', $base . ':batchUpdate', $token, ['requests' => [['insertDimension' => ['range' => ['sheetId' => $gid, 'dimension' => 'ROWS', 'startIndex' => 0, 'endIndex' => 1], 'inheritFromBefore' => false]]]]);
+        if ($c < 200 || $c >= 300) {
+            return $this->sheetFail($c, $raw);
+        }
+        if ($put() !== '') {
+            return 'retry';        // the empty row on top is there: saving again finds it empty and writes the header in it
+        }
+        $this->sheetHdr = 'inserted';
+
+        return $this->sheetOk();
+    }
+
+    /**
+     * Called when the Sheet is saved in the component: make sure the tab has the header. Never throws.
+     * Returns written | inserted | present | foreign | nosheet | error. A Google error is recorded as a kind (Google page), never as text.
+     */
+    public function adminSheetHeader(): string
+    {
+        try {
+            $this->sheetHdr = '';
+            $res = $this->sheetRun('header', 0);
+            if ($res === 'retry') {
+                return 'error';
+            }
+            if ($res === 'skip') {
+                return 'nosheet';
+            }
+
+            return $this->sheetHdr !== '' ? $this->sheetHdr : 'error';
+        } catch (\Throwable $e) {
+            return 'error';
+        }
     }
 
     /** Append the booking as a row to a configured Google Sheet. True when written or when no Sheet is configured. */

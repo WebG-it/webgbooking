@@ -11,6 +11,10 @@ from wgbtest import *
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, '..', '..'))
 RES_ = RES
+import glob
+_z = sorted(glob.glob(os.path.join(ROOT, 'dist', 'pkg_webgbooking-*.zip')), key=lambda q: [int(x) for x in re.findall(r'\d+', os.path.basename(q))])
+NEWZ = os.path.basename(_z[-1])                          # the newest package in dist/ (0.36.1 when this test was written)
+NEWV = NEWZ[len('pkg_webgbooking-'):-4]
 
 
 def install(zipname):
@@ -51,10 +55,10 @@ old = grid()
 check('U2 the 0.36.0 code wrote its two rows the old way: no header, 14 cells, no id', len(old) == 2 and all(len(r) == 14 for r in old) and old[0][3] == 'Vecchia1', old)
 
 before = snap()
-out = install('pkg_webgbooking-0.36.1.zip')
-check('U3 0.36.1 installs over it', 'successfully' in out, out)
+out = install(NEWZ)
+check('U3 the newest package (%s) installs over it' % NEWV, 'successfully' in out, out)
 sh(['docker', 'cp', os.path.join(HERE, 'mock') + '/.', J + ':/tmp/mock/'])
-check('U4 the installed version is 0.36.1', sql("SELECT JSON_VALUE(manifest_cache,'$.version') FROM joom_extensions WHERE element='pkg_webgbooking'") == '0.36.1', '')
+check('U4 the installed version is ' + NEWV, sql("SELECT JSON_VALUE(manifest_cache,'$.version') FROM joom_extensions WHERE element='pkg_webgbooking'") == NEWV, '')
 after = snap()
 for k in ('comp', 'plug', 'google', 'bookings', 'cols'):
     check('U5 %s identical before and after the update (nothing lost, no schema change)' % k, before[k] == after[k], (before[k][:120], after[k][:120]))

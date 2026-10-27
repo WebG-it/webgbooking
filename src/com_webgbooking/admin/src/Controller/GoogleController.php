@@ -84,6 +84,13 @@ class GoogleController extends BaseController
         try {
             $this->getModel('Google')->saveSheet($sheetId, $tab);
             $this->setMessage(Text::_($sheetId === '' ? 'COM_WEBGBOOKING_GOOGLE_SHEET_OFF' : 'COM_WEBGBOOKING_GOOGLE_SHEET_SAVED'));
+            if ($sheetId !== '') {
+                // the saved sheet is kept whatever Google says; the header is a second, separate message
+                $h = $this->getModel('Google')->ensureSheetHeader();
+                if (\in_array($h, ['written', 'inserted', 'present', 'foreign', 'error'], true)) {
+                    Factory::getApplication()->enqueueMessage(Text::_('COM_WEBGBOOKING_GOOGLE_SHEET_HDR_' . strtoupper($h)), \in_array($h, ['foreign', 'error'], true) ? 'warning' : 'message');
+                }
+            }
         } catch (\Throwable $e) {
             $this->setMessage(Text::_('COM_WEBGBOOKING_GOOGLE_SHEET_SAVEFAIL'), 'error');
         }

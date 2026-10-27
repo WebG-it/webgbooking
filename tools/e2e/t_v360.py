@@ -528,6 +528,6 @@ check('B4 old plain footer in the text part: the lines as written', cm3 is not N
 
 # ============================================================ 9. the build
 js = open(os.path.join(SRC, 'plg_system_webgbooking/src/Extension/Webgbooking.php'), encoding='utf-8').read()
-check('K1 the asset version and the manifests say 0.36.1', "const ASSET_VER = '0.36.1'" in js and all('<version>0.36.1</version>' in open(os.path.join(SRC, p), encoding='utf-8').read() for p in ('pkg_webgbooking/pkg_webgbooking.xml', 'com_webgbooking/com_webgbooking.xml', 'plg_system_webgbooking/webgbooking.xml', 'plg_task_webgbookingreminders/webgbookingreminders.xml')), '')
+check('K1 the asset version and the manifests say 0.36.2', "const ASSET_VER = '0.36.2'" in js and all('<version>0.36.2</version>' in open(os.path.join(SRC, p), encoding='utf-8').read() for p in ('pkg_webgbooking/pkg_webgbooking.xml', 'com_webgbooking/com_webgbooking.xml', 'plg_system_webgbooking/webgbooking.xml', 'plg_task_webgbookingreminders/webgbookingreminders.xml')), '')
 reset_env(render=True)
 print('RESULT pass=%d fail=%d' % (RES['pass'], RES['fail']))

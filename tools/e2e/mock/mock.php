@@ -114,6 +114,13 @@ if ($host === 'sheets.googleapis.com') {
     if ($method === 'POST' && $rel === ':batchUpdate') {
         $tabs = array_keys($st['tabs']);
         foreach (($json['requests'] ?? []) as $rq) {
+            $ins = $rq['insertDimension']['range'] ?? null;
+            if ($ins) {
+                $t2 = $tabs[(int) $ins['sheetId'] - 100] ?? null;
+                if ($t2 === null) { http_response_code(400); echo json_encode(['error' => ['code' => 400, 'message' => 'No grid with id']]); exit; }
+                array_splice($st['tabs'][$t2], (int) $ins['startIndex'], 0, array_fill(0, (int) $ins['endIndex'] - (int) $ins['startIndex'], []));
+                continue;
+            }
             $d = $rq['deleteDimension']['range'] ?? null;
             if (!$d) { continue; }
             $tab = $tabs[(int) $d['sheetId'] - 100] ?? null;

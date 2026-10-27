@@ -205,6 +205,22 @@ class GoogleModel extends BaseDatabaseModel
         $db->updateObject('#__webgbooking_google', $obj, 'id');
     }
 
+    /** After "Save sheet": the booking engine puts the header in row 1 when the tab needs it. written | inserted | present | foreign | nosheet | error */
+    public function ensureSheetHeader(): string
+    {
+        try {
+            if (\Joomla\CMS\Plugin\PluginHelper::isEnabled('system', 'webgbooking')) {
+                $engine = \Joomla\CMS\Factory::getApplication()->bootPlugin('webgbooking', 'system');
+                if (method_exists($engine, 'adminSheetHeader')) {
+                    return (string) $engine->adminSheetHeader();
+                }
+            }
+        } catch (\Throwable $e) {
+        }
+
+        return 'error';
+    }
+
     /** Tab (worksheet) titles of a spreadsheet. @return array<int,string> */
     private function listTabs(string $token, string $sheetId, string &$err = ''): array
     {

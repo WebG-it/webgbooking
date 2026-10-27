@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.36.2 (pacchetto, componente e plugin): l'intestazione del Foglio Google si scrive quando indichi il foglio
+
+Richiesta di Marco: l'intestazione non deve aspettare la prima prenotazione. Prove in `tools/e2e/t_v362.py`.
+
+1. **Pannello Google, "Salva foglio"**: dopo aver salvato il foglio (e la scheda) si guarda la prima riga della scheda.
+   - **Scheda vuota**: si scrive l'intestazione nella riga 1.
+   - **L'intestazione c'è già** (la nostra, in italiano o in inglese): non si fa niente.
+   - **Nella riga 1 c'è una prenotazione** (una data e ora in A1, l'id in colonna O): si inserisce **una riga in cima** e ci si scrive l'intestazione. Le prenotazioni sotto non si toccano e restano nello stesso ordine; le righe si ritrovano per id nella colonna O, quindi lo scorrimento di una riga non cambia niente.
+   - **Nella riga 1 c'è altro** (un'intestazione scritta da te): non si tocca niente e il pannello dice che l'intestazione non è stata scritta e perché. Le prenotazioni si aggiungono comunque, con l'id nella colonna O.
+   - Il pannello dice sempre cosa è successo (intestazione scritta / aggiunta una riga in cima / già presente / non scritta). Salvare due volte non aggiunge due righe.
+   - **Se Google non risponde o non permette di scrivere**, il foglio si salva lo stesso, il pannello lo dice in una riga (senza il testo di Google) e basta salvare di nuovo.
+2. **Resta anche la scrittura all'arrivo della prima prenotazione su un foglio vuoto** (se l'intestazione non c'era ancora).
+3. **Permessi Google invariati**: solo `spreadsheets` (l'inserimento della riga usa la stessa API). Nessun permesso nuovo, nessuna modifica di schema o di Opzioni.
+4. **Cosa cambia per chi usa già il prodotto: niente si perde.** Le righe già nel foglio non vengono modificate (si aggiunge al massimo una riga vuota in cima, poi riempita con l'intestazione). Su un foglio già in uso l'intestazione compare solo quando salvi di nuovo il foglio dal pannello Google, non da sola.
+
+Dopo l'aggiornamento non serve svuotare nessuna cache.
+
 ## 0.36.1 (pacchetto, componente e plugin): il Foglio Google segue la prenotazione, la pagina diretta è centrata
 
 Due richieste di Marco, stesso rilascio (urgente per la verifica Google dell'app: i dati personali devono poter sparire anche dal foglio). Prove in `tools/e2e/t_v361.py` (il foglio), `t_v361_upgrade.py` (l'aggiornamento dalla 0.36.0) e `t_v361_page.py` (la pagina diretta).
