@@ -148,6 +148,7 @@ final class DirectPage
             . '<script src="' . self::e($asset . '/uikit/js/uikit.min.js?' . $ver) . '"></script>'
             . '<script src="' . self::e($asset . '/uikit/js/uikit-icons.min.js?' . $ver) . '"></script>'
             . '<script src="' . self::e($asset . '/wgb.js?' . $ver) . '" defer></script>'
+            . '<script src="' . self::e($asset . '/direct.js?' . $ver) . '" defer></script>'
             . '</head><body class="bk-body">'
             . '<div class="bk-page"><div class="bk-card' . ($rule ? ' bk-rule' : ' bk-band') . '">'
             . '<header class="bk-head' . ($center ? ' bk-center' : '') . '">' . $mark . '</header>'

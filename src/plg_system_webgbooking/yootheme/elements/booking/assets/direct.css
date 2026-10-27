@@ -1,8 +1,9 @@
 /* Direct booking pages (/prenota/<slug>). Same look as the WebG Booking emails: one card on a light page, a coloured line on top
    (or a rule under the header), the logo or the business name, footer text, dark colours in dark mode. The brand colours arrive as
    CSS variables (--bk-*) written by the plugin; everything else is here. Mobile first: one column up to 820 px. */
-.bk-body{margin:0;background:#f2f4f7;color:var(--bk-text,#1f2433);font-family:Roboto,"Segoe UI",Helvetica,Arial,sans-serif;font-size:16px;line-height:1.55;-webkit-text-size-adjust:100%}
-.bk-page{box-sizing:border-box;max-width:960px;margin:0 auto;padding:20px 16px 32px}
+.bk-body{margin:0;background:#f2f4f7;color:var(--bk-text,#1f2433);font-family:Roboto,"Segoe UI",Helvetica,Arial,sans-serif;font-size:16px;line-height:1.55;-webkit-text-size-adjust:100%;display:flex;min-height:100vh;min-height:100dvh;overflow-x:hidden}
+/* centred in the window both ways; the auto margin (not align-items:center) means a tall page starts at the top and scrolls, never cut off */
+.bk-page{box-sizing:border-box;width:100%;max-width:960px;margin:auto;padding:24px 16px}
 .bk-page *,.bk-page *::before,.bk-page *::after{box-sizing:border-box}
 .bk-card{background:#fff;border-radius:10px;overflow:hidden}
 .bk-card.bk-band{border-top:5px solid var(--bk-line,#2b59c3)}
@@ -55,7 +56,7 @@
   .bk-evs{grid-template-columns:1fr 1fr}
 }
 @media (max-width:420px){
-  .bk-page{padding:12px 10px 24px}
+  .bk-page{padding:16px 10px}
   .bk-head{padding:18px 16px 10px}
   .bk-rule .bk-head{margin:0 16px}
   .bk-content{padding:6px 16px 22px}

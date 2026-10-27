@@ -35,7 +35,93 @@ if ($host === 'oauth2.googleapis.com') {
     exit;
 }
 if ($host === 'sheets.googleapis.com') {
-    if ($method === 'GET') { echo json_encode(['sheets' => [['properties' => ['title' => 'Prenotazioni']], ['properties' => ['title' => 'Archivio']]]]); exit; }
+    // A small stateful fake of Google Sheets (0.36.1): tabs with a grid of cells in /tmp/gmock/sheet.json.
+    // sheet_fail: disabled (403 SERVICE_DISABLED) | denied (403) | down (503) | down:N (503 for the next N calls, then fine)
+    $sf = "$dir/sheet_fail";
+    $fail = file_exists($sf) ? trim(file_get_contents($sf)) : '';
+    if ($fail !== '') {
+        if (strpos($fail, 'down:') === 0) {
+            $left = (int) substr($fail, 5);
+            if ($left <= 1) { @unlink($sf); } else { file_put_contents($sf, 'down:' . ($left - 1)); }
+            http_response_code(503); echo json_encode(['error' => ['code' => 503, 'status' => 'UNAVAILABLE', 'message' => 'The service is currently unavailable.']]); exit;
+        }
+        if ($fail === 'down') { http_response_code(503); echo json_encode(['error' => ['code' => 503, 'status' => 'UNAVAILABLE']]); exit; }
+        if ($fail === 'denied') { http_response_code(403); echo json_encode(['error' => ['code' => 403, 'status' => 'PERMISSION_DENIED', 'message' => 'The caller does not have permission']]); exit; }
+        http_response_code(403);
+        echo json_encode(['error' => ['code' => 403, 'message' => 'Google Sheets API has not been used in project 100455972354 before or it is disabled. Enable it by visiting https://console.developers.google.com/', 'status' => 'PERMISSION_DENIED',
+            'details' => [['@type' => 'type.googleapis.com/google.rpc.ErrorInfo', 'reason' => 'SERVICE_DISABLED', 'domain' => 'googleapis.com']]]]);
+        exit;
+    }
+    $stf  = "$dir/sheet.json";
+    $st   = file_exists($stf) ? json_decode(file_get_contents($stf), true) : null;
+    if (!is_array($st) || !isset($st['tabs'])) { $st = ['tabs' => ['Prenotazioni' => [], 'Archivio' => []]]; }
+    $save = function () use (&$st, $stf) { file_put_contents($stf, json_encode($st)); };
+    $colNum = function ($l) { $n = 0; foreach (str_split(strtoupper($l)) as $ch) { $n = $n * 26 + ord($ch) - 64; } return $n; };
+    // split "'Tab'!A1:B2" into tab + cells
+    $parseRange = function ($r) use (&$st, $colNum) {
+        $tabs = array_keys($st['tabs']);
+        $tab = $tabs[0];
+        if (preg_match("/^'((?:[^']|'')*)'!(.*)$/", $r, $m)) { $tab = str_replace("''", "'", $m[1]); $r = $m[2]; }
+        $c1 = 1; $c2 = 1000; $r1 = 1; $r2 = 1000000;
+        if (preg_match('/^([A-Z]+)(\d*)(?::([A-Z]+)(\d*))?$/i', $r, $m)) {
+            $c1 = $colNum($m[1]); $c2 = isset($m[3]) && $m[3] !== '' ? $colNum($m[3]) : $c1;
+            $r1 = $m[2] !== '' ? (int) $m[2] : 1;
+            $r2 = isset($m[4]) && $m[4] !== '' ? (int) $m[4] : ($m[2] !== '' && !isset($m[3]) ? $r1 : 1000000);
+        }
+        return [$tab, $c1, $c2, $r1, $r2];
+    };
+    $rel = preg_replace('#^/v4/spreadsheets/[^/:]+#', '', $path);
+    if ($method === 'GET' && $rel === '') {
+        $out = []; $i = 0;
+        foreach (array_keys($st['tabs']) as $t) { $out[] = ['properties' => ['sheetId' => 100 + $i, 'title' => (string) $t, 'index' => $i]]; $i++; }
+        echo json_encode(['sheets' => $out]); exit;
+    }
+    if ($method === 'GET' && strpos($rel, '/values/') === 0) {
+        [$tab, $c1, $c2, $r1, $r2] = $parseRange(rawurldecode(substr($rel, 8)));
+        if (!isset($st['tabs'][$tab])) { http_response_code(400); echo json_encode(['error' => ['code' => 400, 'message' => 'Unable to parse range', 'status' => 'INVALID_ARGUMENT']]); exit; }
+        $grid = $st['tabs'][$tab]; $rows = [];
+        $last = 0;
+        for ($r = $r1; $r <= min($r2, count($grid)); $r++) {
+            $line = [];
+            for ($c = $c1; $c <= $c2; $c++) { $line[] = (string) ($grid[$r - 1][$c - 1] ?? ''); }
+            while ($line && $line[count($line) - 1] === '') { array_pop($line); }
+            $rows[] = $line;
+            if ($line) { $last = count($rows); }
+        }
+        $rows = array_slice($rows, 0, $last);
+        echo json_encode($rows ? ['range' => 'x', 'majorDimension' => 'ROWS', 'values' => $rows] : ['range' => 'x', 'majorDimension' => 'ROWS']); exit;
+    }
+    if ($method === 'PUT' && strpos($rel, '/values/') === 0) {
+        [$tab, $c1, $c2, $r1] = $parseRange(rawurldecode(substr($rel, 8)));
+        if (!isset($st['tabs'][$tab])) { http_response_code(400); echo json_encode(['error' => ['code' => 400, 'status' => 'INVALID_ARGUMENT']]); exit; }
+        foreach (($json['values'] ?? []) as $i => $line) {
+            $r = $r1 - 1 + $i;
+            while (count($st['tabs'][$tab]) <= $r) { $st['tabs'][$tab][] = []; }
+            foreach ($line as $j => $v) { $st['tabs'][$tab][$r][$c1 - 1 + $j] = (string) $v; }
+            ksort($st['tabs'][$tab][$r]);
+        }
+        $save(); echo json_encode(['updatedRows' => 1]); exit;
+    }
+    if ($method === 'POST' && strpos($rel, '/values/') === 0 && substr($rel, -7) === ':append') {
+        [$tab] = $parseRange(rawurldecode(substr($rel, 8, -7)));
+        if (!isset($st['tabs'][$tab])) { http_response_code(400); echo json_encode(['error' => ['code' => 400, 'status' => 'INVALID_ARGUMENT']]); exit; }
+        $g = &$st['tabs'][$tab];
+        while ($g && !array_filter($g[count($g) - 1], function ($x) { return $x !== ''; })) { array_pop($g); }
+        foreach (($json['values'] ?? []) as $line) { $g[] = array_map('strval', array_values($line)); }
+        unset($g);
+        $save(); echo json_encode(['updates' => ['updatedRows' => count($json['values'] ?? [])]]); exit;
+    }
+    if ($method === 'POST' && $rel === ':batchUpdate') {
+        $tabs = array_keys($st['tabs']);
+        foreach (($json['requests'] ?? []) as $rq) {
+            $d = $rq['deleteDimension']['range'] ?? null;
+            if (!$d) { continue; }
+            $tab = $tabs[(int) $d['sheetId'] - 100] ?? null;
+            if ($tab === null) { http_response_code(400); echo json_encode(['error' => ['code' => 400, 'message' => 'No grid with id']]); exit; }
+            array_splice($st['tabs'][$tab], (int) $d['startIndex'], (int) $d['endIndex'] - (int) $d['startIndex']);
+        }
+        $save(); echo json_encode(['spreadsheetId' => 'x', 'replies' => [new stdClass()]]); exit;
+    }
     echo json_encode(['updates' => ['updatedRows' => 1]]);
     exit;
 }

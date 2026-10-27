@@ -152,6 +152,12 @@ class BookingController extends BaseController
                 if (($model->deleteReport['google_ok'] ?? 0) > 0) {
                     $app->enqueueMessage(Text::plural('COM_WEBGBOOKING_CANCEL_GOOGLE_DELETED', (int) $model->deleteReport['google_ok']), 'message');
                 }
+                if (($model->deleteReport['sheet'] ?? '') === 'queued') {
+                    $app->enqueueMessage(Text::_('COM_WEBGBOOKING_DELETE_SHEET_QUEUED'), 'warning');
+                }
+                if (!($model->deleteReport['engine'] ?? true)) {
+                    $app->enqueueMessage(Text::_('COM_WEBGBOOKING_DELETE_SHEET_MANUAL'), 'warning');
+                }
                 if (($model->deleteReport['google_fail'] ?? 0) > 0) {
                     $app->enqueueMessage(Text::plural('COM_WEBGBOOKING_CANCEL_GOOGLE_FAILED', (int) $model->deleteReport['google_fail']), 'warning');
                 }

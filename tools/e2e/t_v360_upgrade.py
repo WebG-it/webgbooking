@@ -21,6 +21,7 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), 
 args = [a for a in sys.argv[3:] if not a.startswith('--')]
 zips = sorted(glob.glob(os.path.join(ROOT, 'dist', 'pkg_webgbooking-*.zip')), key=lambda p: [int(x) for x in re.findall(r'\d+', os.path.basename(p))])
 NEW = zips[-1]
+NEWV = os.path.basename(NEW).split('-')[-1][:-4]      # the version of the newest package in dist/
 OLDS = args or [os.path.join(ROOT, 'dist', 'pkg_webgbooking-0.35.3.zip'), os.path.join(ROOT, 'dist', 'pkg_webgbooking-0.35.2.zip')]
 COMP = "element='com_webgbooking' AND type='component'"
 PLUG = "element='webgbooking' AND folder='system' AND type='plugin'"
@@ -133,6 +134,11 @@ def run_scenarios():
     out['emails'] = sorted(ms)
     calls = []
     for l in gm_log():
+        if 'sheets.googleapis' in l['host']:
+            # 0.36.1 reads the sheet before it writes (and may add a header row and the id column): only the APPEND itself is compared, on the same sheet and tab
+            if l['method'] == 'POST' and l['path'].endswith(':append'):
+                calls.append(norm('%s APPEND %s' % (l['host'], l['path'])))
+            continue
         hdr = sorted(k for k in (l.get('headers') or {}) if k in ('authorization', 'api-key', 'x-api-key', 'content-type'))
         calls.append(norm('%s %s %s?%s %s %s' % (l['host'], l['method'], l['path'], l['query'], hdr, json.dumps(l['body'], sort_keys=True) if not isinstance(l['body'], str) else l['body'])))
     out['calls'] = sorted(c for c in calls if 'oauth2.googleapis' not in c)
@@ -185,7 +191,7 @@ for old in OLDS:
     check('%s before: the four bookings work (free + Google, Brevo, webhook with profile, paid + Stripe + payment)' % ov, A['redirect_ok'] and len(A['emails']) >= 6 and any('api.brevo.com' in c for c in A['calls']) and any('/hook' in c for c in A['calls']) and any('api.stripe.com' in c for c in A['calls']) and any('calendar/v3' in c for c in A['calls']), (A['redirect_ok'], len(A['emails']), len(A['calls'])))
 
     # ---------------------------------------------------------------- the update
-    check('%s the 0.36.0 package installs over it' % ov, install(NEW) and version() == '0.36.0', version())
+    check('%s the 0.36.0 package installs over it' % ov, install(NEW) and version() == NEWV, version())
     comp, plug = params(COMP), params(PLUG)
     miss = [k for k in before_plug if k not in comp]
     changed = {k: (before_plug[k], comp[k]) for k in before_plug if k in comp and comp[k] != before_plug[k] and k not in ('email_subject', 'email_body', 'whp2_headers')}
@@ -235,7 +241,7 @@ for old in OLDS:
     # ---------------------------------------------------------------- again, and a changed value is not undone
     snap = params(COMP)
     install(NEW)
-    check('%s running the same update again changes nothing' % ov, params(COMP) == snap and version() == '0.36.0', diff(snap, params(COMP), 'again'))
+    check('%s running the same update again changes nothing' % ov, params(COMP) == snap and version() == NEWV, diff(snap, params(COMP), 'again'))
     sql("UPDATE joom_extensions SET params=JSON_SET(params,'$.notify_email','changed@wgbtest.invalid','$.window_days','60') WHERE %s" % COMP)
     sql("UPDATE joom_extensions SET params=JSON_SET(params,'$.notify_email','stale@wgbtest.invalid') WHERE %s" % PLUG)
     install(NEW)

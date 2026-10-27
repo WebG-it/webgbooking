@@ -88,8 +88,12 @@ $e = static fn($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
                 <?php endif; ?>
 
                 <?php // Optional: a copy of every booking in a Google Sheet. Closed by default; nothing is written unless filled in. ?>
-                <details class="mt-4 border rounded p-3">
+                <details class="mt-4 border rounded p-3"<?php echo !empty($s->sheetErr) ? ' open' : ''; ?>>
                     <summary class="fw-semibold"><?php echo Text::_('COM_WEBGBOOKING_GOOGLE_SHEET_HEADING'); ?></summary>
+                    <?php if (!empty($s->sheetErr)) : ?>
+                        <?php // One clear line per kind of problem; what Google actually said is never shown. ?>
+                        <div class="alert alert-warning mt-3"><?php echo Text::_('COM_WEBGBOOKING_GOOGLE_SHEET_ERR_' . strtoupper($s->sheetErr)); ?></div>
+                    <?php endif; ?>
                     <p class="text-muted mt-3"><?php echo Text::_('COM_WEBGBOOKING_GOOGLE_SHEET_INTRO'); ?></p>
 
                     <form action="<?php echo Route::_('index.php?option=com_webgbooking&task=google.savesheet'); ?>" method="post">

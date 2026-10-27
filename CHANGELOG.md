@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.36.1 (pacchetto, componente e plugin): il Foglio Google segue la prenotazione, la pagina diretta è centrata
+
+Due richieste di Marco, stesso rilascio (urgente per la verifica Google dell'app: i dati personali devono poter sparire anche dal foglio). Prove in `tools/e2e/t_v361.py` (il foglio), `t_v361_upgrade.py` (l'aggiornamento dalla 0.36.0) e `t_v361_page.py` (la pagina diretta).
+
+1. **Foglio Google: una riga per prenotazione, sempre aggiornata.**
+   - **Intestazione**: se il foglio (o la scheda scelta) è del tutto vuoto, la prima riga scritta è un'intestazione, nella lingua del sito. Se la riga 1 contiene già qualcosa non si scrive nessuna intestazione e non si sovrascrive niente.
+   - **Colonna O con l'id della prenotazione**, in fondo alle 14 colonne di prima (A..N nello stesso ordine: i fogli in uso non si spostano).
+   - **La riga cambia quando cambia la prenotazione**: annullata dal cliente (pagina aperta dall'email) o dal pannello (singolo, multiplo, dal dettaglio), confermata, completata, no-show, spostata di data e ora. Una prenotazione annullata resta nel foglio con lo stato aggiornato.
+   - **Eliminare una prenotazione dal pannello toglie anche la sua riga dal foglio** (sono dati personali). Se Google non risponde, la prenotazione si elimina lo stesso e la rimozione della riga è messa in coda e rifatta dall'attività pianificata; dopo dieci tentativi lo staff riceve un avviso.
+   - **Robustezza**: la riga si ritrova ogni volta cercando l'id nella colonna O (mai un numero di riga ricordato) e le scritture passano sotto un blocco, quindi due modifiche ravvicinate o una riga sparita sopra non portano a scrivere la riga sbagliata. Un errore o un limite di Google non blocca mai l'annullo o la modifica: il passo è segnato in `fx_steps` e l'attività pianificata lo ripete con attesa crescente (come gli altri passaggi, fino a dieci tentativi, poi avviso allo staff). Una creazione ripetuta dopo una risposta persa non duplica la riga (se l'id c'è già, la riga si aggiorna). L'eliminazione di più prenotazioni insieme toglie le righe con una sola operazione; se il Foglio è impostato ma Google è scollegato, la rimozione resta in coda (e lo staff è avvisato se non riesce) invece di essere dimenticata; se il motore delle prenotazioni non è attivo il pannello avvisa di togliere le righe a mano.
+   - **Permessi Google invariati**: solo `spreadsheets` (le righe si rimuovono con la stessa API); nessun permesso nuovo, nessun permesso Drive.
+   - **API Google Sheets non abilitata**: se nel progetto Google Cloud l'API non è abilitata Google risponde 403 e prima il passaggio falliva in silenzio. Ora la pagina Google del componente dice in una riga che va abilitata "Google Sheets API" (senza mostrare il testo di Google), e le righe in attesa si scrivono da sole appena l'API è abilitata. README e istruzioni di installazione lo riportano.
+2. **Pagina diretta di prenotazione (`/prenota/<slug>`, l'elenco dei tipi e "non trovato") centrata** nella finestra, in verticale e in orizzontale, con il footer dentro il blocco. Se il contenuto è più alto della finestra (modulo aperto, telefono, elenco lungo) parte dall'alto e scorre, senza tagliare niente e senza scroll laterale. La scheda non si accorcia passando da calendario a orari (non salta su e giù); cresce solo per il modulo, che è più alto. Colori, testi e struttura della scheda non cambiano; chiaro e scuro come prima.
+3. **Attenzione, cosa cambia per chi usa già il prodotto: niente si perde.**
+   - Nessuna modifica allo schema del database né alle Opzioni: l'aggiornamento non tocca prenotazioni, impostazioni e collegamento Google (provato: tutto identico prima e dopo).
+   - **Le righe già nel foglio restano come sono** (14 colonne, senza id): non vengono aggiornate né cancellate dalle nuove regole. Se una prenotazione vecchia viene annullata o eliminata, la sua riga nel foglio non si trova per id e non si fa niente (nessun errore). Per avere l'aggiornamento automatico anche su di loro bisognerebbe riscriverle, e non lo facciamo.
+   - Il foglio già in uso non riceve l'intestazione (la riga 1 è già occupata): i dati nuovi si aggiungono sotto con l'id nella colonna O.
+   - Se più siti scrivessero sullo stesso foglio, l'id (numero progressivo di ogni sito) potrebbe coincidere: un foglio per sito.
+   - Per la copia su Foglio Google serve "Google Sheets API" abilitata nel progetto Google Cloud della connessione.
+
+Dopo l'aggiornamento svuotare la cache del sito (YOOtheme, Cloudflare) per vedere la pagina diretta centrata.
+
 ## 0.36.0 (pacchetto, componente e plugin): le impostazioni sono le Opzioni del componente, il piede si scrive in un editor
 
 Due richieste di Marco, stesso rilascio. Prove in `tools/e2e/t_v360.py` (le Opzioni, il filtro del piede, il disegno), `t_v360_upgrade.py` (l'aggiornamento con opzioni vere dalla 0.35.3 e dalla 0.35.2) e `t_v360_fresh.py` (installazione nuova).

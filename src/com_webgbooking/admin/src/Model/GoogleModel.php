@@ -66,6 +66,8 @@ class GoogleModel extends BaseDatabaseModel
             'expired'     => false,
             // true when Google answered with an error that is not an expired token (detail goes to the log, never on screen)
             'apiProblem'  => false,
+            // why the copy to the Sheet last failed: '' | api_disabled | denied | notfound | badrange | down | other (a kind, never Google's text)
+            'sheetErr'    => '',
             'error'       => '',
         ];
 
@@ -116,7 +118,7 @@ class GoogleModel extends BaseDatabaseModel
                 // Optional Sheets copy: only the tab names of the sheet the admin pasted (Sheets scope, no Drive).
                 if ($status->sheetId !== '') {
                     try {
-                        $status->tabs = $this->listTabs($token, $status->sheetId);
+                        $status->tabs = $this->listTabs($token, $status->sheetId, $status->sheetErr);
                     } catch (\Throwable $eTabs) {
                         $this->log(Text::sprintf('COM_WEBGBOOKING_LOG_SHEET_TABS', $eTabs->getMessage()));
                     }
@@ -138,6 +140,18 @@ class GoogleModel extends BaseDatabaseModel
             }
         } catch (\Throwable $e) {
             $status->error = $e->getMessage();
+        }
+
+        // a failure of the last copy to the Sheet, left by the booking engine (kind only)
+        if ($status->sheetErr === '' && $status->sheetId !== '') {
+            try {
+                $db = $this->getDatabase();
+                $j  = json_decode((string) $db->setQuery($db->getQuery(true)->select($db->quoteName('v'))->from($db->quoteName('#__webgbooking_kv'))->where($db->quoteName('k') . ' = ' . $db->quote('sheet_err')))->loadResult(), true);
+                if (\is_array($j) && \in_array($j['kind'] ?? '', ['api_disabled', 'denied', 'notfound', 'badrange', 'down', 'other'], true)) {
+                    $status->sheetErr = (string) $j['kind'];
+                }
+            } catch (\Throwable $e) {
+            }
         }
 
         return $status;
@@ -192,14 +206,18 @@ class GoogleModel extends BaseDatabaseModel
     }
 
     /** Tab (worksheet) titles of a spreadsheet. @return array<int,string> */
-    private function listTabs(string $token, string $sheetId): array
+    private function listTabs(string $token, string $sheetId, string &$err = ''): array
     {
         $resp = (new HttpFactory())->getHttp()->get(
             'https://sheets.googleapis.com/v4/spreadsheets/' . rawurlencode($sheetId) . '?fields=sheets.properties.title',
             ['Authorization' => 'Bearer ' . $token]
         );
 
-        $data = json_decode((string) $resp->body, true) ?: [];
+        $body = (string) $resp->body;
+        if ((int) $resp->code === 403 && (stripos($body, 'SERVICE_DISABLED') !== false || stripos($body, 'accessNotConfigured') !== false || stripos($body, 'has not been used in project') !== false)) {
+            $err = 'api_disabled';
+        }
+        $data = json_decode($body, true) ?: [];
         $out  = [];
         foreach ($data['sheets'] ?? [] as $s) {
             $title = $s['properties']['title'] ?? '';

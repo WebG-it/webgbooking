@@ -43,7 +43,7 @@ use WebG\Plugin\System\Webgbooking\Mail\EmailTemplates;
 final class Webgbooking extends CMSPlugin implements SubscriberInterface
 {
     /** Cache-buster for the bundled front-end assets (wgb.css/js, UIkit). Bump when those change. */
-    public const ASSET_VER = '0.36.0';
+    public const ASSET_VER = '0.36.1';
 
     protected $autoloadLanguage = true;
 
@@ -1518,6 +1518,19 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             }
         }
 
+        // a Sheet rewrite marked meanwhile by a cancel or a move must survive this final write of the steps
+        try {
+            $cur = json_decode((string) $db->setQuery($db->getQuery(true)->select($db->quoteName('fx_steps'))->from($db->quoteName('#__webgbooking_bookings'))->where($db->quoteName('id') . ' = ' . (int) $row->id))->loadResult(), true);
+            $cur = \is_array($cur) ? $cur : [];
+            foreach (['sheet_sync', 'sheet_tries', 'sheet_at'] as $k) {
+                if (isset($cur[$k])) {
+                    $steps[$k] = $cur[$k];
+                } else {
+                    unset($steps[$k]);
+                }
+            }
+        } catch (\Throwable $e) {
+        }
         $done  = !$failed && ($steps['linkmail'] ?? '') !== 'needed';
         $state = $done ? 'done' : ($tries >= 10 ? 'failed' : 'retry');
         $set   = [
@@ -1593,6 +1606,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             )->loadObjectList();
 
             $n += $this->retryHooks();
+            $n += $this->retrySheet();
 
             foreach ($rows ?: [] as $row) {
                 $old = (string) ($row->fx_last ?? '');
@@ -3188,64 +3202,392 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
         }
     }
 
+    // ------------------------------------------------------------------------------------------------
+    // Google Sheet copy (0.36.1): header, id column O, update on every change, removal on delete.
+    // One scope (spreadsheets) as before; no Drive. Every write finds the row by the booking id in column O at that very
+    // moment (a remembered row number would be wrong as soon as another row is removed) and runs under a named lock, so two
+    // changes of the same row never cross. Rows written before 0.36.1 have no id: they are left as they are.
+    // ------------------------------------------------------------------------------------------------
+
+    /** The 15 cells of a booking: A..N as before, O = booking id. */
+    private function sheetValues(object $row): array
+    {
+        $customCol = [];
+        foreach ($this->customAnswers($row) as $it) {
+            $customCol[] = $it['l'] . ': ' . $it['v'];
+        }
+
+        // Neutralise spreadsheet formula injection: any visitor value starting with = + - @ (or a
+        // control char) is treated by Sheets as a live formula. Prefix such cells with an apostrophe.
+        $safe = static function ($v): string {
+            $v = (string) $v;
+
+            return ($v !== '' && \in_array($v[0], ['=', '+', '-', '@', "\t", "\r", "\n"], true)) ? "'" . $v : $v;
+        };
+
+        return array_map($safe, [
+            $row->created, $row->booking_date, $row->booking_time,
+            $row->customer_name, $row->customer_email, (string) $row->customer_phone,
+            (string) $row->guest_email, (string) $row->notes, $row->status, (string) $row->meeting_url,
+            implode(' | ', $customCol),
+            $this->rowLocation($row), (string) $this->rowDuration($row), (string) ($row->event_name ?? ''),
+            (string) (int) $row->id,
+        ]);
+    }
+
+    /** Header row, in the language of the site. */
+    private function sheetHeader(): array
+    {
+        $out = [];
+        foreach (['CREATED', 'DATE', 'TIME', 'NAME', 'EMAIL', 'PHONE', 'GUEST', 'NOTES', 'STATUS', 'MEETING', 'ANSWERS', 'PLACE', 'DURATION', 'EVENT', 'ID'] as $k) {
+            $out[] = Text::_('PLG_SYSTEM_WEBGBOOKING_SHEET_H_' . $k);
+        }
+
+        return $out;
+    }
+
+    /** One Sheets API call. @return array{0:int,1:array,2:string} status (0 = transport error), decoded body, raw body */
+    private function sheetReq(string $method, string $url, string $token, ?array $body = null): array
+    {
+        try {
+            $h    = ['Authorization' => 'Bearer ' . $token, 'Content-Type' => 'application/json'];
+            $http = (new HttpFactory())->getHttp();
+            if ($method === 'GET') {
+                $resp = $http->get($url, $h, 10);
+            } elseif ($method === 'PUT') {
+                $resp = $http->put($url, json_encode($body), $h, 10);
+            } else {
+                $resp = $http->post($url, json_encode($body ?? new \stdClass()), $h, 10);
+            }
+            $raw = self::httpBody($resp);
+
+            return [self::httpCode($resp), json_decode($raw, true) ?: [], $raw];
+        } catch (\Throwable $e) {
+            return [0, [], ''];
+        }
+    }
+
+    /** Remember why Google refused (a kind, never Google's own text) for the Google page; log without values. */
+    private function sheetFail(int $code, string $raw): string
+    {
+        $kind = 'other';
+        if (stripos($raw, 'SERVICE_DISABLED') !== false || stripos($raw, 'accessNotConfigured') !== false || stripos($raw, 'has not been used in project') !== false) {
+            $kind = 'api_disabled';
+        } elseif ($code === 403) {
+            $kind = 'denied';
+        } elseif ($code === 404) {
+            $kind = 'notfound';
+        } elseif ($code === 400) {
+            $kind = 'badrange';
+        } elseif ($code === 0 || $code === 429 || $code >= 500) {
+            $kind = 'down';
+        }
+        $this->kvSet('sheet_err', (string) json_encode(['kind' => $kind, 'at' => time()]));
+        $this->wlog(Text::sprintf('PLG_SYSTEM_WEBGBOOKING_LOG_SHEET_FAIL', $code, $kind));
+
+        return 'retry';
+    }
+
+    /** A Sheets call worked: a warning left by an earlier failure is no longer true. */
+    private function sheetOk(): string
+    {
+        if ($this->kvGet('sheet_err') !== null) {
+            $this->kvDelete('sheet_err');
+        }
+
+        return 'ok';
+    }
+
+    /**
+     * Do one thing on the Sheet under a named lock.
+     * $mode: 'upsert' (creation: update the row if the id is already there, else append, with a header on an empty tab),
+     *        'update' (a change: rewrite the row of that id, nothing if it is not there), 'delete' (remove the row of that id).
+     * Returns ok | skip (nothing configured, or no such row/booking: nothing to do) | retry.
+     */
+    private function sheetRun(string $mode, int $id, array $ids = []): string
+    {
+        try {
+            $db   = Factory::getContainer()->get(DatabaseInterface::class);
+            $lock = $this->lockName($db, 'sheet');
+            if (!$this->acquireLock($db, $lock)) {
+                return 'retry';
+            }
+            try {
+                return $this->sheetRunLocked($db, $mode, $id, $ids);
+            } finally {
+                $this->releaseLock($db, $lock);
+            }
+        } catch (\Throwable $e) {
+            return 'retry';
+        }
+    }
+
+    private function sheetRunLocked($db, string $mode, int $id, array $ids = []): string
+    {
+        $g = $db->setQuery($db->getQuery(true)->select('*')->from($db->quoteName('#__webgbooking_google')))->loadObject();
+        // Sheet chosen in the component (Google page) → fallback to the plugin param.
+        $sheetId = $g ? (trim((string) ($g->sheet_id ?? '')) ?: trim((string) $this->params->get('google_sheet_id', ''))) : '';
+        if ($sheetId === '') {
+            return 'skip';
+        }
+        if (empty($g->refresh_token)) {
+            // a Sheet is set but Google is disconnected: a removal must not be forgotten (it waits, then the staff is told), a rewrite has nobody to write to
+            return $mode === 'delete' ? $this->sheetFail(0, '') : 'skip';
+        }
+
+        $row = null;
+        if ($mode !== 'delete') {
+            // always the booking as it is NOW, never the copy a slow request carried around
+            $row = $db->setQuery($db->getQuery(true)->select('*')->from($db->quoteName('#__webgbooking_bookings'))->where($db->quoteName('id') . ' = ' . (int) $id))->loadObject();
+            if (!$row) {
+                return 'skip';
+            }
+        }
+
+        $token = '';
+        try {
+            $token = $this->googleAccessToken((string) $g->refresh_token);
+        } catch (\Throwable $e) {
+        }
+        if ($token === '') {
+            return $this->sheetFail(0, '');
+        }
+
+        $tab  = trim((string) ($g->sheet_tab ?? ''));
+        $base = 'https://sheets.googleapis.com/v4/spreadsheets/' . rawurlencode($sheetId);
+        $rng  = static fn(string $a1): string => rawurlencode(($tab !== '' ? "'" . str_replace("'", "''", $tab) . "'!" : '') . $a1);
+
+        // where is this booking? (column O, now). Raw values: a column the admin formatted (thousands separator ...) still compares as the number it is
+        [$c, $d, $raw] = $this->sheetReq('GET', $base . '/values/' . $rng('O:O') . '?valueRenderOption=UNFORMATTED_VALUE', $token);
+        if ($c < 200 || $c >= 300) {
+            return $this->sheetFail($c, $raw);
+        }
+        $want  = array_map('strval', $mode === 'delete' ? $ids : [$id]);
+        $found = [];
+        foreach ((array) ($d['values'] ?? []) as $i => $cells) {
+            $v = ((array) $cells)[0] ?? '';
+            $v = (\is_int($v) || \is_float($v)) && (float) (int) $v === (float) $v ? (string) (int) $v : (string) $v;
+            if ($v !== '' && \in_array($v, $want, true)) {
+                $found[] = $i + 1;
+            }
+        }
+
+        if ($mode === 'delete') {
+            if (!$found) {
+                return $this->sheetOk();
+            }
+            [$c, $d, $raw] = $this->sheetReq('GET', $base . '?fields=' . rawurlencode('sheets.properties(sheetId,title,index)'), $token);
+            if ($c < 200 || $c >= 300) {
+                return $this->sheetFail($c, $raw);
+            }
+            $gid = null;
+            foreach ((array) ($d['sheets'] ?? []) as $s) {
+                $p = (array) ($s['properties'] ?? []);
+                if (($tab === '' && (int) ($p['index'] ?? 0) === 0) || ($tab !== '' && (string) ($p['title'] ?? '') === $tab)) {
+                    $gid = (int) ($p['sheetId'] ?? 0);
+                    break;
+                }
+            }
+            if ($gid === null) {
+                return $this->sheetFail(400, '');
+            }
+            $reqs = [];
+            foreach (array_reverse($found) as $n) {      // from the bottom: the rows above do not move
+                $reqs[] = ['deleteDimension' => ['range' => ['sheetId' => $gid, 'dimension' => 'ROWS', 'startIndex' => $n - 1, 'endIndex' => $n]]];
+            }
+            [$c, , $raw] = $this->sheetReq('POST', $base . ':batchUpdate', $token, ['requests' => $reqs]);
+
+            return ($c >= 200 && $c < 300) ? $this->sheetOk() : $this->sheetFail($c, $raw);
+        }
+
+        $vals = $this->sheetValues($row);
+        if ($found) {
+            foreach ($found as $n) {       // normally one row; a duplicate (never meant to exist) is brought up to date too
+                [$c, , $raw] = $this->sheetReq('PUT', $base . '/values/' . $rng('A' . $n . ':O' . $n) . '?valueInputOption=USER_ENTERED', $token, ['majorDimension' => 'ROWS', 'values' => [$vals]]);
+                if ($c < 200 || $c >= 300) {
+                    return $this->sheetFail($c, $raw);
+                }
+            }
+
+            return $this->sheetOk();
+        }
+        if ($mode === 'update') {
+            return 'skip';       // an older row without id, or one never written: left alone, no error
+        }
+
+        // append; on a completely empty tab (first three rows empty) the header goes first, in the same call
+        [$c, $d, $raw] = $this->sheetReq('GET', $base . '/values/' . $rng('A1:O3'), $token);
+        if ($c < 200 || $c >= 300) {
+            return $this->sheetFail($c, $raw);
+        }
+        $empty = true;
+        foreach ((array) ($d['values'] ?? []) as $r) {
+            foreach ((array) $r as $cell) {
+                if (trim((string) $cell) !== '') {
+                    $empty = false;
+                }
+            }
+        }
+        $rows = $empty ? [$this->sheetHeader(), $vals] : [$vals];
+        [$c, , $raw] = $this->sheetReq('POST', $base . '/values/' . $rng('A1') . ':append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS', $token, ['values' => $rows]);
+
+        return ($c >= 200 && $c < 300) ? $this->sheetOk() : $this->sheetFail($c, $raw);
+    }
+
     /** Append the booking as a row to a configured Google Sheet. True when written or when no Sheet is configured. */
     private function appendToSheet(object $row): bool
     {
+        return \in_array($this->sheetRun('upsert', (int) $row->id), ['ok', 'skip'], true);
+    }
+
+    /** Mark (or clear) "this booking's Sheet row must be rewritten" in `fx_steps`; the scheduled task redoes it with a backoff. */
+    private function sheetMark(int $id, bool $needed, int $tries = 0, string $state = 'needed'): void
+    {
         try {
-            $db = Factory::getContainer()->get(DatabaseInterface::class);
-            $g  = $db->setQuery(
-                $db->getQuery(true)->select('*')->from($db->quoteName('#__webgbooking_google'))
-            )->loadObject();
-
-            if (!$g || empty($g->refresh_token)) {
-                return true;
+            $db  = Factory::getContainer()->get(DatabaseInterface::class);
+            $cur = $db->setQuery($db->getQuery(true)->select($db->quoteName('fx_steps'))->from($db->quoteName('#__webgbooking_bookings'))->where($db->quoteName('id') . ' = ' . (int) $id))->loadResult();
+            if ($cur === null) {
+                return;
             }
-
-            // Sheet chosen in the component (Google page) → fallback to the plugin param.
-            $sheetId = trim((string) ($g->sheet_id ?? '')) ?: trim((string) $this->params->get('google_sheet_id', ''));
-            if ($sheetId === '') {
-                return true;
+            $steps = json_decode((string) $cur, true);
+            $steps = \is_array($steps) ? $steps : [];
+            $before = json_encode($steps);
+            if ($needed) {
+                $steps['sheet_sync']  = $state;
+                $steps['sheet_tries'] = $tries;
+                $steps['sheet_at']    = time();
+            } else {
+                unset($steps['sheet_sync'], $steps['sheet_tries'], $steps['sheet_at']);
             }
-
-            $token = $this->googleAccessToken((string) $g->refresh_token);
-            if ($token === '') {
-                return false;
+            if (json_encode($steps) !== $before) {
+                $db->setQuery($db->getQuery(true)->update($db->quoteName('#__webgbooking_bookings'))->set($db->quoteName('fx_steps') . ' = ' . $db->quote((string) json_encode($steps ?: new \stdClass())))->where($db->quoteName('id') . ' = ' . (int) $id))->execute();
             }
-
-            $tab   = trim((string) ($g->sheet_tab ?? ''));
-            $range = $tab !== '' ? rawurlencode("'" . str_replace("'", "''", $tab) . "'!A1") : 'A1';
-
-            $customCol = [];
-            foreach ($this->customAnswers($row) as $it) {
-                $customCol[] = $it['l'] . ': ' . $it['v'];
-            }
-
-            // Neutralise spreadsheet formula injection: any visitor value starting with = + - @ (or a
-            // control char) is treated by Sheets as a live formula. Prefix such cells with an apostrophe.
-            $safe = static function ($v): string {
-                $v = (string) $v;
-                return ($v !== '' && \in_array($v[0], ['=', '+', '-', '@', "\t", "\r", "\n"], true)) ? "'" . $v : $v;
-            };
-
-            $values = [array_map($safe, [
-                $row->created, $row->booking_date, $row->booking_time,
-                $row->customer_name, $row->customer_email, (string) $row->customer_phone,
-                (string) $row->guest_email, (string) $row->notes, $row->status, (string) $row->meeting_url,
-                implode(' | ', $customCol),
-                $this->rowLocation($row), (string) $this->rowDuration($row), (string) ($row->event_name ?? ''),
-            ])];
-
-            $resp = (new HttpFactory())->getHttp()->post(
-                'https://sheets.googleapis.com/v4/spreadsheets/' . rawurlencode($sheetId) . '/values/' . $range . ':append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS',
-                json_encode(['values' => $values]),
-                ['Authorization' => 'Bearer ' . $token, 'Content-Type' => 'application/json'],
-                8
-            );
-
-            return self::httpCode($resp) < 400;
         } catch (\Throwable $e) {
-            return false;
         }
+    }
+
+    /** The booking changed: rewrite its Sheet row now; if Google says no, remember it and let the task retry. Never throws, never blocks the change. */
+    private function sheetSync(int $id): void
+    {
+        try {
+            $this->sheetMark($id, $this->sheetRun('update', $id) === 'retry');
+        } catch (\Throwable $e) {
+        }
+    }
+
+    /** Admin changed the status of these bookings without going through the engine (completed, no-show, pending...). */
+    public function adminSheetSync(array $ids): void
+    {
+        // a long list never holds the request: the first few are rewritten now, the others are marked and the task does them
+        foreach (array_values($ids) as $i => $id) {
+            if ($i < 5) {
+                $this->sheetSync((int) $id);
+            } else {
+                $this->sheetMark((int) $id, true);
+            }
+        }
+    }
+
+    /**
+     * These bookings are being deleted: their Sheet rows go too (personal data), in ONE pass (one read, one batch of removals, however
+     * many bookings). If Google fails the removals are queued (kv `sq:`, only the id) and redone by the task.
+     * Returns ok | queued (Google said no: it will be redone) | nosheet (no Sheet set: nothing to remove here).
+     */
+    public function adminSheetRemove(array $ids): string
+    {
+        $ids = array_values(array_filter(array_map('intval', $ids), static fn($i) => $i > 0));
+        if (!$ids) {
+            return 'nosheet';
+        }
+        try {
+            $res = $this->sheetRun('delete', 0, $ids);
+            if ($res === 'retry') {
+                foreach ($ids as $id) {
+                    $this->kvSet('sq:' . $id . ':' . bin2hex(random_bytes(3)), (string) json_encode(['id' => $id, 'tries' => 1, 'at' => time()]));
+                }
+
+                return 'queued';
+            }
+
+            return $res === 'skip' ? 'nosheet' : 'ok';
+        } catch (\Throwable $e) {
+            return 'queued';
+        }
+    }
+
+    /** Redo the Sheet writes that failed: rewrites marked in `fx_steps` and queued removals. Backoff 2, 4, 6 ... minutes, 10 tries, then the staff is told. */
+    private function retrySheet(int $limit = 20): int
+    {
+        $n  = 0;
+        $t0 = microtime(true);
+        try {
+            $db   = Factory::getContainer()->get(DatabaseInterface::class);
+            $rows = $db->setQuery(
+                $db->getQuery(true)->select($db->quoteName(['id', 'fx_steps']))->from($db->quoteName('#__webgbooking_bookings'))
+                    ->where($db->quoteName('fx_steps') . ' LIKE ' . $db->quote('%"sheet_sync"%'))
+                    ->where($db->quoteName('fx_steps') . ' NOT LIKE ' . $db->quote('%"sheet_sync"%failed%')),
+                0,
+                $limit
+            )->loadObjectList();
+            foreach ($rows ?: [] as $r) {
+                if (microtime(true) - $t0 > 40) {
+                    break;
+                }
+                $st    = json_decode((string) $r->fx_steps, true);
+                if (($st['sheet_sync'] ?? '') !== 'needed') {
+                    continue;
+                }
+                $tries = (int) ($st['sheet_tries'] ?? 0) + 1;
+                if (time() - (int) ($st['sheet_at'] ?? 0) < $tries * 120) {
+                    continue;
+                }
+                if ($this->sheetRun('update', (int) $r->id) !== 'retry') {
+                    $this->sheetMark((int) $r->id, false);
+                    $n++;
+                } elseif ($tries >= 10) {
+                    $this->sheetMark((int) $r->id, true, $tries, 'failed');
+                    $this->wlog(Text::sprintf('PLG_SYSTEM_WEBGBOOKING_LOG_SHEET_GAVEUP', (int) $r->id));
+                    $this->alertStaff('sheetsync' . (int) $r->id, Text::_('PLG_SYSTEM_WEBGBOOKING_ALERT_SHEET_SUBJECT'), Text::sprintf('PLG_SYSTEM_WEBGBOOKING_ALERT_SHEET_BODY', (int) $r->id), 24);
+                } else {
+                    $this->sheetMark((int) $r->id, true, $tries);
+                }
+            }
+
+            $q = $db->setQuery(
+                $db->getQuery(true)->select($db->quoteName(['k', 'v']))->from($db->quoteName('#__webgbooking_kv'))->where($db->quoteName('k') . ' LIKE ' . $db->quote('sq:%')),
+                0,
+                $limit
+            )->loadObjectList();
+            foreach ($q ?: [] as $r) {
+                if (microtime(true) - $t0 > 40) {
+                    break;
+                }
+                $j = json_decode((string) $r->v, true);
+                if (!\is_array($j) || empty($j['id'])) {
+                    $this->kvDelete((string) $r->k);
+                    continue;
+                }
+                $tries = (int) ($j['tries'] ?? 1);
+                if (time() - (int) ($j['at'] ?? 0) < $tries * 120) {
+                    continue;
+                }
+                if ($this->sheetRun('delete', 0, [(int) $j['id']]) !== 'retry') {
+                    $this->kvDelete((string) $r->k);
+                    $n++;
+                } elseif ($tries >= 10) {
+                    $this->kvDelete((string) $r->k);
+                    $this->wlog(Text::sprintf('PLG_SYSTEM_WEBGBOOKING_LOG_SHEET_GAVEUP', (int) $j['id']));
+                    $this->alertStaff('sheetdel' . (int) $j['id'], Text::_('PLG_SYSTEM_WEBGBOOKING_ALERT_SHEETDEL_SUBJECT'), Text::sprintf('PLG_SYSTEM_WEBGBOOKING_ALERT_SHEETDEL_BODY', (int) $j['id']), 24);
+                } else {
+                    $j['tries'] = $tries + 1;
+                    $j['at']    = time();
+                    $this->kvSet((string) $r->k, (string) json_encode($j));
+                }
+            }
+        } catch (\Throwable $e) {
+        }
+
+        return $n;
     }
 
     /** Forward a consented subscriber to the configured newsletter webhook (admin-set URL). True when sent or not configured. */
@@ -5666,6 +6008,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             $mail = $row->_custOn ? $this->notify($row, false, 'customer') : 'off';
             $this->sendStaffTrace($row, 'confirmed_admin');
             $this->fireHook($row, 'booking.confirmed', ['confirmed_by' => 'staff']);
+            $this->sheetSync((int) $row->id);
 
             return ['status' => 'ok', 'mail' => $mail];
         } catch (\Throwable $e) {
@@ -5708,6 +6051,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
 
         $mail = $this->notifyCancellation($row, $byAdmin);
         $this->fireHook($row, 'booking.cancelled', ['cancelled_by' => $byAdmin ? 'staff' : 'customer']);
+        $this->sheetSync((int) $row->id);
 
         return ['status' => 'ok', 'google' => $google, 'mail' => $mail, 'refund' => ($row->payment_status ?? '') === 'paid'];
     }
@@ -5878,6 +6222,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             $row->_prevTime = $prevTime;
             $this->notify($row, true);
             $this->fireHook($row, 'booking.rescheduled', ['previous_date' => $prevDate, 'previous_time' => $prevTime]);
+            $this->sheetSync((int) $row->id);
 
             $rv = $this->custView($row);
             $this->respond([

@@ -41,7 +41,7 @@ class BookingModel extends BaseDatabaseModel
     }
 
     /** Outcome of the last deleteItems() call (Google events removed with the rows). */
-    public array $deleteReport = ['google_ok' => 0, 'google_fail' => 0, 'engine' => true];
+    public array $deleteReport = ['google_ok' => 0, 'google_fail' => 0, 'engine' => true, 'sheet' => ''];
 
     /** Outcome of the last cancelBookings() call, for the admin message. */
     public array $cancelReport = ['done' => 0, 'already' => 0, 'google_ok' => 0, 'google_fail' => 0, 'mail_ok' => 0, 'mail_fail' => 0, 'refund' => 0, 'engine' => true];
@@ -159,8 +159,20 @@ class BookingModel extends BaseDatabaseModel
             ->whereIn($db->quoteName('id'), $ids);
 
         $db->setQuery($query)->execute();
+        $n = (int) $db->getAffectedRows();
 
-        return (int) $db->getAffectedRows();
+        // the row in the Google Sheet follows the new status (completed, no-show ...); a Google error never undoes the change
+        try {
+            if (PluginHelper::isEnabled('system', 'webgbooking')) {
+                $engine = Factory::getApplication()->bootPlugin('webgbooking', 'system');
+                if (method_exists($engine, 'adminSheetSync')) {
+                    $engine->adminSheetSync($ids);
+                }
+            }
+        } catch (\Throwable $e) {
+        }
+
+        return $n;
     }
 
     /**
@@ -198,6 +210,14 @@ class BookingModel extends BaseDatabaseModel
                     $this->deleteReport['google_fail']++;
                 }
             }
+        }
+
+        // the rows in the Google Sheet go first (one pass for all), before the bookings disappear; a Google error never blocks the deletion
+        try {
+            if ($engine !== null && method_exists($engine, 'adminSheetRemove')) {
+                $this->deleteReport['sheet'] = $engine->adminSheetRemove($ids);
+            }
+        } catch (\Throwable $e) {
         }
 
         $db = $this->getDatabase();

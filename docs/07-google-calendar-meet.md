@@ -18,7 +18,7 @@ Obiettivo di Marco: alla prenotazione il **link Google Meet deve essere generato
 Solo tu puoi crearlo (è il tuo account Google Cloud).
 
 1. **console.cloud.google.com** → in alto crea un **progetto** (es. "WebG Booking").
-2. **API e servizi → Libreria** → cerca e **abilita "Google Calendar API"**.
+2. **API e servizi → Libreria** → cerca e **abilita "Google Calendar API"**. Se usi la copia su Foglio Google abilita anche **"Google Sheets API"** (stesso progetto): senza, Google risponde 403 "API non abilitata" e nessuna riga viene scritta.
    - ℹ️ **NON serve** abilitare la "Google Meet API": il link Meet lo genera la Calendar API stessa tramite `conferenceData.createRequest` + `conferenceDataVersion=1` (Google crea la conferenza e restituisce `hangoutLink`). La Meet API separata serve solo a gestire spazi/registrazioni Meet standalone, cosa che a noi non serve.
 3. **API e servizi → Schermata consenso OAuth**:
    - Tipo utente: **Esterno** → Crea.
