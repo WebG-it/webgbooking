@@ -125,7 +125,7 @@ def run_scenarios():
         tp.pay_in_mock(sid)
         res['webhook'] = tp.webhook(tp.event('checkout.session.completed', sid))
     time.sleep(1)
-    out['answers'] = json.dumps({k: (v if not isinstance(v, dict) else {a: b for a, b in v.items() if a not in ('redirect', 'manage', 'url', 'token')}) for k, v in res.items()}, sort_keys=True, default=str)
+    out['answers'] = json.dumps({k: (v if not isinstance(v, dict) else {a: b for a, b in v.items() if a not in ('redirect', 'manage', 'url', 'token', 'pending')}) for k, v in res.items()}, sort_keys=True, default=str)
     out['redirect_ok'] = str(res['paid'].get('redirect', '')).startswith('https://checkout.stripe.test/c/pay/')
     ms = []
     for p in mails():

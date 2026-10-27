@@ -68,6 +68,37 @@
     function pad2(n){return (n<10?'0':'')+n;}
     function isoDate(d){return d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate());}
     function errBox(msg){return '<div class="uk-alert uk-alert-danger" role="alert" uk-alert>'+esc(msg)+'</div><button type="button" class="uk-button uk-button-default uk-button-small uk-margin-small-top" data-act="retry">'+esc(L.back)+'</button>';}
+    /* the thank-you after a booking: the server's own sentence, then what was booked (all of it is already in this page: nothing is asked of the server again) */
+    function tzName(z,ms){try{var p=new Intl.DateTimeFormat(loc,{timeZone:z,timeZoneName:'long'}).formatToParts(new Date(ms||Date.now())),i;for(i=0;i<p.length;i++){if(p[i].type==='timeZoneName')return p[i].value;}}catch(e){}return '';}
+    function addMin(hhmm,m){var a=(hhmm||'').split(':'),t=((+a[0]||0)*60+(+a[1]||0)+m)%1440;return pad2x(Math.floor(t/60))+':'+pad2x(t%60);}
+    /* the chosen day (long) and "start - end (zone name)" in the zone the visitor is looking at */
+    function chosenWhen(){
+      var sel=curSel(),dur=+cfg.duration||0,day='';try{day=st.date.toLocaleDateString(loc,{weekday:'long',day:'numeric',month:'long',year:'numeric'});}catch(e){day=fmtFull(st.date,loc);}
+      var end='';if(dur>0){if(st.tz&&sel.ms){var pe=tzParts(sel.ms+dur*60000,st.tz);end=pad2x(pe.hour)+':'+pad2x(pe.minute);}else{end=addMin(st.time,dur);}}
+      var zn=st.tz?tzName(st.tz,sel.ms):'';
+      return {day:day,when:st.time+(end?' - '+end:'')+(zn?' ('+zn+')':'')};
+    }
+    /* reschedule: what the appointment is now, and what it becomes if the visitor confirms */
+    function changeBox(){
+      if(!st.date||!st.time||!L.rsTo)return '';
+      var c=chosenWhen();
+      return '<div class="wgb-recap wgb-change"><ul class="wgb-recap-l">'
+        +(cfg.rsFromTxt?'<li><span uk-icon="icon:history;ratio:0.9"></span><span><span class="wgb-rc-k">'+esc(L.rsFrom||'')+'</span> '+esc(cfg.rsFromTxt)+'</span></li>':'')
+        +'<li><span uk-icon="icon:calendar;ratio:0.9"></span><span><span class="wgb-rc-k">'+esc(L.rsTo)+'</span> <b>'+esc(c.day+', '+c.when)+'</b></span></li></ul></div>';
+    }
+    function doneHtml(res){
+      var dur=+cfg.duration||0,pend=!!(res&&res.pending),h='<div class="wgb-done"><div class="uk-alert uk-alert-success" role="alert" uk-alert>'+esc((res&&res.message)||L.done)+'</div>';
+      if(!st.date||!st.time||!L.rcConfirmed){return h+'</div>';}
+      var cw=chosenWhen(),day=cw.day,when=cw.when;
+      var where=effLoc()==='phone'?(st.form.phone&&L.rcCall?L.rcCall.replace('%s',function(){return st.form.phone;}):L.locPhone):L.locMeet;
+      var rows=[['calendar',day],['clock',when]];
+      if(dur>0)rows.push(['future',dur+' '+(L.minShort||'min')]);
+      rows.push([effLoc()==='phone'?'receiver':'video-camera',where]);
+      if(st.form.email&&L.rcMail)rows.push(['mail',(pend&&L.rcMailWait?L.rcMailWait:L.rcMail).replace('%s',function(){return st.form.email;})]);
+      h+='<div class="wgb-recap"><div class="wgb-recap-h"><span class="wgb-recap-t">'+esc(cfg.title||'')+'</span><span class="wgb-recap-st '+(pend?'wgb-st-wait':'wgb-st-ok')+'">'+esc(pend?L.rcPending:L.rcConfirmed)+'</span></div><ul class="wgb-recap-l">';
+      for(var i=0;i<rows.length;i++){h+='<li><span uk-icon="icon:'+rows[i][0]+';ratio:0.9"></span><span>'+esc(rows[i][1])+'</span></li>';}
+      return h+'</ul></div></div>';
+    }
     function submit(){
       mount.innerHTML='<div class="uk-text-center uk-padding-small" role="status"><span uk-spinner></span> '+esc(L.sending||'')+'</div>';
       var url=cfg.ajaxUrl||'';
@@ -85,7 +116,7 @@
         .then(function(r){return r.json();})
         .then(function(res){
           if(res&&res.ok&&res.redirect){try{window.dataLayer=window.dataLayer||[];window.dataLayer.push({event:'wgb_checkout_started'});}catch(e){}mount.innerHTML='<div class="uk-text-center uk-padding-small" role="status"><span uk-spinner></span> '+esc(L.payRedirecting||'')+'</div>';window.location.href=res.redirect;return;}
-          if(res&&res.ok){track();mount.innerHTML='<div class="uk-alert uk-alert-success" role="alert" uk-alert>'+esc(res.message||L.done)+'</div>';goThanks();}
+          if(res&&res.ok){var rc=doneHtml(res);track();mount.innerHTML=rc;goThanks();}
           else{mount.innerHTML=errBox((res&&res.message)||L.bookErr);}
         })
         .catch(function(){mount.innerHTML=errBox(L.bookErr);});
@@ -172,7 +203,8 @@
         h.push('<button type="button" class="uk-button uk-button-'+(cfg.btnStyle||'primary')+' uk-width-1-1 uk-margin-small-top" data-act="book">'+esc(cfg.price&&L.payNow?L.payNow.replace('%s',cfg.price.text):L.bookNow)+'</button>');
       } else if(st.step==='confirm'){
         h.push(summary());
-        h.push('<div class="uk-text-meta uk-margin-small-bottom">'+esc(L.rsIntro||'')+'</div>');
+        h.push(changeBox());
+        h.push('<div class="uk-text-meta uk-margin-small-bottom uk-margin-small-top">'+esc(L.rsIntro||'')+'</div>');
         h.push('<button type="button" class="uk-button uk-button-'+(cfg.btnStyle||'primary')+' uk-width-1-1 uk-margin-small-top" data-act="rebook">'+esc(L.rsConfirm||'')+'</button>');
       } else {
         h.push('<div class="uk-alert uk-alert-success" uk-alert>'+esc(L.done)+'</div>');

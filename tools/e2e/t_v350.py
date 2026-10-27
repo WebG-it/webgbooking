@@ -331,7 +331,7 @@ jx('php /tmp/mock/render_el.php /tmp/mock/configs_et.json >/dev/null; chmod -R a
 c_free = page_cfg('et_free')
 check('E1 an element with a saved type takes duration and place from it (45 min, phone)', c_free['duration'] == 45 and c_free['location'] == 'phone', (c_free['duration'], c_free['location']))
 h_free = Sess().get('%s/wgbtest/et_free.html' % BASE)
-check('E1b ... and the title from the type when the element has none, without repeating it as a subtitle', 'Evento dal componente' in h_free and h_free.count('Evento dal componente') == 1, h_free.count('Evento dal componente'))
+check('E1b ... and the title from the type when the element has none, without repeating it as a subtitle', 'Evento dal componente' in h_free and re.sub(r'data-wgb="[^"]*"', '', h_free).count('Evento dal componente') == 1, h_free.count('Evento dal componente'))
 fa = form_actions(c_free['form'])
 check('E1c the sealed token names the type but not a "page" source (the actions stay the element\'s)', fa.get('etype') == SLUGS['el_free'] and 'src' not in fa, {k: fa.get(k) for k in ['etype', 'src']})
 c_over = page_cfg('et_over')

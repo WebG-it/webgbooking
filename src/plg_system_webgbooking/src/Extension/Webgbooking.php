@@ -43,7 +43,7 @@ use WebG\Plugin\System\Webgbooking\Mail\EmailTemplates;
 final class Webgbooking extends CMSPlugin implements SubscriberInterface
 {
     /** Cache-buster for the bundled front-end assets (wgb.css/js, UIkit). Bump when those change. */
-    public const ASSET_VER = '0.36.2';
+    public const ASSET_VER = '0.36.3';
 
     protected $autoloadLanguage = true;
 
@@ -454,6 +454,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
 
             $this->respond([
                 'ok'      => true,
+                'pending' => !empty($actions['manual']),
                 'message' => Text::_(
                     !empty($actions['manual'])
                         ? ($loc === 'phone' ? 'PLG_SYSTEM_WEBGBOOKING_BOOK_OK_PHONE' : 'PLG_SYSTEM_WEBGBOOKING_BOOK_OK')
@@ -5984,7 +5985,12 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             'duration' => $this->rowDuration($row),
             'ajaxUrl' => Uri::root(true) . '/index.php?option=com_ajax&group=system&plugin=webgbooking&format=json',
             'siteTz'  => $this->siteTz(),
+            // what the appointment is now (the customer's own zone): the confirmation shows it next to the new one
+            'rsFromTxt' => trim($dateFmt . ', ' . $timeTxt, ' ,'),
             'labels'  => [
+                'rsFrom'    => Text::_('PLG_SYSTEM_WEBGBOOKING_RS_FROM'),
+                'rsTo'      => Text::_('PLG_SYSTEM_WEBGBOOKING_RS_TO'),
+                'calUnavailable' => Text::_('PLG_SYSTEM_WEBGBOOKING_CAL_UNAVAILABLE'),
                 'tzLabel'   => Text::_('PLG_SYSTEM_WEBGBOOKING_TZ_LABEL'),
                 'stepTime'  => Text::_('PLG_SYSTEM_WEBGBOOKING_STEP_TIME'),
                 'noSlots'   => Text::_('PLG_SYSTEM_WEBGBOOKING_NO_SLOTS'),
@@ -6013,6 +6019,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             . ($this->paidLocked($row)
                 ? '<hr><p class="muted">' . $e(Text::sprintf('PLG_SYSTEM_WEBGBOOKING_PAID_LOCKED', max(0, (int) $this->params->get('paid_cancel_hours', 24)))) . '</p>'
                 : '<h2 id="reschedule">' . $e(Text::_('PLG_SYSTEM_WEBGBOOKING_MANAGE_RESCHEDULE_TITLE')) . '</h2>'
+                . '<p class="muted">' . $e(Text::_('PLG_SYSTEM_WEBGBOOKING_RS_STEPS')) . '</p>'
                 . '<div class="wgb-booking" data-wgb="' . $cfgAttr . '"></div>'
                 . '<hr>'
                 . '<form method="post" id="cancel" action="' . $e($cancelAction) . '">'
@@ -6621,7 +6628,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
             . '.wrap{max-width:560px;margin:48px auto;padding:0 16px}'
             . '.card{background:#fff;border:1px solid #e6e9ee;border-radius:12px;padding:26px 28px}'
             . 'h1{font-size:20px;margin:0 0 10px}h2{font-size:15px;margin:26px 0 6px}.muted{color:#6a6a6a;font-size:14px;line-height:1.5}'
-            . 'table{width:100%;border-collapse:collapse;margin:18px 0}td{padding:9px 0;font-size:14px;border-top:1px solid #eef1f4}'
+            . 'table{width:100%;border-collapse:collapse;margin:18px 0}td{padding:9px 0;font-size:14px;border-top:1px solid #eef1f4;overflow-wrap:anywhere}'
             . 'tr:first-child td{border-top:0}td:first-child{color:#6a6a6a;width:130px}'
             . '.btn{display:inline-block;border:0;border-radius:8px;padding:11px 22px;font-weight:600;font-size:14px;cursor:pointer;text-decoration:none}'
             . '.btn-danger{background:#c0392b;color:#fff}.btn-ghost{background:#eef1f4;color:#1f2937}.ok{color:#1d6b3f}a{color:#1f2937}'

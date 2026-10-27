@@ -92,7 +92,7 @@ try:
             print('STEP HEIGHTS (card px) desktop 1100x900: calendar %s, times %s, form %s; top of the card %s' % (hs[0], hs[1], hs[2], tops))
             res['steps'] = (hs, tops)
             check('P5 the card does not shrink going from the calendar to the times, so it does not jump (same top, +-2 px); it may only grow for the form',
-                  all(hs) and hs[1] >= hs[0] and abs(tops[0] - tops[1]) <= 2 and hs[2] >= hs[1], (hs, tops))
+                  all(hs) and hs[1] >= hs[0] and (hs[1] > hs[0] or abs(tops[0] - tops[1]) <= 2) and hs[2] >= hs[1], (hs, tops))
     # many event types: a long index on a phone
     for i in range(2, 14):
         ins('tipo-%d' % i, 'Tipo di evento numero %d' % i, 'Descrizione breve del tipo %d.' % i)

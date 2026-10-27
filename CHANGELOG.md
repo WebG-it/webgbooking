@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.36.3 (pacchetto, componente e plugin): la conferma dice cosa hai prenotato, e il pulsante per spostare l'appuntamento si vede
+
+Due richieste di Marco. Prove in `tools/e2e/t_v363.py` (clic veri in Chrome, chiaro e scuro, computer e 375 px).
+
+1. **Pagina di conferma con il riepilogo.** Dopo la prenotazione, sotto la frase di conferma, compare un riquadro con il nome del tipo di evento, giorno della settimana e data per esteso, ora di inizio e di fine **nel fuso di chi prenota** con il nome del fuso, durata, come avviene (Google Meet, oppure "Ti chiamo io al numero" con il numero dato) e l'indirizzo email a cui arriva la conferma. Una prenotazione che aspetta la conferma dello staff lo dice con parole sue ("In attesa di conferma", "Ti scriviamo a ... appena è confermato"). Vale per la pagina diretta e per l'elemento YOOtheme (stesso testo e stesso stile). Tutto viene da dati che la pagina ha già: niente di nuovo viaggia o finisce nei log. Italiano e inglese.
+2. **Pagina "Gestisci il tuo appuntamento" (il link delle email): il pulsante di conferma dello spostamento.**
+   - Causa: il pulsante di conferma c'era già, ma compariva solo dopo tre passi (giorno, poi orario) e la pagina non lo diceva. Prima della scelta si vedeva solo un calendario senza spiegazioni e, sotto, l'unico pulsante con il nome in vista: quello rosso per annullare. Dopo aver scelto l'orario il calendario spariva e restava una riga piccola con un pulsante chiamato "Conferma il nuovo orario".
+   - Ora il blocco "Riprogramma" spiega i passi ("scegli un giorno e un orario: poi compare il pulsante «Conferma la nuova data». Finché non lo premi, l'appuntamento resta com'è"); dopo la scelta compare un riquadro **"Adesso: <data e ora attuali>" e "Nuova data: <giorno, ora di inizio e fine, fuso>"** e il pulsante **"Conferma la nuova data"** ("Confirm the new date"). Confermare sposta la prenotazione, l'evento Google e la riga del Foglio, e manda l'email di spostamento (come prima). Funziona anche per una prenotazione in attesa di conferma, che resta in attesa.
+   - Il calendario non disponibile ha ora una frase (prima restava un riquadro vuoto).
+   - Minimo di grafica: gli indirizzi lunghi (il collegamento Meet) vanno a capo e non allargano la pagina sul telefono. Il rifacimento completo della pagina di gestione resta per un rilascio successivo; la pagina non ha ancora una veste scura.
+3. **Cosa cambia per chi usa già il prodotto: niente si perde.** Nessuna modifica di schema, Opzioni o permessi. Cambia solo il testo del pulsante di conferma dello spostamento (da "Conferma il nuovo orario" a "Conferma la nuova data"); chi ha un override di lingua per quella stringa continua a vedere il suo. Dopo l'aggiornamento svuotare la cache del sito (YOOtheme, Cloudflare): il riepilogo è nel file `wgb.js` (versione degli asset alzata).
+
 ## 0.36.2 (pacchetto, componente e plugin): l'intestazione del Foglio Google si scrive quando indichi il foglio
 
 Richiesta di Marco: l'intestazione non deve aspettare la prima prenotazione. Prove in `tools/e2e/t_v362.py`.
