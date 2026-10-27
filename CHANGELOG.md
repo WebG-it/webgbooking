@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.36.3 (pacchetto, componente e plugin): la conferma dice cosa hai prenotato, e il pulsante per spostare l'appuntamento si vede
+## 0.36.3, 27-10-2026 (pacchetto, componente e plugin): la conferma dice cosa hai prenotato, e il pulsante per spostare l'appuntamento si vede
 
 Due richieste di Marco. Prove in `tools/e2e/t_v363.py` (clic veri in Chrome, chiaro e scuro, computer e 375 px).
 
