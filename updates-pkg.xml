@@ -7,14 +7,14 @@
         <element>pkg_webgbooking</element>
         <type>package</type>
         <client>site</client>
-        <version>0.36.1</version>
+        <version>0.36.2</version>
         <maintainer>Marco Galassi (WebG)</maintainer>
         <maintainerurl>https://www.webg.it</maintainerurl>
         <infourl title="WebG Booking">https://github.com/WebG-it/webgbooking</infourl>
         <downloads>
-            <downloadurl type="full" format="zip">https://raw.githubusercontent.com/WebG-it/webgbooking/main/dist/pkg_webgbooking-0.36.1.zip</downloadurl>
+            <downloadurl type="full" format="zip">https://raw.githubusercontent.com/WebG-it/webgbooking/main/dist/pkg_webgbooking-0.36.2.zip</downloadurl>
         </downloads>
-        <sha256>d3e5bbe435d4db58ad504ecc07aebfe5b10daa76b080520a914b969c8d38f1b1</sha256>
+        <sha256>d0b34a91ea2fd2d637427ce1b857f0fb166621aa9ba9c5ac1e641b9b50c5b228</sha256>
         <tags>
             <tag>stable</tag>
         </tags>
