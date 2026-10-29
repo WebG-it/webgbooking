@@ -90,6 +90,11 @@ def main():
         x = re.sub(r"(dist/pkg_webgbooking-)[0-9.]+(\.zip)", r"\g<1>%s\g<2>" % version, x)
         x = re.sub(r"<sha256>[^<]+</sha256>", "<sha256>%s</sha256>" % sha, x)
         x = x.replace("(component + system plugin)", "(component + system plugin + reminders task)")
+        # PHP minimum in the update entry (README: Joomla 5 or 6, PHP 8.2+). Added once, never duplicated; the entry
+        # already published is not edited by hand, the next release carries it.
+        if "<php_minimum>" not in x:
+            eol = "\r\n" if "\r\n" in x else "\n"
+            x = re.sub(r"(<targetplatform [^>]*/>)", lambda m: m.group(1) + eol + "        <php_minimum>8.2</php_minimum>", x, count=1)
         open(p, "w", encoding="utf-8", newline="").write(x)
         print("updates-pkg.xml updated")
 

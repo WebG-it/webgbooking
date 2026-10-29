@@ -108,7 +108,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
 
         // OAuth callback from Google (redirects to admin, not JSON).
         if ($action === 'oauth') {
-            $this->oauthCallback($input->get('code', '', 'RAW'), $input->get('state', '', 'RAW'));
+            $this->oauthCallback($input->getString('code', ''), $input->getString('state', ''));
             return;
         }
 
@@ -148,7 +148,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
 
         // Event config of the element (duration / buffers), signed at render time. Missing or tampered
         // tokens (old cached pages) fall back to the plugin-wide defaults.
-        $ev = $this->evFromToken((string) $input->get('ev', '', 'RAW'));
+        $ev = $this->evFromToken((string) $input->getString('ev', ''));
 
         // Whole-month availability: the single source for selectable days + their slots.
         if ($action === 'month') {
@@ -205,7 +205,7 @@ final class Webgbooking extends CMSPlugin implements SubscriberInterface
 
         // Per-element ACTIONS + custom-field DEFINITIONS + EVENT TYPE (HMAC-verified: signed by the server
         // at render time, so the client cannot inject fields, turn "required" off or pick another duration).
-        $actions = $this->verifyForm($input->post->get('form', '', 'RAW'));
+        $actions = $this->verifyForm($input->post->getString('form', ''));
         if (!$actions) {
             // No valid signed config = not our widget (or a forged price/duration): refuse. Without this a
             // hand-made request could book a paid event as a free default one.
